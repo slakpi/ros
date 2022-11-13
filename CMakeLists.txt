@@ -4,5 +4,5 @@ project(ros C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
-add_subdirectory(src/kernel_stub)
-add_subdirectory(src/kernel)
+add_subdirectory(src/arch)
+add_subdirectory(src/ros)

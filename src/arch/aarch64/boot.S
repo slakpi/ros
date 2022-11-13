@@ -29,7 +29,7 @@ _start:
  
   // jump to C code, should not return
 2:
-  bl      kernel_main
+  bl      kernel_stub
   // for failsafe, halt this core
 halt:
   wfe

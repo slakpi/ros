@@ -12,7 +12,7 @@
 // r0 -> 0x00000000
 // r1 -> 0x00000C42 - machine id
 // r2 -> 0x00000100 - start of ATAGS
-// preserve these registers as argument for kernel_main
+// preserve these registers as argument for kernel_stub
 _start:
   // Shut off extra cores
   mrc p15, 0, r5, c0, c0, 5
@@ -41,8 +41,8 @@ _start:
   cmp r4, r9
   blo 1b
 
-  // Call kernel_main
-  ldr r3, =kernel_main
+  // Call kernel_stub
+  ldr r3, =kernel_stub
   blx r3
 
   // halt
