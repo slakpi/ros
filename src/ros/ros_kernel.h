@@ -1,6 +1,3 @@
-#if !defined ROS_KERNEL_H
-#define ROS_KERNEL_H
+#pragma once
 
 void ros_main();
-
-#endif

@@ -7,12 +7,11 @@
 .globl _start
  
 .org 0x8000
-// Entry point for the kernel.
+// Entry point for the kernel. Registers:
 // r15 -> should begin execution at 0x8000.
-// r0 -> 0x00000000
-// r1 -> 0x00000C42 - machine id
-// r2 -> 0x00000100 - start of ATAGS
-// preserve these registers as argument for kernel_stub
+// r0  -> 0x00000000
+// r1  -> 0x00000C42 - machine id
+// r2  -> 0x00000100 - start of ATAGS
 _start:
   // Shut off extra cores
   mrc p15, 0, r5, c0, c0, 5
