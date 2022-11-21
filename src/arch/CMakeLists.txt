@@ -17,5 +17,6 @@ endif()
 add_custom_target(
   kernel_img
   ${CMAKE_OBJCOPY} $<TARGET_FILE:kernel> -O binary ${CMAKE_CURRENT_BINARY_DIR}/${kernel_img_file}
+  BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${kernel_img_file}
   DEPENDS kernel
   COMMENT "Making kernel image...")
