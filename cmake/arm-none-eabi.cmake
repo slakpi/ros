@@ -1,5 +1,5 @@
 set(CMAKE_SYSTEM_NAME Generic)
-set(CMAKE_SYSTEM_PROCESSOR armv7)
+set(CMAKE_SYSTEM_PROCESSOR armv8) # 32-bit Armv8
 
 set(cross_compiler ${TC_PATH}/bin/arm-none-eabi-)
 
@@ -18,8 +18,8 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfloat-abi=hard")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=neon-vfpv4")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a53") # Rpi 3B
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
