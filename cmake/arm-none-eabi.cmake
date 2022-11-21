@@ -9,10 +9,10 @@ set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-set(CMAKE_OBJCOPY ${TC_PATH}${cross_compiler}objcopy
+set(CMAKE_OBJCOPY ${cross_compiler}objcopy
     CACHE FILEPATH "The toolchain objcopy command " FORCE)
 
-set(CMAKE_OBJDUMP ${TC_PATH}${CROSS_COMPILE}objdump
+set(CMAKE_OBJDUMP ${cross_compiler}objdump
     CACHE FILEPATH "The toolchain objdump command " FORCE )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
