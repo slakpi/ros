@@ -1,36 +1,43 @@
-// AArch64 mode
+/// AArch64 mode
  
-// To keep this in the first portion of the binary.
+/// To keep this in the first portion of the binary.
 .section ".text.boot"
  
-// Make _start global.
+/// @brief Kernel entry point.
+/// @param[in] x0 32-bit pointer to the DTB (primary core)
+/// @param[in] x1 Zero
+/// @param[in] x2 Zero
+/// @param[in] x3 Zero
+/// @param[in] x4 Address of this entry point
 .globl _start
- 
 .org 0x80000
-// Entry point for the kernel. Registers:
-// x0 -> 32 bit pointer to DTB in memory (primary core only) / 0 (secondary cores)
-// x1 -> 0
-// x2 -> 0
-// x3 -> 0
-// x4 -> 32 bit kernel entry point, _start location
 _start:
-  // set stack before our code
-  ldr     x5, =_start
-  mov     sp, x5
+  mov     x5, x0            // Save the entry arugments
 
-  // clear bss
-  ldr     x5, =__bss_start
-  ldr     w6, =__bss_size
-1:
-  cbz     w6, 2f
-  str     xzr, [x5], #8
-  sub     w6, w6, #1
-  cbnz    w6, 1b
- 
-  // jump to C code, should not return
-2:
-  bl      kernel_stub
-  // for failsafe, halt this core
+  mrs     x0, mpidr_el1     // Get the CPU ID
+  and     x0, x0, #0xff
+  cbz     x0, setup         // CPU  0   -> setup
+  b       halt              // CPUs 1-3 -> halt
+
+setup:
+  ldr     x0, =__bss_start  // Clear the BSS
+  ldr     x1, =__bss_size
+  bl      memzero
+
+  mov     sp, #4096         // TODO: Generalize this.
+
+  mov     x0, x5            // Transfer to kernel stub, should not return
+  bl      kernel_stub       // If kernel stub does return, fall through to the
+                            // halt below.
+
 halt:
-  wfe
-  b halt
+  b       halt
+
+/// @brief Zeros a memory block in 8-byte words
+/// @param[in] x0 Start address (8-byte alignment)
+/// @param[in] x1 Block size (8-byte alignment)
+memzero:
+  str     xzr, [x0], #8     // Write 8 bytes from xzr, then increment by 8 bytes
+	subs    x1, x1, #8        // Subtract 8 from size argument
+	b.gt    memzero           // Keep looping
+	ret

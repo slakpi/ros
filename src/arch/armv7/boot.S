@@ -3,15 +3,12 @@
 // To keep this in the first portion of the binary.
 .section ".text.boot"
  
-// Make _start global.
+// @brief Kernel entry point.
+// @param[in] r0 Zero
+// @param[in] r1 Machine ID
+// @param[in] r2 Start of ATAGS
 .globl _start
- 
 .org 0x8000
-// Entry point for the kernel. Registers:
-// r15 -> should begin execution at 0x8000.
-// r0  -> 0x00000000
-// r1  -> 0x00000C42 - machine id
-// r2  -> 0x00000100 - start of ATAGS
 _start:
   // Shut off extra cores
   mrc p15, 0, r5, c0, c0, 5
