@@ -2,6 +2,7 @@
 # Build the kernel executable.
 #-------------------------------------------------------------------------------
 add_executable(kernel ${CMAKE_SYSTEM_PROCESSOR}/boot.S ${CMAKE_SYSTEM_PROCESSOR}/kernel_stub.c)
+target_compile_definitions(kernel PRIVATE RPI_VERSION=${RPI_VERSION})
 target_link_options(kernel PUBLIC -T ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/boot.ld)
 target_link_libraries(kernel PRIVATE ROS::Kernel)
 

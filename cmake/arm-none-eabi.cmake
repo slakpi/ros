@@ -17,8 +17,11 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
-# Use -mfloat-abi=soft by default to match the Rust Armv7 target
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7") # Rpi 2 & 3
+if(${RPI_VERSION} STREQUAL 3)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a53")
+else()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
+endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")

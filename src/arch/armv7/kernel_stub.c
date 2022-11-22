@@ -7,6 +7,10 @@
 
 #define PERIPHERAL_BASE 0x3F000000
 
+#if RPI_VERSION > 3
+#error "Invalid Raspberry Pi board version."
+#endif
+
 /**
  * @brief   Armv7 kernel stub.
  * @details Should eventually do architecture-specific stuff with the ATAGS

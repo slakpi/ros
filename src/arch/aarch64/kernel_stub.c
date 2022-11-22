@@ -6,6 +6,15 @@
 #endif
 
 #define RPI4_PERIPHERAL_BASE 0xFE000000
+#define RPI3_PERIPHERAL_BASE 0x3F000000
+
+#if (!defined RPI_VERSION) || (RPI_VERSION == 3)
+#define PERIPHERAL_BASE RPI3_PERIPHERAL_BASE
+#elif RPI_VERSION == 4
+#define PERIPHERAL_BASE RPI4_PERIPHERAL_BASE
+#else
+#error "Invalid Raspberry Pi board version for AArch64."
+#endif
 
 /**
  * @brief   AArch64 kernel stub.
@@ -15,7 +24,7 @@
  */
 void kernel_stub(uint64_t dtb_ptr32) {
   const ROSKernelInit init = {
-    .peripheral_base = RPI4_PERIPHERAL_BASE
+    .peripheral_base = PERIPHERAL_BASE
   };
 
   ros_kernel(&init);
