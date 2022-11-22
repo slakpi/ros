@@ -1,8 +1,13 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.19)
 
-project(ros C CXX ASM)
+project(ros C ASM)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 20)
+
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
+endif()
+
+add_subdirectory(cmake/corrosion)
 
 add_subdirectory(src/arch)
-add_subdirectory(src/ros)
+add_subdirectory(src/kernel)

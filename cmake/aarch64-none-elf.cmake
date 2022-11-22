@@ -19,7 +19,13 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 # -mfloat-abi is invalid for AArch64; hardware floating-point is the default.
 # -mfpu is ignored for AArch64; NEON is the default.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a72") # Rpi 4B
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a72") # Rpi 4
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
+
+# Set the Rust target
+set(Rust_CARGO_TARGET aarch64-unknown-none)
+
+# Set the kernel image file name; kernel8.img is used for 64-bit Rpi 3 & 4
+set(ROS_KERNEL_IMAGE_FILE kernel8.img)
