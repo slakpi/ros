@@ -8,7 +8,6 @@
 // @param[in] r1 Machine ID
 // @param[in] r2 Start of ATAGS
 .globl _start
-.org 0x8000
 _start:
   // Shut off extra cores
   mrc p15, 0, r5, c0, c0, 5
