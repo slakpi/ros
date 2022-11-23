@@ -17,11 +17,7 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
-if(${RPI_VERSION} STREQUAL 3)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a53")
-else()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
-endif()
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")

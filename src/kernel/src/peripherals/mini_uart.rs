@@ -1,4 +1,3 @@
-use super::base;
 use super::gpio;
 use super::utils;
 use core::str;

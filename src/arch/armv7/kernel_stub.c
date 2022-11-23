@@ -1,13 +1,13 @@
 #include <stdint.h>
 #include "ros_kernel.h"
 
-#if __ARM_ARCH != 7
-#error "Attempting to use Armv7 kernel stub for non-Armv7 architecture."
+#if defined __aarch64__
+#error "Attempting to use AArch32 kernel stub for AArch64 architecture."
 #endif
 
 #define PERIPHERAL_BASE 0x3F000000
 
-#if RPI_VERSION > 3
+#if RPI_VERSION > 2
 #error "Invalid Raspberry Pi board version."
 #endif
 

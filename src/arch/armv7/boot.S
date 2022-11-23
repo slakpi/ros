@@ -2,45 +2,51 @@
  
 // To keep this in the first portion of the binary.
 .section ".text.boot"
- 
-// @brief Kernel entry point.
-// @param[in] r0 Zero
-// @param[in] r1 Machine ID
-// @param[in] r2 Start of ATAGS
+
+/// @fn _start(r0, r1, r2)
+/// @brief Kernel entry point.
+/// @param[in] r0 Zero
+/// @param[in] r1 Machine ID
+/// @param[in] r2 Start of ATAGS
 .globl _start
 _start:
-  // Shut off extra cores
-  mrc p15, 0, r5, c0, c0, 5
-  and r5, r5, #3
-  cmp r5, #0
-  bne halt
+  mrc     p15, 0, r5, c0, c0, 5
+  and     r5, r5, #3
+  cmp     r5, #0            // CPU  0   -> setup
+  bne     halt              // CPUs 1-3 -> halt
 
-  // Setup the stack.
-  ldr r5, =_start
-  mov sp, r5
+  mov     r5, r0            // Save the entry arguments
+  mov     r6, r1
+  mov     r7, r2
 
-  // Clear out bss.
-  ldr r4, =__bss_start
-  ldr r9, =__bss_end
-  mov r5, #0
-  mov r6, #0
-  mov r7, #0
-  mov r8, #0
-  b       2f
-1:
-  // store multiple at r4.
-  stmia r4!, {r5-r8}
+  ldr     sp, =_start       // Setup the stack
 
-  // If we are still below bss_end, loop.
-2:
-  cmp r4, r9
-  blo 1b
+  ldr     r0, =__bss_start  // Clear the BSS
+  ldr     r1, =__bss_end
+  bl      memzero
 
-  // Call kernel_stub
-  ldr r3, =kernel_stub
-  blx r3
+  mov     r0, r5            // Transfer to kernel stub, should not return
+  mov     r1, r6            // If kernel stub does return, fall through to the
+  mov     r2, r7            // halt below.
+  ldr     r5, =kernel_stub
+  blx     r5
 
-  // halt
 halt:
-  wfe
-  b halt
+  b       halt
+
+/// @fn memzero(r0, r1)
+/// @brief Zeros a memory block
+/// @param[in] r0 Start address (Assumes 4-byte alignment)
+/// @param[in] r1 Block size (Assumes 4-byte multiple)
+memzero:
+  cmp     r1, #0
+  beq     zero_end          // Zero bytes, nothing to do
+  mov     r2, #0
+zero_loop:
+  str     r2, [r0]
+  add     r0, r0, #4
+	subs    r1, r1, #4        // Subtract 4 from size argument
+  cmp     r1, #0
+  bne     zero_loop         // Keep looping
+zero_end:
+	bx      lr                // Return

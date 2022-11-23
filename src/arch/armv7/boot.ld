@@ -2,8 +2,7 @@ ENTRY(_start)
  
 SECTIONS
 {
-  . = 0x8000;
-  /* For AArch64, use . = 0x80000; */
+  . = 0x10000;     /* TODO: Investigate why this works for QEMU */
   __start = .;
   __text_start = .;
   .text :
