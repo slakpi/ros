@@ -27,3 +27,8 @@ set(Rust_CARGO_TARGET armv7a-none-eabi)
 
 # Set the kernel image file name; kernel7.img is used for 32-bit Rpi 2 & 3
 set(ROS_KERNEL_IMAGE_FILE kernel7.img)
+if(${QEMU_BUILD})
+  set(ROS_KERNEL_LINK_SCRIPT boot_qemu.ld)
+else()
+  set(ROS_KERNEL_LINK_SCRIPT boot.ld)
+endif()

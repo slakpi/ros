@@ -31,5 +31,5 @@ set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 # Set the Rust target
 set(Rust_CARGO_TARGET aarch64-unknown-none)
 
-# Set the kernel image file name; kernel8.img is used for 64-bit Rpi 3 & 4
 set(ROS_KERNEL_IMAGE_FILE kernel8.img)
+set(ROS_KERNEL_LINK_SCRIPT boot.ld)

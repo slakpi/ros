@@ -1,8 +1,13 @@
+/**
+ * This file is for 32-bit QEMU builds only. QEMU loads the kernel at 0x10000
+ * rather than 0x8000.
+ */
+
 ENTRY(_start)
  
 SECTIONS
 {
-  . = 0x8000;
+  . = 0x10000;
   __start = .;
   __text_start = .;
   .text :
