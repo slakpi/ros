@@ -1,3 +1,4 @@
+use crate::dbg_print;
 use crate::peripherals;
 use core::panic::PanicInfo;
 
@@ -20,7 +21,12 @@ pub extern "C" fn ros_kernel(init: *const ROSKernelInit) -> ! {
   }
 
   peripherals::mini_uart::uart_init();
-  peripherals::mini_uart::uart_send_string("Hello, World!\n");
+
+  dbg_print!("=== ROS ===\n");
+  dbg_print!(
+    "Peripheral Base Address: {:#x}",
+    peripherals::base::get_peripheral_register_addr(0) as usize
+  );
 
   loop {}
 }

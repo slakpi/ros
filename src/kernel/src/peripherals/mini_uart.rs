@@ -69,11 +69,18 @@ pub fn uart_send(c: u8) {
   utils::put(c as i32, AUX_MU_IO_REG);
 }
 
+/// @fn uart_send_bytes(s: &[u8])
+/// @brief Send an array of bytes to the mini UART.
+/// @param[in] s The byte array to send.
+pub fn uart_send_bytes(s: &[u8]) {
+  for c in s {
+    uart_send(*c);
+  }
+}
+
 /// @fn uart_send_string(s: &str)
-/// @brief Convenience function to send a whole string.
+/// @brief Convenience function to send UTF-8 bytes to the mini UART.
 /// @param[in] s The string to send.
 pub fn uart_send_string(s: &str) {
-  for c in s.bytes() {
-    uart_send(c);
-  }
+  uart_send_bytes(s.as_bytes());
 }

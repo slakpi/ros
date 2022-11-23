@@ -1,3 +1,6 @@
+/// @brief Peripheral base address for the Raspberry Pi board. The kernel is
+///        single-threaded, so directly accessing the value is safe. However, it
+///        should only be initialized once.
 static mut PERIPHERAL_BASE: usize = 0;
 
 /// @fn set_peripheral_base_addr(base: usize)
