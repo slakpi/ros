@@ -10,7 +10,6 @@
 /// @param[in] x3 Zero
 /// @param[in] x4 Address of this entry point
 .globl _start
-.org 0x80000
 _start:
   mov     x5, x0            // Save the entry arugments
 
@@ -37,7 +36,10 @@ halt:
 /// @param[in] x0 Start address (8-byte alignment)
 /// @param[in] x1 Block size (8-byte alignment)
 memzero:
+  cbz     x1, end
+loop:
   str     xzr, [x0], #8     // Write 8 bytes from xzr, then increment by 8 bytes
 	subs    x1, x1, #8        // Subtract 8 from size argument
-	b.gt    memzero           // Keep looping
+	b.gt    loop              // Keep looping
+end:
 	ret
