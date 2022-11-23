@@ -17,6 +17,7 @@
 #endif
 
 /**
+ * @fn void kernel_stub(uint64_t dtb_ptr32)
  * @brief   AArch64 kernel stub.
  * @details Should eventually do architecture-specific stuff with the device
  *          tree and pass it on to Rustland.

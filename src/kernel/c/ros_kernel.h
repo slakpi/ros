@@ -12,6 +12,7 @@ typedef struct {
 } ROSKernelInit;
 
 /**
+ * @fn ros_kernel(const ROSKernelInit *init)
  * @brief Rust ROS kernel entry point.
  */
 void ros_kernel(const ROSKernelInit *init);

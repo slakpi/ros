@@ -12,6 +12,7 @@
 #endif
 
 /**
+ * @fn void kernel_stub(uint32_t r0, uint32_t r1, uint32_t atags)
  * @brief   Armv7 kernel stub.
  * @details Should eventually do architecture-specific stuff with the ATAGS
  *          and pass it on to Rustland.

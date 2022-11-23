@@ -3,6 +3,7 @@
 /// To keep this in the first portion of the binary.
 .section ".text.boot"
 
+/// @fn _start(x0, x1, x2, x3, x4)
 /// @brief Kernel entry point.
 /// @param[in] x0 32-bit pointer to the DTB (primary core)
 /// @param[in] x1 Zero
@@ -31,6 +32,7 @@ setup:
 halt:
   b       halt
 
+/// @fn memzero(x0, x1)
 /// @brief Zeros a memory block
 /// @param[in] x0 Start address (Assumes 8-byte alignment)
 /// @param[in] x1 Block size (Assumes 8-byte multiple)
