@@ -65,7 +65,7 @@ for the Raspberry Pi 2 expects the kernel at 0x10000 rather than 0x8000 like the
 actual hardware. Start QEMU with:
 
     qemu-system-aarch64 -M raspi3b \
-                        -kernel build/aarch64/src/arch/kernel8.img \
+                        -kernel build/aarch64/src/boot/kernel8.img \
                         -serial null -serial stdio \
                         -gdb tcp::9000 \
                         -S
@@ -73,7 +73,7 @@ actual hardware. Start QEMU with:
 or:
 
     qemu-system-arm -M raspi2b \
-                    -kernel build/armv7/src/arch/kernel7.img \
+                    -kernel build/armv7/src/boot/kernel7.img \
                     -serial null -serial stdio \
                     -gdb tcp::9000 \
                     -S

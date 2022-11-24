@@ -31,5 +31,9 @@ set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 # Set the Rust target
 set(Rust_CARGO_TARGET aarch64-unknown-none)
 
+# QEMU_BUILD is not used by AArch64. It has no effect, so go ahead and just
+# quiet the warning about it being unsed.
+set(ignore_QEMU_BUILD ${QEMU_BUILD})
+
 set(ROS_KERNEL_IMAGE_FILE kernel8.img)
 set(ROS_KERNEL_LINK_SCRIPT boot.ld)
