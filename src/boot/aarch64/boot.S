@@ -12,23 +12,38 @@
 /// @param[in] x4 Address of this entry point
 .globl _start
 _start:
-  mov     x5, x0            // Save the entry arugments
+/*------------------------------------------------------------------------------
+Save the entry arguments
+------------------------------------------------------------------------------*/
+  mov     x5, x0
 
-  mrs     x0, mpidr_el1     // Get the CPU ID
+/*------------------------------------------------------------------------------
+Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
+------------------------------------------------------------------------------*/
+  mrs     x0, mpidr_el1
   and     x0, x0, #0xff
-  cbz     x0, setup         // CPU  0   -> setup
-  b       halt              // CPUs 1-3 -> halt
+  cbnz    x0, halt
 
-setup:
-  ldr     x0, =__bss_start  // Clear the BSS
+/*------------------------------------------------------------------------------
+Setup the stack pointer for the kernel.
+TODO: This needs to be generalized once memory management is a thing.
+------------------------------------------------------------------------------*/
+  mov     sp, #4096
+
+/*------------------------------------------------------------------------------
+Clear the BSS.
+------------------------------------------------------------------------------*/
+  ldr     x0, =__bss_start
   ldr     x1, =__bss_size
   bl      memzero
 
-  mov     sp, #4096         // TODO: Generalize this.
+/*------------------------------------------------------------------------------
+Restore the entry arguments and transfer control to the kernel stub. The stub
+should not return. If it does, we will end up halting below.
+------------------------------------------------------------------------------*/
+  mov     x0, x5
+  bl      kernel_stub
 
-  mov     x0, x5            // Transfer to kernel stub, should not return
-  bl      kernel_stub       // If kernel stub does return, fall through to the
-                            // halt below.
 halt:
   b       halt
 
@@ -39,8 +54,8 @@ halt:
 memzero:
   cbz     x1, zero_end      // Zero bytes, nothing to do
 zero_loop:
-  str     xzr, [x0], #8     // Write 8 bytes from xzr, then increment by 8 bytes
+  str     xzr, [x0], #8     // Write 8 zero bytes, then increment by 8 bytes
 	subs    x1, x1, #8        // Subtract 8 from size argument
-	b.gt    zero_loop         // Keep looping
+	bgt     zero_loop         // Keep looping if size still greater than zero
 zero_end:
 	ret

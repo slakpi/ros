@@ -10,24 +10,41 @@
 /// @param[in] r2 Start of ATAGS
 .globl _start
 _start:
-  mrc     p15, 0, r5, c0, c0, 5
-  and     r5, r5, #3
-  cmp     r5, #0            // CPU  0   -> setup
-  bne     halt              // CPUs 1-3 -> halt
-
-  mov     r5, r0            // Save the entry arguments
+/*------------------------------------------------------------------------------
+Save the entry arguments
+------------------------------------------------------------------------------*/
+  mov     r5, r0
   mov     r6, r1
   mov     r7, r2
 
-  ldr     sp, =_start       // Setup the stack
+/*------------------------------------------------------------------------------
+Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
+------------------------------------------------------------------------------*/
+  mrc     p15, 0, r0, c0, c0, 5
+  and     r0, r0, #3
+  cmp     r0, #0
+  bne     halt
 
-  ldr     r0, =__bss_start  // Clear the BSS
+/*------------------------------------------------------------------------------
+Setup the stack pointer for the kernel.
+TODO: This needs to be generalized once memory management is a thing.
+------------------------------------------------------------------------------*/
+  mov     sp, #4096
+
+/*------------------------------------------------------------------------------
+Clear the BSS.
+------------------------------------------------------------------------------*/
+  ldr     r0, =__bss_start
   ldr     r1, =__bss_end
   bl      memzero
 
-  mov     r0, r5            // Transfer to kernel stub, should not return
-  mov     r1, r6            // If kernel stub does return, fall through to the
-  mov     r2, r7            // halt below.
+/*------------------------------------------------------------------------------
+Restore the entry arguments and transfer control to the kernel stub. The stub
+should not return. If it does, we will end up halting below.
+------------------------------------------------------------------------------*/
+  mov     r0, r5
+  mov     r1, r6
+  mov     r2, r7
   ldr     r5, =kernel_stub
   blx     r5
 
@@ -43,10 +60,8 @@ memzero:
   beq     zero_end          // Zero bytes, nothing to do
   mov     r2, #0
 zero_loop:
-  str     r2, [r0]
-  add     r0, r0, #4
+  str     r2, [r0], #4      // Write 4 zero bytes, then increment by 4 bytes
 	subs    r1, r1, #4        // Subtract 4 from size argument
-  cmp     r1, #0
-  bne     zero_loop         // Keep looping
+  bgt     zero_loop         // Keep looping if size still greater than zero
 zero_end:
 	bx      lr                // Return
