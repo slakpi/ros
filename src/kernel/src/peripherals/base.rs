@@ -1,3 +1,4 @@
+/// @var PERIPHERAL_BASE
 /// @brief Peripheral base address for the Raspberry Pi board. The kernel is
 ///        single-threaded, so directly accessing the value is safe. However, it
 ///        should only be initialized once.

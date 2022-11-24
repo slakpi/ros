@@ -1,6 +1,7 @@
 use crate::peripherals::mini_uart;
 use core::fmt::{self, Write};
 
+/// @var DBG_WRITE_BUFFER
 /// @brief 2KiB static buffer for formatting strings. Since the kernel is
 ///        single-threaded, directly accessing the buffer is safe.
 static mut DBG_WRITE_BUFFER: [u8; 2048] = [0; 2048];
