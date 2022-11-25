@@ -1,4 +1,4 @@
-// AArch32 mode
+// ARMv7
  
 // To keep this in the first portion of the binary.
 .section ".text.boot"

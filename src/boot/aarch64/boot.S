@@ -1,5 +1,41 @@
-/// AArch64 mode
- 
+/// ARMv8 AArch64
+
+#define SCTLR_RESERVED          ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
+#define SCTLR_EE_LITTLE_ENDIAN  (1 << 25) /* EL1 endianness */
+#define SCTLR_E0E_LITTLE_ENDIAN (1 << 24) /* EL0 endianness */
+#define SCTLR_I_CACHE_DISABLED  (1 << 12) /* Instruction cache disabled */
+#define SCTLR_D_CACHE_DISABLED  (1 <<  2) /* Data cache disabled */
+#define SCTLR_MMU_ENABLED       (1 <<  0) /* MMU enabled */
+
+/*------------------------------------------------------------------------------
+Default configuration for EL1. BIG ENDIAN for EL0 and EL1, instruction and data
+caches are ENABLED, MMU is DISABLED.
+------------------------------------------------------------------------------*/
+#define SCTLR_DEFAULT_MMU_DISABLED (SCTLR_RESERVED)
+
+#define HCR_RW (1 << 31) /* EL1 is AArch64 */
+
+/*------------------------------------------------------------------------------
+Hypervisor configuration. EL1 runs in AArch64, EL0 runs in either AArch64 or
+AArch32 depending on PSTATE.
+------------------------------------------------------------------------------*/
+#define HCR_DEFAULT (HCR_RW)
+
+#define SCR_RESERVED (3 <<  4)
+#define SCR_RW       (1 << 10)
+#define SCR_NS       (1 <<  0)
+
+/*------------------------------------------------------------------------------
+Secure configuration default. EL2 is AArch64, EL1 controlled by EL2. Levels
+lower than EL3 are not secure.
+------------------------------------------------------------------------------*/
+#define SCR_DEFAULT (SCR_RESERVED | SCR_RW | SCR_NS)
+
+#define SPSR_MASK_ALL_INTERRUPTS (7 << 6)
+#define SPSR_EL1h                (5 << 0) /* EL1 interrupt handler mode */
+
+#define SPSR_DEFAULT (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL1h)
+
 /// To keep this in the first portion of the binary.
 .section ".text.boot"
 
@@ -25,6 +61,25 @@ Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
   cbnz    x0, halt
 
 /*------------------------------------------------------------------------------
+Configure the processor for Exception Level 1.
+------------------------------------------------------------------------------*/
+  ldr     x0, =SCTLR_DEFAULT_MMU_DISABLED
+  msr     sctlr_el1, x0
+
+  ldr     x0, =HCR_DEFAULT
+  msr     hcr_el2, x0
+
+  ldr     x0, =SCR_DEFAULT
+  msr     scr_el3, x0
+
+  ldr     x0, =SPSR_DEFAULT
+  msr     spsr_el3, x0
+
+  adr     x0, el1_entry
+  msr     elr_el3, x0
+
+el1_entry:
+/*------------------------------------------------------------------------------
 Setup the stack pointer for the kernel.
 TODO: This needs to be generalized once memory management is a thing.
 ------------------------------------------------------------------------------*/
@@ -46,6 +101,7 @@ should not return. If it does, we will end up halting below.
 
 halt:
   b       halt
+
 
 /// @fn memzero(x0, x1)
 /// @brief Zeros a memory block
