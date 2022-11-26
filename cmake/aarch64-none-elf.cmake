@@ -19,6 +19,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
 # -mfloat-abi is invalid for AArch64; hardware floating-point is the default.
 # -mfpu is ignored for AArch64; NEON is the default.
+# Turn off hardware floating-point and SIMD. The kernel does not allow floating-
+# point or vector instructions.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=+nofp+nosimd")
 if("${RPI_VERSION}" STREQUAL "4")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a72")
 elseif("${RPI_VERSION}" STREQUAL "3")
@@ -28,11 +31,12 @@ endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 
-# Set the Rust target
-set(Rust_CARGO_TARGET aarch64-unknown-none)
+# Set the Rust target. Use the software floating-point variant. The kernel does
+# not allow floating-point or vector instructions.
+set(Rust_CARGO_TARGET aarch64-unknown-none-softfloat)
 
 # QEMU_BUILD is not used by AArch64. It has no effect, so go ahead and just
-# quiet the warning about it being unsed.
+# quiet the warning about it being unused.
 set(ignore_QEMU_BUILD ${QEMU_BUILD})
 
 set(ROS_KERNEL_IMAGE_FILE kernel8.img)

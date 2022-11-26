@@ -3,7 +3,8 @@
 #include <stdint.h>
 
 /**
- * 
+ * @struct  ROSMemoryRegion
+ * @details See definition in `ros_kernel.rs`.
  */
 typedef struct {
   uintptr_t base;
@@ -12,7 +13,6 @@ typedef struct {
 
 /**
  * @struct  ROSKernelInit
- * @brief   Architecture-specific initialization values.
  * @details See definition in `ros_kernel.rs`.
  */
 typedef struct {

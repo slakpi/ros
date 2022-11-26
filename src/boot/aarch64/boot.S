@@ -65,11 +65,12 @@ Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
 Configure the processor for Exception Level 1.
 ------------------------------------------------------------------------------*/
   bl      init_kernel_el
-  eret
+  eret                      // Transfer control to el1_entry in EL1.
 
 
 /// @fn el1_entry()
-/// @brief Continue setup after exiting EL3 or EL2.
+/// @brief Entry point after exiting EL3 or EL2. Will only run once when the
+///        kernel initially drops to EL1.
 el1_entry:
 /*------------------------------------------------------------------------------
 Setup the stack pointer for the kernel.
@@ -120,7 +121,7 @@ in_el3:
   ldr     x0, =SPSR_DEFAULT
   msr     spsr_el3, x0
 
-  adr     x0, el1_entry     // When exiting EL3, jump to el1_entry
+  adr     x0, el1_entry
   msr     elr_el3, x0
 
 in_el2:
@@ -130,7 +131,7 @@ in_el2:
   ldr     x0, =SPSR_DEFAULT
   msr     spsr_el2, x0
 
-  adr     x0, el1_entry     // When exiting EL2, jump to el1_entry
+  adr     x0, el1_entry
   msr     elr_el2, x0
 
 in_el1:

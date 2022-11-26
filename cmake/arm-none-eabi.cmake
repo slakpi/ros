@@ -17,12 +17,15 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
+# -mfloat-abi is unnecessary; this toolchain assumes software floating-point.
+# -mfpu is unnecessary.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
 
-# Set the Rust target
+# Set the Rust target. Use the software floating-point variant. The kernel does
+# not allow floating-point or vector instructions.
 set(Rust_CARGO_TARGET armv7a-none-eabi)
 
 # Set the kernel image file name; kernel7.img is used for 32-bit Rpi 2 & 3
