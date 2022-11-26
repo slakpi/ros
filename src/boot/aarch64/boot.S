@@ -39,6 +39,7 @@ lower than EL3 are not secure.
 /// To keep this in the first portion of the binary.
 .section ".text.boot"
 
+
 /// @fn _start(x0, x1, x2, x3, x4)
 /// @brief Kernel entry point.
 /// @param[in] x0 32-bit pointer to the DTB (primary core)
@@ -63,27 +64,19 @@ Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
 /*------------------------------------------------------------------------------
 Configure the processor for Exception Level 1.
 ------------------------------------------------------------------------------*/
-  ldr     x0, =SCTLR_DEFAULT_MMU_DISABLED
-  msr     sctlr_el1, x0
+  bl      init_kernel_el
+  eret
 
-  ldr     x0, =HCR_DEFAULT
-  msr     hcr_el2, x0
 
-  ldr     x0, =SCR_DEFAULT
-  msr     scr_el3, x0
-
-  ldr     x0, =SPSR_DEFAULT
-  msr     spsr_el3, x0
-
-  adr     x0, el1_entry
-  msr     elr_el3, x0
-
+/// @fn el1_entry()
+/// @brief Continue setup after exiting EL3 or EL2.
 el1_entry:
 /*------------------------------------------------------------------------------
 Setup the stack pointer for the kernel.
 TODO: This needs to be generalized once memory management is a thing.
 ------------------------------------------------------------------------------*/
-  mov     sp, #4096
+  ldr     x0, =_start
+  mov     sp, x0
 
 /*------------------------------------------------------------------------------
 Clear the BSS.
@@ -91,6 +84,12 @@ Clear the BSS.
   ldr     x0, =__bss_start
   ldr     x1, =__bss_size
   bl      memzero
+
+/*------------------------------------------------------------------------------
+Setup exception vectors.
+------------------------------------------------------------------------------*/
+	adr     x0, vectors
+	msr     vbar_el1, x0
 
 /*------------------------------------------------------------------------------
 Restore the entry arguments and transfer control to the kernel stub. The stub
@@ -101,6 +100,44 @@ should not return. If it does, we will end up halting below.
 
 halt:
   b       halt
+
+
+/// @fn init_kernel_el()
+/// @brief Initialize the kernel in the correct exception level.
+init_kernel_el:
+  mrs     x0, CurrentEL
+  lsr     x0, x0, #2
+
+  cmp     x0, #1
+  beq     in_el1            // Skip EL2 initialization if already in EL1
+  cmp     x0, #2
+  beq     in_el2            // Skip EL3 initialization if already in EL2
+
+in_el3:
+  ldr     x0, =SCR_DEFAULT
+  msr     scr_el3, x0
+
+  ldr     x0, =SPSR_DEFAULT
+  msr     spsr_el3, x0
+
+  adr     x0, el1_entry     // When exiting EL3, jump to el1_entry
+  msr     elr_el3, x0
+
+in_el2:
+  ldr     x0, =HCR_DEFAULT
+  msr     hcr_el2, x0
+
+  ldr     x0, =SPSR_DEFAULT
+  msr     spsr_el2, x0
+
+  adr     x0, el1_entry     // When exiting EL2, jump to el1_entry
+  msr     elr_el2, x0
+
+in_el1:
+  ldr     x0, =SCTLR_DEFAULT_MMU_DISABLED
+  msr     sctlr_el1, x0
+
+  ret
 
 
 /// @fn memzero(x0, x1)

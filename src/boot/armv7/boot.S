@@ -3,6 +3,7 @@
 // To keep this in the first portion of the binary.
 .section ".text.boot"
 
+
 /// @fn _start(r0, r1, r2)
 /// @brief Kernel entry point.
 /// @param[in] r0 Zero
@@ -29,7 +30,8 @@ Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
 Setup the stack pointer for the kernel.
 TODO: This needs to be generalized once memory management is a thing.
 ------------------------------------------------------------------------------*/
-  mov     sp, #4096
+  ldr     r0, =_start
+  mov     sp, r0
 
 /*------------------------------------------------------------------------------
 Clear the BSS.
@@ -50,6 +52,7 @@ should not return. If it does, we will end up halting below.
 
 halt:
   b       halt
+
 
 /// @fn memzero(r0, r1)
 /// @brief Zeros a memory block

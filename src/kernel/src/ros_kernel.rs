@@ -2,11 +2,18 @@ use crate::dbg_print;
 use crate::peripherals;
 use core::panic::PanicInfo;
 
+#[repr(C)]
+pub struct ROSMemoryRegion {
+  pub base: usize,
+  pub size: usize,
+}
+
 /// @struct ROSKernelInit
 /// @var ROSKernelInit::peripheral_base The base address for peripherals.
 #[repr(C)]
 pub struct ROSKernelInit {
   pub peripheral_base: usize,
+  pub memory_regions: [ROSMemoryRegion; 16],
 }
 
 /// @fn panic(_info: &PanicInfo) -> !
@@ -32,6 +39,11 @@ pub extern "C" fn ros_kernel(init: *const ROSKernelInit) -> ! {
   peripherals::mini_uart::uart_init();
   startup_messages();
   loop {}
+}
+
+#[no_mangle]
+pub extern "C" fn trap_exception(esr_el1: usize, far_el1: usize) {
+
 }
 
 fn startup_messages() {

@@ -1,5 +1,8 @@
-#include <stdint.h>
+#include "atags.h"
 #include "ros_kernel.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
 
 #if !defined __aarch64__
 #error "Attempting to use AArch64 kernel stub for non-AArch64 architecture."
@@ -18,15 +21,15 @@
 
 /**
  * @fn void kernel_stub(uint64_t dtb_ptr32)
- * @brief   AArch64 kernel stub.
- * @details Should eventually do architecture-specific stuff with the device
- *          tree and pass it on to Rustland.
- * @param[in] dtb_ptr32 32-bit pointer to the device tree blob
+ * @brief AArch64 kernel stub.
+ * @param[in] dtb_ptr32 32-bit pointer to the device tree blob or ATAG list.
  */
 void kernel_stub(uint64_t dtb_ptr32) {
-  const ROSKernelInit init = {
-    .peripheral_base = PERIPHERAL_BASE
-  };
+  ROSKernelInit init = {.peripheral_base = PERIPHERAL_BASE};
+
+  if (!read_atags(&init, dtb_ptr32)) {
+    return; // TODO: Check for device tree.
+  }
 
   ros_kernel(&init);
 }
