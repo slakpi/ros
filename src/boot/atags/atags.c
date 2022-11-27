@@ -94,10 +94,10 @@ bool read_atags(ROSKernelInit *init, uintptr_t start) {
  * @param[in] mem   The memory region ATAG.
  */
 static void handle_mem(ROSKernelInit *init, const ATAGMem *mem) {
-  static const size_t max_regions = count_of(init->mem_regions);
+  static const size_t max_regions = count_of(init->memory_regions);
   size_t mem_rgn = 0;
 
-  while (mem_rgn < max_regions && init->mem_regions[mem_rgn].size != 0) {
+  while (mem_rgn < max_regions && init->memory_regions[mem_rgn].size != 0) {
     ++mem_rgn;
   }
 
@@ -105,6 +105,6 @@ static void handle_mem(ROSKernelInit *init, const ATAGMem *mem) {
     return;
   }
 
-  init->mem_regions[mem_rgn].base = mem->base;
-  init->mem_regions[mem_rgn].size = mem->size;
+  init->memory_regions[mem_rgn].base = mem->base;
+  init->memory_regions[mem_rgn].size = mem->size;
 }
