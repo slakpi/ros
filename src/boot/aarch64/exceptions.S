@@ -2,6 +2,7 @@
 /// @brief Size of the exception handler stack frame.
 #define EXCEPTION_FRAME_SIZE 256
 
+
 /// @def ventry(label)
 /// @brief   Adds @a label as a vector to the vector table.
 /// @details @a .align aligns the entries to offsets of 0x80. The GNU assembler
@@ -10,6 +11,7 @@
 .align 7
   b       \label
 .endm
+
 
 /// @def kernel_entry()
 /// @brief   Exception handler prologue.
@@ -36,6 +38,7 @@
   str	    x30, [sp, #16 * 15] 
 .endm
 
+
 /// @def kernel_exit()
 /// @brief Exception handler epilogue.
 .macro kernel_exit
@@ -58,6 +61,7 @@
   add	    sp, sp, #EXCEPTION_FRAME_SIZE
   eret
 .endm
+
 
 /// @def vectors
 /// @brief   Exception vector table.
@@ -84,6 +88,7 @@ vectors:
   ventry  _trap_exception   // EL0 IRQ (32-bit)
   ventry  _trap_exception   // EL0 FIQ (32-bit)
   ventry  _trap_exception   // EL0 Error (32-bit)
+
 
 /// @fn _trap_exception()
 /// @brief Default exception trap. Calls @a trap_exception in Rustland then

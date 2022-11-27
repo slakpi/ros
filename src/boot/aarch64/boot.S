@@ -68,9 +68,17 @@ Configure the processor for Exception Level 1.
   eret                      // Transfer control to el1_entry in EL1.
 
 
+/// @fn el2_entry()
+/// @brief Dummy entry point for EL3 -> E2.
+el2_entry:
+  eret
+
+
 /// @fn el1_entry()
-/// @brief Entry point after exiting EL3 or EL2. Will only run once when the
-///        kernel initially drops to EL1.
+/// @brief   Entry point for EL2 -> EL1.
+/// @details Runs once when the kernel drops from EL2 to EL1 during bootstrap.
+///          All subsequent exception level changes will be EL0 -> EL1 or
+///          EL1 -> EL0.
 el1_entry:
 /*------------------------------------------------------------------------------
 Setup the stack pointer for the kernel.
@@ -121,7 +129,7 @@ in_el3:
   ldr     x0, =SPSR_DEFAULT
   msr     spsr_el3, x0
 
-  adr     x0, el1_entry
+  adr     x0, el2_entry
   msr     elr_el3, x0
 
 in_el2:
