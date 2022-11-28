@@ -22,9 +22,12 @@ fn panic(_info: &PanicInfo) -> ! {
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
 pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
-  let mut init = ROSKernelInit::new();
+  let mut init = ROSKernelInit::new();  
   init.peripheral_base = peripheral_base;
+  
+  // TODO: Attempt to parse a device tree if this is not an ATAG list.
   atags::read_atags(&mut init, blob);
+
   ros_kernel(init)
 }
 
@@ -40,7 +43,10 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
 pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: usize) -> ! {
   let mut init = ROSKernelInit::new();
   init.peripheral_base = peripheral_base;
+
+  // TODO: Attempt to parse a device tree if this is not an ATAG list.
   atags::read_atags(&mut init, blob);
+
   ros_kernel(init)
 }
 
