@@ -1,5 +1,11 @@
 // ARMv7
  
+#if RPI_VERSION > 2
+#error "Invalid Raspberry Pi board version for ARMv7."
+#endif
+
+#define PERIPHERAL_BASE 0x3F000000
+
 // To keep this in the first portion of the binary.
 .section ".text.boot"
 
@@ -14,9 +20,8 @@ _start:
 /*------------------------------------------------------------------------------
 Save the entry arguments
 ------------------------------------------------------------------------------*/
-  mov     r5, r0
-  mov     r6, r1
-  mov     r7, r2
+  mov     r5, r1
+  mov     r6, r2
 
 /*------------------------------------------------------------------------------
 Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
@@ -46,9 +51,9 @@ should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
   mov     r0, r5
   mov     r1, r6
-  mov     r2, r7
-  ldr     r5, =kernel_stub
-  blx     r5
+  ldr     r2, =PERIPHERAL_BASE
+  ldr     r4, =kernel_stub
+  blx     r4
 
 halt:
   b       halt

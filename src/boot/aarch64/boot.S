@@ -1,5 +1,16 @@
 /// ARMv8 AArch64
 
+#define RPI4_PERIPHERAL_BASE 0xFE000000
+#define RPI3_PERIPHERAL_BASE 0x3F000000
+
+#if (!defined RPI_VERSION) || (RPI_VERSION == 3)
+#define PERIPHERAL_BASE RPI3_PERIPHERAL_BASE
+#elif RPI_VERSION == 4
+#define PERIPHERAL_BASE RPI4_PERIPHERAL_BASE
+#else
+#error "Invalid Raspberry Pi board version for AArch64."
+#endif
+
 #define SCTLR_RESERVED          ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
 #define SCTLR_EE_LITTLE_ENDIAN  (1 << 25) /* EL1 endianness */
 #define SCTLR_E0E_LITTLE_ENDIAN (1 << 24) /* EL0 endianness */
@@ -105,6 +116,7 @@ Restore the entry arguments and transfer control to the kernel stub. The stub
 should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
   mov     x0, x5
+  ldr     x1, =PERIPHERAL_BASE
   bl      kernel_stub
 
 halt:

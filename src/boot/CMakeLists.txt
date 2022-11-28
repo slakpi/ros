@@ -3,11 +3,8 @@
 #-------------------------------------------------------------------------------
 add_executable(
   kernel ${CMAKE_SYSTEM_PROCESSOR}/boot.S
-         ${CMAKE_SYSTEM_PROCESSOR}/exceptions.S
-         ${CMAKE_SYSTEM_PROCESSOR}/kernel_stub.c
-         atags/atags.c)
+         ${CMAKE_SYSTEM_PROCESSOR}/exceptions.S)
 target_compile_definitions(kernel PRIVATE RPI_VERSION=${RPI_VERSION})
-target_include_directories(kernel PRIVATE atags)
 target_link_libraries(kernel PRIVATE ROS::Kernel)
 target_link_options(
   kernel PUBLIC -T ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/${ROS_KERNEL_LINK_SCRIPT})
