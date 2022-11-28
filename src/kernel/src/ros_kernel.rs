@@ -37,9 +37,10 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
 /// cbindgen:ignore
 #[cfg(target_arch = "arm")]
 #[no_mangle]
-pub extern "C" fn kernel_stub(machine_id: usize, blob: usize, peripheral_base: usize) -> ! {
+pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: usize) -> ! {
   let mut init = ROSKernelInit::new();
   init.peripheral_base = peripheral_base;
+  atags::read_atags(&mut init, blob);
   ros_kernel(init)
 }
 
