@@ -91,12 +91,11 @@ vectors:
 
 
 /// @fn _trap_exception()
-/// @brief Default exception trap. Calls @a trap_exception in Rustland then
-///        halts.
+/// @brief Default exception trap stub.
 _trap_exception:
   kernel_entry
   mrs     x0, esr_el1
   mrs     x1, far_el1
-  bl      trap_exception
+  bl      trap_exception    // Transfer to Rustland
 halt:
   b       halt
