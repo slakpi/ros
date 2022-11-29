@@ -99,11 +99,12 @@ TODO: This needs to be generalized once memory management is a thing.
   mov     sp, x0
 
 /*------------------------------------------------------------------------------
-Clear the BSS.
+Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
 ------------------------------------------------------------------------------*/
   ldr     x0, =__bss_start
-  ldr     x1, =__bss_size
-  bl      memzero
+  mov     x1, #0
+  ldr     x2, =__bss_size
+  bl      memset
 
 /*------------------------------------------------------------------------------
 Setup exception vectors.
@@ -159,17 +160,3 @@ in_el1:
   msr     sctlr_el1, x0
 
   ret
-
-
-/// @fn memzero(x0, x1)
-/// @brief Zeros a memory block
-/// @param[in] x0 Start address (Assumes 8-byte alignment)
-/// @param[in] x1 Block size (Assumes 8-byte multiple)
-memzero:
-  cbz     x1, zero_end      // Zero bytes, nothing to do
-zero_loop:
-  str     xzr, [x0], #8     // Write 8 zero bytes, then increment by 8 bytes
-	subs    x1, x1, #8        // Subtract 8 from size argument
-	bgt     zero_loop         // Keep looping if size still greater than zero
-zero_end:
-	ret

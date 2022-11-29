@@ -39,11 +39,12 @@ TODO: This needs to be generalized once memory management is a thing.
   mov     sp, r0
 
 /*------------------------------------------------------------------------------
-Clear the BSS.
+Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
 ------------------------------------------------------------------------------*/
   ldr     r0, =__bss_start
-  ldr     r1, =__bss_end
-  bl      memzero
+  mov     r1, #0
+  ldr     r2, =__bss_end
+  bl      memset
 
 /*------------------------------------------------------------------------------
 Restore the entry arguments and transfer control to the kernel stub. The stub
@@ -57,19 +58,3 @@ should not return. If it does, we will end up halting below.
 
 halt:
   b       halt
-
-
-/// @fn memzero(r0, r1)
-/// @brief Zeros a memory block
-/// @param[in] r0 Start address (Assumes 4-byte alignment)
-/// @param[in] r1 Block size (Assumes 4-byte multiple)
-memzero:
-  cmp     r1, #0
-  beq     zero_end          // Zero bytes, nothing to do
-  mov     r2, #0
-zero_loop:
-  str     r2, [r0], #4      // Write 4 zero bytes, then increment by 4 bytes
-	subs    r1, r1, #4        // Subtract 4 from size argument
-  bgt     zero_loop         // Keep looping if size still greater than zero
-zero_end:
-	bx      lr                // Return
