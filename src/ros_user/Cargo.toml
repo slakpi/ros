@@ -1,0 +1,15 @@
+[package]
+name = "ros_user"
+version = "0.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+cbindgen = "0.20"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+ros_kernel_user = {path="../ros_kernel_user"}

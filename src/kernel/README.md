@@ -1,5 +1,5 @@
-boot
-====
+Kernel Bootstrap
+================
 
 This folder contains all of the architecture-dependent code to bootstrap the
 kernel. It provides the entry point called by the bootloader, initializes the
