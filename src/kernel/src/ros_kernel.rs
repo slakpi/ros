@@ -18,7 +18,6 @@ fn panic(_info: &PanicInfo) -> ! {
 /// @param[in] blob            ATAG or Device Tree blob.
 /// @param[in] peripheral_base The peripheral base address.
 /// @returns Does not return
-/// cbindgen:ignore
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
 pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
@@ -37,7 +36,6 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
 /// @param[in] blob            ATAG or Device Tree blob.
 /// @param[in] peripheral_base The peripheral base address.
 /// @returns Does not return
-/// cbindgen:ignore
 #[cfg(target_arch = "arm")]
 #[no_mangle]
 pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: usize) -> ! {

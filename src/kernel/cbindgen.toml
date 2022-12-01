@@ -1,5 +1,0 @@
-language = "C"
-pragma_once = true
-cpp_compat  = true
-line_length = 100
-tab_width = 2
