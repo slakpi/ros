@@ -1,2 +1,2 @@
-add-symbol-file build/aarch64/src/boot/kernel
+add-symbol-file build/aarch64/src/kernel/kernel
 target remote localhost:9000
