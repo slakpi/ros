@@ -15,10 +15,10 @@ pub fn set_peripheral_base_addr(base: usize) {
   }
 }
 
-/// @fn get_peripheral_register_addr(reg: usize) -> *mut i32
+/// @fn get_peripheral_register_addr(reg: usize) -> *mut u32
 /// @brief   Get a physical peripheral register address.
 /// @param[in] reg The register address relative to the peripheral base address.
 /// @returns The physical address of the register.
-pub fn get_peripheral_register_addr(reg: usize) -> *mut i32 {
-  unsafe { (PERIPHERAL_BASE + reg) as *mut i32 }
+pub fn get_peripheral_register_addr(reg: usize) -> *mut u32 {
+  unsafe { (PERIPHERAL_BASE + reg) as *mut u32 }
 }

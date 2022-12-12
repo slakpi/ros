@@ -18,7 +18,7 @@ pub const AUX_MU_BAUD_REG: usize = 0x00215068;
 /// @fn uart_init()
 /// @brief Intialize UART1.
 pub fn uart_init() {
-  let mut selector: i32 = utils::get(gpio::GPFSEL1);
+  let mut selector = utils::get(gpio::GPFSEL1);
   selector &= !(7 << 12);
   selector |= 2 << 12;
   selector &= !(7 << 15);
@@ -47,12 +47,12 @@ pub fn uart_init() {
 pub fn _uart_recv() -> u8 {
   loop {
     let c = utils::get(AUX_MU_LSR_REG);
-    if c & 0x00000001 != 0 {
+    if c & 0x1 != 0 {
       break;
     }
   }
 
-  (utils::get(AUX_MU_IO_REG) & 0x000000ff) as u8
+  (utils::get(AUX_MU_IO_REG) & 0xff) as u8
 }
 
 /// @fn uart_send(c: u8)
@@ -61,12 +61,12 @@ pub fn _uart_recv() -> u8 {
 pub fn uart_send(c: u8) {
   loop {
     let c = utils::get(AUX_MU_LSR_REG);
-    if c & 0x00000020 != 0 {
+    if c & 0x20 != 0 {
       break;
     }
   }
 
-  utils::put(c as i32, AUX_MU_IO_REG);
+  utils::put(c as u32, AUX_MU_IO_REG);
 }
 
 /// @fn uart_send_bytes(s: &[u8])

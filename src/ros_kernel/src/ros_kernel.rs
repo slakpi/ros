@@ -1,4 +1,5 @@
 use crate::dbg_print;
+use crate::drivers::video;
 use crate::peripherals;
 use crate::support::atags;
 use crate::support::kernel_init::ROSKernelInit;
@@ -21,9 +22,9 @@ fn panic(_info: &PanicInfo) -> ! {
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
 pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
-  let mut init = ROSKernelInit::new();  
+  let mut init = ROSKernelInit::new();
   init.peripheral_base = peripheral_base;
-  
+
   // TODO: Attempt to parse a device tree if this is not an ATAG list.
   atags::read_atags(&mut init, blob);
 
@@ -55,6 +56,7 @@ pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: 
 fn ros_kernel(init: ROSKernelInit) -> ! {
   peripherals::base::set_peripheral_base_addr(init.peripheral_base);
   peripherals::mini_uart::uart_init();
+  video::framebuffer::fb_init();
   startup_messages();
   loop {}
 }
@@ -65,4 +67,6 @@ fn startup_messages() {
   let pbase = peripherals::base::get_peripheral_register_addr(0) as usize;
   dbg_print!("=== ROS ===\n");
   dbg_print!("Peripheral Base Address: {:#x}\n", pbase);
+
+  video::framebuffer::draw_string("Hello, World!", 0, 0, 0x0f);
 }
