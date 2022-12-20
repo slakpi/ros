@@ -1,4 +1,5 @@
-use super::utils;
+use super::base;
+use core::convert::TryFrom;
 
 pub const MBOX_REQUEST: u32 = 0;
 
@@ -79,18 +80,18 @@ pub fn get_buffer_mut() -> &'static mut Mail {
 /// @returns True if the request succeeds.
 pub fn send(channel: u32) -> bool {
   // Wait for the GPU to empty the mailbox.
-  while (utils::get(MBOX_STATUS) & MBOX_FULL) != 0 {}
+  while (base::peripheral_reg_get(MBOX_STATUS) & MBOX_FULL) != 0 {}
 
   // Write the buffer address and channel to the mailbox.
   let packed_addr = pack_address_and_channel(channel);
-  utils::put(packed_addr, MBOX_WRITE);
+  base::peripheral_reg_put(packed_addr, MBOX_WRITE);
 
   loop {
     // Wait for the GPU to deposit data into the mailbox.
-    while (utils::get(MBOX_STATUS) & MBOX_EMPTY) != 0 {}
+    while (base::peripheral_reg_get(MBOX_STATUS) & MBOX_EMPTY) != 0 {}
 
     // Discard any responses not related to our request.
-    if utils::get(MBOX_READ) == packed_addr {
+    if base::peripheral_reg_get(MBOX_READ) == packed_addr {
       unsafe {
         return MAIL.mail[1] == MBOX_RESPONSE;
       }
@@ -108,7 +109,7 @@ pub fn send(channel: u32) -> bool {
 fn pack_address_and_channel(channel: u32) -> u32 {
   unsafe {
     let raw_ptr = &MAIL.mail as *const u32;
-    let raw_addr = (raw_ptr as usize) & (0xfffffff0 as usize);
-    (raw_addr as u32) | (channel & 0xf)
+    let raw_addr = (raw_ptr as usize) & (0xfffffff0usize);
+    (u32::try_from(raw_addr).unwrap()) | (channel & 0xf)
   }
 }

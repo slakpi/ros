@@ -58,7 +58,7 @@ pub fn dbg_print(args: fmt::Arguments<'_>) {
     let mut stream = WriteBuffer::new(&mut DBG_WRITE_BUFFER);
     match stream.write_fmt(args) {
       Ok(_) => mini_uart::uart_send_bytes(stream.as_bytes()),
-      _ => mini_uart::uart_send_string("(Failed to format string.)"),
+      _ => mini_uart::uart_send_string("Error: dbg_print Failed to format string.\n"),
     }
   }
 }

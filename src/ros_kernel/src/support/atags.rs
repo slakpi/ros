@@ -1,4 +1,5 @@
 use super::kernel_init::ROSKernelInit;
+use core::convert::TryFrom;
 use core::mem::ManuallyDrop;
 
 const ATAG_NONE: u32 = 0;
@@ -87,7 +88,7 @@ pub fn read_atags(init: &mut ROSKernelInit, blob: usize) -> bool {
       }
 
       // Offset ptr. The size field is the number of 32-bit integers in the tag.
-      ptr = ptr.offset((*atag).hdr.size as isize);
+      ptr = ptr.offset(isize::try_from((*atag).hdr.size).unwrap());
       hdr = ptr as *const ATAGHeader;
     }
   }
@@ -102,8 +103,8 @@ pub fn read_atags(init: &mut ROSKernelInit, blob: usize) -> bool {
 fn read_mem_atag(init: &mut ROSKernelInit, tag: &ATAGMem) {
   for rgn in init.memory_regions.iter_mut() {
     if rgn.size == 0 {
-      rgn.size = tag.size as usize;
-      rgn.base = tag.base as usize;
+      rgn.size = usize::try_from(tag.size).unwrap();
+      rgn.base = usize::try_from(tag.base).unwrap();
       break;
     }
   }

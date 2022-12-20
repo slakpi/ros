@@ -1,6 +1,6 @@
 use crate::dbg_print;
-use crate::drivers::video;
-use crate::peripherals;
+use crate::drivers::video::framebuffer;
+use crate::peripherals::{base, gpio, mini_uart};
 use crate::support::atags;
 use crate::support::kernel_init::ROSKernelInit;
 use core::panic::PanicInfo;
@@ -26,7 +26,7 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
   init.peripheral_base = peripheral_base;
 
   // TODO: Attempt to parse a device tree if this is not an ATAG list.
-  atags::read_atags(&mut init, blob);
+  // atags::read_atags(&mut init, blob);
 
   ros_kernel(init)
 }
@@ -44,29 +44,36 @@ pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: 
   init.peripheral_base = peripheral_base;
 
   // TODO: Attempt to parse a device tree if this is not an ATAG list.
-  atags::read_atags(&mut init, blob);
+  // atags::read_atags(&mut init, blob);
 
   ros_kernel(init)
 }
 
 /// @fn ros_kernel(init: *const ROSKernelInit) -> !
 /// @brief   Rust kernel entry point.
-/// @param[in] init Pointer to the architecture-dependent setup.
+/// @param[in] init Architecture-dependent initialization parameters.
 /// @returns Does not return.
 fn ros_kernel(init: ROSKernelInit) -> ! {
-  peripherals::base::set_peripheral_base_addr(init.peripheral_base);
-  peripherals::mini_uart::uart_init();
-  video::framebuffer::fb_init();
-  startup_messages();
+  init_peripherals(&init);
+
+  dbg_print!("=== ROS ===\n");
+  dbg_print!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
+
+  init_drivers();
+
   loop {}
 }
 
-/// @fn startup_messages()
-/// @brief Print some boring information on startup.
-fn startup_messages() {
-  let pbase = peripherals::base::get_peripheral_register_addr(0) as usize;
-  dbg_print!("=== ROS ===\n");
-  dbg_print!("Peripheral Base Address: {:#x}\n", pbase);
+/// @fn init_peripherals(init: &ROSKernelInit)
+/// @brief Initialize peripheral devices.
+/// @param[in] init Architecture-dependent initialization parameters.
+fn init_peripherals(init: &ROSKernelInit) {
+  base::set_peripheral_base_addr(init.peripheral_base);
+  mini_uart::uart_init();
+}
 
-  video::framebuffer::draw_string("Hello, World!", 0, 0, 0x0f);
+/// @fn init_drivers()
+/// @brief Initialize drivers.
+fn init_drivers() {
+  framebuffer::fb_init();
 }
