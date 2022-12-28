@@ -1,4 +1,4 @@
-use crate::dbg_print;
+use crate::{dbg_print, kprint};
 use crate::drivers::video::framebuffer;
 use crate::peripherals::{base, gpio, mini_uart};
 use crate::support::atags;
@@ -60,6 +60,9 @@ fn ros_kernel(init: ROSKernelInit) -> ! {
   dbg_print!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
 
   init_drivers();
+
+  kprint!("=== ROS ===\n");
+  kprint!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
 
   loop {}
 }

@@ -1,6 +1,8 @@
+use crate::support::print;
 use super::framebuffer;
-use core::cmp;
 use core::convert::TryFrom;
+use core::fmt::{self, Write};
+use core::mem;
 use core::ptr;
 
 const VGA_PAL: [u32; 16] = [
@@ -8,8 +10,8 @@ const VGA_PAL: [u32; 16] = [
   0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
 ];
 
-const FONT_WIDTH: u8 = 8;
-const FONT_HEIGHT: u8 = 8;
+const FONT_WIDTH: usize = 8;
+const FONT_HEIGHT: usize = 8;
 const FONT_BPG: usize = 8;
 const _FONT_BPL: usize = 1;
 const FONT_NUMGLYPHS: usize = 256;
@@ -292,46 +294,100 @@ pub fn clear() {
   }
 }
 
-fn draw_pixel(fb: &framebuffer::Framebuffer, x: u32, y: u32, attr: u8) {
-  let x = isize::try_from(cmp::min(cmp::max(x, 0), fb.width - 1)).unwrap();
-  let y = isize::try_from(cmp::min(cmp::max(y, 0), fb.height - 1)).unwrap();
+fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
+  let x = isize::try_from(x.clamp(0, fb.width - 1)).unwrap();
+  let y = isize::try_from(y.clamp(0, fb.height - 1)).unwrap();
   let p = isize::try_from(fb.pitch).unwrap();
-  let offs = (y * p) + x;
-  let pal_idx = usize::try_from(attr & 0x0f).unwrap();
+  let mut offs = (y * p) + (x * 4);
+  let ch = usize::try_from(ch).unwrap();
 
-  unsafe {
-    *(fb.fb_ptr.offset(offs) as *mut u32) = VGA_PAL[pal_idx];
+  for r in 0..FONT_HEIGHT {
+    let mut row: [u32; FONT_WIDTH] = [0; FONT_WIDTH];
+
+    for c in 0..FONT_WIDTH {
+      let mask = 1 << c;
+      let px: usize = if (FONT_GLYPHS[ch][r] & mask) != 0 {
+        (attr & 0x0f).into()
+      } else {
+        ((attr & 0xf0) >> 4).into()
+      };
+
+      row[c] = VGA_PAL[px];
+    }
+
+    unsafe {
+      core::ptr::copy(row.as_ptr() as *const u8, fb.fb_ptr.offset(offs),
+                      mem::size_of_val(&row));
+    }
+
+    offs = offs + p;
   }
 }
 
-fn draw_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
-  for r in 0..FONT_HEIGHT {
-    for c in 0..FONT_WIDTH {
-      let mask = 1 << c;
-      let px = if (FONT_GLYPHS[ch as usize][r as usize] & mask) != 0 {
-        attr & 0x0f
-      } else {
-        (attr & 0xf0) >> 4
-      };
+fn scroll_console(fb: &framebuffer::Framebuffer) {
+  let p = (fb.pitch as isize) * (FONT_HEIGHT as isize);
+  let bytes = (fb.pitch as usize) * (fb.height as usize) - (p as usize);
+  
+  unsafe {
+    core::ptr::copy(fb.fb_ptr.offset(p), fb.fb_ptr, bytes);
+  }
+}
 
-      draw_pixel(fb, x + (c as u32), y + (r as u32), px);
+fn print_string(s: &[u8], attr: u8) {
+  let (mut r, mut c) = unsafe {
+    (CONSOLE.y, CONSOLE.x)
+  };
+  let x_inc: u32 = u32::try_from(FONT_WIDTH).unwrap();
+  let y_inc: u32 = u32::try_from(FONT_HEIGHT).unwrap();
+  let fb = framebuffer::get_fb();
+
+  for b in s {
+    if c >= fb.width {
+      c = 0;
+      r = r + y_inc;
+    }
+
+    while r >= fb.height {
+      scroll_console(fb);
+      r = r - y_inc;
+    }
+
+    if *b == 0xd {
+      c = 0;
+    } else if *b == 0xa {
+      c = 0;
+      r = r + y_inc;
+    } else {
+      print_char(fb, *b, c, r, attr);
+      c = c + x_inc;
+    }
+  }
+
+  unsafe {
+    (CONSOLE.y, CONSOLE.x) = (r, c);
+  }
+}
+
+/// @fn kprint(args: fmt::Arguments<'_>)
+/// @brief Formats the arguments to a string and writes it to the console.
+/// @param[in] args The formatting arguments built by format_args!.
+pub fn kprint(args: fmt::Arguments<'_>) {
+  unsafe {
+    let mut stream = print::new_string_format_buffer();
+    match stream.write_fmt(args) {
+      Ok(_) => print_string(stream.as_bytes(), 0x0f),
+      _ => print_string("Error: kprint Failed to format string.\n".as_bytes(), 0x0f),
     }
   }
 }
 
-// pub fn draw_string(s: &str, x: u32, y: u32, attr: u8) {
-//   let mut r = y;
-//   let mut c = x;
-
-//   for b in s.as_bytes() {
-//     if *b == 0xd {
-//       c = x;
-//     } else if *b == 0xa {
-//       c = x;
-//       r = r + (FONT_HEIGHT as u32);
-//     }
-
-//     draw_char(*b, c, r, attr);
-//     c = c + (FONT_WIDTH as u32);
-//   }
-// }
+/// @def kprint!
+/// @brief Macro form that takes a format string and arguments to print to the
+///        console.
+#[macro_export]
+macro_rules! kprint {
+  () => {};
+  ($($arg:tt)*) => {{
+    $crate::drivers::video::console::kprint(format_args!($($arg)*));
+  }}
+}
