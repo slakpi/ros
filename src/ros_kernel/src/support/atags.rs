@@ -103,8 +103,8 @@ pub fn read_atags(init: &mut ROSKernelInit, blob: usize) -> bool {
 fn read_mem_atag(init: &mut ROSKernelInit, tag: &ATAGMem) {
   for rgn in init.memory_regions.iter_mut() {
     if rgn.size == 0 {
-      rgn.size = usize::try_from(tag.size).unwrap();
-      rgn.base = usize::try_from(tag.base).unwrap();
+      rgn.size = tag.size as usize;
+      rgn.base = tag.base as usize;
       break;
     }
   }

@@ -50,7 +50,5 @@ impl<'buffer> fmt::Write for WriteBuffer<'buffer> {
 }
 
 pub fn new_string_format_buffer() -> WriteBuffer<'static> {
-  unsafe {
-    WriteBuffer::new(&mut WRITE_BUFFER)
-  }
+  unsafe { WriteBuffer::new(&mut WRITE_BUFFER) }
 }

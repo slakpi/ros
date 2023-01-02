@@ -6,12 +6,10 @@ use core::fmt::{self, Write};
 /// @brief Formats the arguments to a string and writes it to the mini UART.
 /// @param[in] args The formatting arguments built by format_args!.
 pub fn dbg_print(args: fmt::Arguments<'_>) {
-  unsafe {
-    let mut stream = print::new_string_format_buffer();
-    match stream.write_fmt(args) {
-      Ok(_) => mini_uart::uart_send_bytes(stream.as_bytes()),
-      _ => mini_uart::uart_send_string("Error: dbg_print Failed to format string.\n"),
-    }
+  let mut stream = print::new_string_format_buffer();
+  match stream.write_fmt(args) {
+    Ok(_) => mini_uart::uart_send_bytes(stream.as_bytes()),
+    _ => mini_uart::uart_send_string("Error: dbg_print Failed to format string.\n"),
   }
 }
 

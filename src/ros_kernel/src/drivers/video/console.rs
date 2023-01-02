@@ -1,5 +1,5 @@
-use crate::support::print;
 use super::framebuffer;
+use crate::support::print;
 use core::convert::TryFrom;
 use core::fmt::{self, Write};
 use core::mem;
@@ -282,10 +282,12 @@ struct Console {
 
 static mut CONSOLE: Console = Console { x: 0, y: 0 };
 
+/// @fn clear()
+/// @brief Clear the frame buffer.
 pub fn clear() {
   let fb = framebuffer::get_fb();
-  let h = usize::try_from(fb.height).unwrap();
-  let p = usize::try_from(fb.pitch).unwrap();
+  let h = fb.height as usize;
+  let p = fb.pitch as usize;
 
   unsafe {
     ptr::write_bytes(fb.fb_ptr, 0, h * p);
@@ -294,12 +296,25 @@ pub fn clear() {
   }
 }
 
+/// @fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8)
+/// @brief Print a character to a framebuffer using the default font.
+/// @param[in] fb   The framebuffer for output.
+/// @param[in] ch   The character to print.
+/// @param[in] x    The x position on the screen in pixels.
+/// @param[in] y    The y position on the screen in pixels.
+/// @param[in] attr The font colors. The high nibble is the index in to the VGA
+///                 palette for the background, and the low nibble is the index
+///                 for the foreground.
 fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
+  if fb.width == 0 || fb.height == 0 {
+    return;
+  }
+
   let x = isize::try_from(x.clamp(0, fb.width - 1)).unwrap();
   let y = isize::try_from(y.clamp(0, fb.height - 1)).unwrap();
   let p = isize::try_from(fb.pitch).unwrap();
   let mut offs = (y * p) + (x * 4);
-  let ch = usize::try_from(ch).unwrap();
+  let ch = ch as usize;
 
   for r in 0..FONT_HEIGHT {
     let mut row: [u32; FONT_WIDTH] = [0; FONT_WIDTH];
@@ -316,27 +331,35 @@ fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
     }
 
     unsafe {
-      core::ptr::copy(row.as_ptr() as *const u8, fb.fb_ptr.offset(offs),
-                      mem::size_of_val(&row));
+      core::ptr::copy(
+        row.as_ptr() as *const u8,
+        fb.fb_ptr.offset(offs),
+        mem::size_of_val(&row),
+      );
     }
 
     offs = offs + p;
   }
 }
 
+/// @fn scroll_console(fb: &framebuffer::Framebuffer)
+/// @brief Scroll a framebuffer up one line.
+/// @param[in] fb The framebuffer to scroll.
 fn scroll_console(fb: &framebuffer::Framebuffer) {
   let p = (fb.pitch as isize) * (FONT_HEIGHT as isize);
   let bytes = (fb.pitch as usize) * (fb.height as usize) - (p as usize);
-  
+
   unsafe {
     core::ptr::copy(fb.fb_ptr.offset(p), fb.fb_ptr, bytes);
   }
 }
 
+/// @fn print_string(s: &[u8], attr: u8)
+/// @brief Print a string to the console.
+/// @param[in] s    An array of single-byte, characters to print.
+/// @param[in] attr The font colors. See @a print_char.
 fn print_string(s: &[u8], attr: u8) {
-  let (mut r, mut c) = unsafe {
-    (CONSOLE.y, CONSOLE.x)
-  };
+  let (mut r, mut c) = unsafe { (CONSOLE.y, CONSOLE.x) };
   let x_inc: u32 = u32::try_from(FONT_WIDTH).unwrap();
   let y_inc: u32 = u32::try_from(FONT_HEIGHT).unwrap();
   let fb = framebuffer::get_fb();
@@ -372,12 +395,10 @@ fn print_string(s: &[u8], attr: u8) {
 /// @brief Formats the arguments to a string and writes it to the console.
 /// @param[in] args The formatting arguments built by format_args!.
 pub fn kprint(args: fmt::Arguments<'_>) {
-  unsafe {
-    let mut stream = print::new_string_format_buffer();
-    match stream.write_fmt(args) {
-      Ok(_) => print_string(stream.as_bytes(), 0x0f),
-      _ => print_string("Error: kprint Failed to format string.\n".as_bytes(), 0x0f),
-    }
+  let mut stream = print::new_string_format_buffer();
+  match stream.write_fmt(args) {
+    Ok(_) => print_string(stream.as_bytes(), 0x0f),
+    _ => print_string("Error: kprint Failed to format string.\n".as_bytes(), 0x0f),
   }
 }
 

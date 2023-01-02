@@ -1,5 +1,4 @@
 use super::base;
-use core::convert::TryFrom;
 
 pub const MBOX_REQUEST: u32 = 0;
 
@@ -110,6 +109,6 @@ fn pack_address_and_channel(channel: u32) -> u32 {
   unsafe {
     let raw_ptr = &MAIL.mail as *const u32;
     let raw_addr = (raw_ptr as usize) & (0xfffffff0usize);
-    (u32::try_from(raw_addr).unwrap()) | (channel & 0xf)
+    (raw_addr as u32) | (channel & 0xf)
   }
 }

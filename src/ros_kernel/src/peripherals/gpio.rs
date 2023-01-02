@@ -37,6 +37,8 @@ pub const GPIO_PUP_PDN_CNTRL_REG1: usize = 0x002000E8;
 pub const GPIO_PUP_PDN_CNTRL_REG2: usize = 0x002000EC;
 pub const GPIO_PUP_PDN_CNTRL_REG3: usize = 0x002000F0;
 
+/// @enum GPIOPin
+/// @brief GPIO pin identifiers.
 #[derive(Copy, Clone)]
 #[repr(u8)]
 pub enum GPIOPin {
@@ -100,9 +102,12 @@ pub enum GPIOPin {
   GPIO57,
 }
 
+/// @enum GPIOPinFunction
+/// @brief GPIO pin functions. Refer to the BCM283x and BCM2711 datasheets for
+///        the alternate function assignments.
 #[derive(Copy, Clone)]
 #[repr(u8)]
-pub enum GPIOPinMode {
+pub enum GPIOPinFunction {
   Input = 0,
   Output = 1,
   AltFn0 = 4,
@@ -115,7 +120,11 @@ pub enum GPIOPinMode {
 
 pub const GPIO_DELAY: u64 = 150;
 
-pub fn set_pin_function(pin: GPIOPin, mode: GPIOPinMode) {
+/// @fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction)
+/// @brief Changes the function assignment for a GPIO pin.
+/// @param[in] pin  The pin to change.
+/// @param[in] func The new function assginment. 
+pub fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction) {
   let pin_val = pin as u8;
   let shift = (pin_val % 10) * 3;
   let reg = match pin_val / 10 {
@@ -133,16 +142,32 @@ pub fn set_pin_function(pin: GPIOPin, mode: GPIOPinMode) {
 
   let mut val = base::peripheral_reg_get(reg);
   val &= !(3 << shift);
-  val |= (mode as u32) << shift;
+  val |= (func as u32) << shift;
   base::peripheral_reg_put(val, reg);
 }
 
+/// @fn write_to_pin(pin: GPIOPin, val: bool)
+/// @brief Write to a GPIO pin.
+/// @param[in] pin The pin to write.
+/// @param[in] val The truth value to write.
 pub fn write_to_pin(pin: GPIOPin, val: bool) {
   let pin_val = pin as u8;
   let shift = pin_val % 32;
   let reg = match pin_val / 32 {
-    0 => if val {GPSET0} else {GPCLR0},
-    1 => if val {GPSET1} else {GPCLR1},
+    0 => {
+      if val {
+        GPCLR0
+      } else {
+        GPSET0
+      }
+    }
+    1 => {
+      if val {
+        GPCLR1
+      } else {
+        GPSET1
+      }
+    }
     _ => {
       assert!(false, "Invalid GPIO register."); // Should never happen
       0

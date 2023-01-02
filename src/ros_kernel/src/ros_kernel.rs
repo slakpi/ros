@@ -1,8 +1,8 @@
-use crate::{dbg_print, kprint};
-use crate::drivers::video::framebuffer;
-use crate::peripherals::{base, gpio, mini_uart};
+use crate::drivers::video::{console, framebuffer};
+use crate::peripherals::{base, mini_uart};
 use crate::support::atags;
 use crate::support::kernel_init::ROSKernelInit;
+use crate::{dbg_print, kprint};
 use core::panic::PanicInfo;
 
 /// @fn panic(_info: &PanicInfo) -> !
@@ -14,16 +14,16 @@ fn panic(_info: &PanicInfo) -> ! {
   loop {}
 }
 
-/// @fn kernel_stub(blob: usize, peripheral_base: usize) -> !
+/// @fn kernel_stub(blob: u32, peripheral_base: u32) -> !
 /// @brief   AArch64 kernel stub.
 /// @param[in] blob            ATAG or Device Tree blob.
 /// @param[in] peripheral_base The peripheral base address.
 /// @returns Does not return
 #[cfg(target_arch = "aarch64")]
 #[no_mangle]
-pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
+pub extern "C" fn kernel_stub(_blob: u32, peripheral_base: u32) -> ! {
   let mut init = ROSKernelInit::new();
-  init.peripheral_base = peripheral_base;
+  init.peripheral_base = peripheral_base as usize;
 
   // TODO: Attempt to parse a device tree if this is not an ATAG list.
   // atags::read_atags(&mut init, blob);
@@ -31,7 +31,7 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
   ros_kernel(init)
 }
 
-/// @fn kernel_stub(zero: usize, machine_id: usize, blob: usize, peripheral_base: usize) -> !
+/// @fn kernel_stub(machine_id: u32, blob: u32, peripheral_base: u32) -> !
 /// @brief   ARMv7 kernel stub.
 /// @param[in] machine_id      The machine ID provided by the bootloader.
 /// @param[in] blob            ATAG or Device Tree blob.
@@ -39,9 +39,9 @@ pub extern "C" fn kernel_stub(blob: usize, peripheral_base: usize) -> ! {
 /// @returns Does not return
 #[cfg(target_arch = "arm")]
 #[no_mangle]
-pub extern "C" fn kernel_stub(_machine_id: usize, blob: usize, peripheral_base: usize) -> ! {
+pub extern "C" fn kernel_stub(_machine_id: u32, _blob: u32, peripheral_base: u32) -> ! {
   let mut init = ROSKernelInit::new();
-  init.peripheral_base = peripheral_base;
+  init.peripheral_base = peripheral_base as usize;
 
   // TODO: Attempt to parse a device tree if this is not an ATAG list.
   // atags::read_atags(&mut init, blob);
@@ -61,6 +61,7 @@ fn ros_kernel(init: ROSKernelInit) -> ! {
 
   init_drivers();
 
+  console::clear();
   kprint!("=== ROS ===\n");
   kprint!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
 

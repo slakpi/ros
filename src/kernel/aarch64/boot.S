@@ -5,7 +5,7 @@
 
 #if (!defined RPI_VERSION) || (RPI_VERSION == 3)
 #define PERIPHERAL_BASE RPI3_PERIPHERAL_BASE
-#elif RPI_VERSION == 4
+#elif RPI_VERSION > 3
 #define PERIPHERAL_BASE RPI4_PERIPHERAL_BASE
 #else
 #error "Invalid Raspberry Pi board version for AArch64."
@@ -51,6 +51,7 @@ lower than EL3 are not secure.
 .section ".text.boot"
 
 
+///-------------------------------------------------------------------------------------------------
 /// @fn _start(x0, x1, x2, x3, x4)
 /// @brief Kernel entry point.
 /// @param[in] x0 32-bit pointer to the DTB (primary core)
@@ -63,28 +64,35 @@ _start:
 /*------------------------------------------------------------------------------
 Save the entry arguments
 ------------------------------------------------------------------------------*/
-  mov     x5, x0
+  mov     w5, w0
 
 /*------------------------------------------------------------------------------
 Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
 ------------------------------------------------------------------------------*/
   mrs     x0, mpidr_el1
-  and     x0, x0, #0xff
-  cbnz    x0, halt
+  and     x0, x0, #3
+  cbnz    x0, start_cpu_halt
 
 /*------------------------------------------------------------------------------
-Configure the processor for Exception Level 1.
+Configure the processor exception levels. The bootloader should have dropped us
+into EL2, so returning from this exception handler will jump to EL1 after
+configuration.
 ------------------------------------------------------------------------------*/
   bl      init_kernel_el
-  eret                      // Transfer control to el1_entry in EL1.
+  eret 
+
+start_cpu_halt:
+  b       start_cpu_halt
 
 
+///-------------------------------------------------------------------------------------------------
 /// @fn el2_entry()
 /// @brief Dummy entry point for EL3 -> E2.
 el2_entry:
   eret
 
 
+///-------------------------------------------------------------------------------------------------
 /// @fn el1_entry()
 /// @brief   Entry point for EL2 -> EL1.
 /// @details Runs once when the kernel drops from EL2 to EL1 during bootstrap.
@@ -116,14 +124,15 @@ Setup exception vectors.
 Restore the entry arguments and transfer control to the kernel stub. The stub
 should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
-  mov     x0, x5
-  ldr     x1, =PERIPHERAL_BASE
+  mov     w0, w5
+  ldr     w1, =PERIPHERAL_BASE
   bl      kernel_stub
 
-halt:
-  b       halt
+el1_cpu_halt:
+  b       el1_cpu_halt
 
 
+///-------------------------------------------------------------------------------------------------
 /// @fn init_kernel_el()
 /// @brief Initialize the kernel in the correct exception level.
 init_kernel_el:

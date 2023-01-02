@@ -1,8 +1,6 @@
 /// TODO: Move this out of kernel space as soon as video is available.
-
 use super::base;
 use super::gpio;
-use core::convert::TryFrom;
 use core::str;
 
 const AUX_ENABLES: usize = 0x00215004;
@@ -27,13 +25,6 @@ const AUX_MU_BAUD_REG: usize = 0x00215068;
 ///          The system frequency is 250 MHz. The baud register value of 270
 ///          translates to a baudrate of 250 MHz / (8 * (270 + 1)) ~ 115200.
 pub fn uart_init() {
-  let mut selector = base::peripheral_reg_get(gpio::GPFSEL1);
-  selector &= !(7 << 12);
-  selector |= 2 << 12;
-  selector &= !(7 << 15);
-  selector |= 2 << 15;
-  base::peripheral_reg_put(selector, gpio::GPFSEL1);
-
   base::peripheral_reg_put(0, gpio::GPPUD);
   base::peripheral_delay(gpio::GPIO_DELAY);
   base::peripheral_reg_put(3 << 14, gpio::GPPUDCLK0);
@@ -46,6 +37,9 @@ pub fn uart_init() {
   base::peripheral_reg_put(3, AUX_MU_LCR_REG); // 8-bit data
   base::peripheral_reg_put(0, AUX_MU_MCR_REG); // RTS line is high
   base::peripheral_reg_put(270, AUX_MU_BAUD_REG);
+
+  gpio::set_pin_function(gpio::GPIOPin::GPIO14, gpio::GPIOPinFunction::AltFn5);
+  gpio::set_pin_function(gpio::GPIOPin::GPIO15, gpio::GPIOPinFunction::AltFn5);
 
   base::peripheral_reg_put(3, AUX_MU_CNTL_REG);
 }
@@ -61,7 +55,7 @@ pub fn _uart_recv() -> u8 {
     }
   }
 
-  u8::try_from(base::peripheral_reg_get(AUX_MU_IO_REG) & 0xff).unwrap()
+  (base::peripheral_reg_get(AUX_MU_IO_REG) & 0xff) as u8
 }
 
 /// @fn uart_send(c: u8)
@@ -75,7 +69,7 @@ pub fn uart_send(c: u8) {
     }
   }
 
-  base::peripheral_reg_put(u32::try_from(c).unwrap(), AUX_MU_IO_REG);
+  base::peripheral_reg_put(c as u32, AUX_MU_IO_REG);
 }
 
 /// @fn uart_send_bytes(s: &[u8])

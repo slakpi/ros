@@ -29,7 +29,7 @@ pub fn fb_init() {
   if mailbox::send(mailbox::MBOX_CH_PROP) {
     let buf = mailbox::get_buffer();
 
-    // Verify we have a buffer with 32-bit depth and a pointer. Conver the
+    // Verify we have a buffer with 32-bit depth and a pointer. Convert the
     // pointer into an ARM pointer.
     unsafe {
       if buf[20] == 32 && buf[28] != 0 {
