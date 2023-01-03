@@ -6,7 +6,7 @@
 
 #define PERIPHERAL_BASE 0x3F000000
 
-// To keep this in the first portion of the binary.
+// The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
 
 

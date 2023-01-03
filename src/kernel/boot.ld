@@ -2,7 +2,6 @@ ENTRY(_start)
  
 SECTIONS
 {
-  . = 0x80000;
   __start = .;
   __text_start = .;
   .text :

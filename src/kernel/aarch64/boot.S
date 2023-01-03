@@ -47,7 +47,7 @@ lower than EL3 are not secure.
 
 #define SPSR_DEFAULT (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL1h)
 
-/// To keep this in the first portion of the binary.
+// The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
 
 
@@ -83,6 +83,9 @@ configuration.
 
 start_cpu_halt:
   b       start_cpu_halt
+
+
+.section ".text"
 
 
 ///-------------------------------------------------------------------------------------------------
