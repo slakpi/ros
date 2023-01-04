@@ -1,41 +1,50 @@
+__page_size = 4096;
+
 ENTRY(_start)
- 
+
 SECTIONS
 {
-  __start = .;
-  __text_start = .;
   .text :
   {
-      KEEP(*(.text.boot))
-      *(.text)
-  }
-  . = ALIGN(4096); /* align to page size */
-  __text_end = .;
+    __text_start = .;
 
-  __rodata_start = .;
+    KEEP(*(.text.boot))
+    *(.text)
+
+    . = ALIGN(__page_size);
+    __text_end = .;
+  }
+
   .rodata :
   {
-      *(.rodata)
-  }
-  . = ALIGN(4096); /* align to page size */
-  __rodata_end = .;
+    __rodata_start = .;
 
-  __data_start = .;
+    *(.rodata)
+
+    . = ALIGN(__page_size);
+    __rodata_end = .;
+  }
+
   .data :
   {
-      *(.data)
-  }
-  . = ALIGN(4096); /* align to page size */
-  __data_end = .;
+    __data_start = .;
 
-  __bss_start = .;
+    *(.data)
+
+    . = ALIGN(__page_size);
+    __data_end = .;
+  }
+
   .bss :
   {
-      bss = .;
-      *(.bss .bss.*)
+    __bss_start = .;
+
+    bss = .;
+    *(.bss .bss.*)
+
+    . = ALIGN(__page_size);
+    __bss_end = .;
   }
-  . = ALIGN(4096); /* align to page size */
-  __bss_end = .;
+  
   __bss_size = __bss_end - __bss_start;
-  __end = .;
 }
