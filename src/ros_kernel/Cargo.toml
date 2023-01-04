@@ -14,5 +14,9 @@ panic = "abort"
 [profile.release]
 panic = "abort"
 
+[profile.relwithdebinfo]
+inherits = "release"
+debug = true
+
 [dependencies]
 ros_kernel_user = {path="../ros_kernel_user"}
