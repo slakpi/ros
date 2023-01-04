@@ -123,7 +123,7 @@ pub const GPIO_DELAY: u64 = 150;
 /// @fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction)
 /// @brief Changes the function assignment for a GPIO pin.
 /// @param[in] pin  The pin to change.
-/// @param[in] func The new function assginment. 
+/// @param[in] func The new function assginment.
 pub fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction) {
   let pin_val = pin as u8;
   let shift = (pin_val % 10) * 3;
