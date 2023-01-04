@@ -1,3 +1,5 @@
+use core::ptr;
+
 /// @var PERIPHERAL_BASE
 /// @brief Peripheral base address for the Raspberry Pi board. The kernel is
 ///        single-threaded, so directly accessing the value is safe. However, it
@@ -30,7 +32,7 @@ pub fn get_peripheral_register_addr(reg: usize) -> *mut u32 {
 pub fn peripheral_reg_put(val: u32, to: usize) {
   let addr = get_peripheral_register_addr(to);
   unsafe {
-    *addr = val;
+    ptr::write_volatile(addr, val);
   }
 }
 
@@ -40,7 +42,7 @@ pub fn peripheral_reg_put(val: u32, to: usize) {
 /// @returns The register's value.
 pub fn peripheral_reg_get(from: usize) -> u32 {
   let addr = get_peripheral_register_addr(from);
-  unsafe { *addr }
+  unsafe { ptr::read_volatile(addr) }
 }
 
 /// @fn peripheral_delay(count: u64)
