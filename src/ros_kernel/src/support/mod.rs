@@ -1,3 +1,2 @@
-pub mod atags;
-pub mod kernel_init;
+pub mod dtb;
 pub mod print;

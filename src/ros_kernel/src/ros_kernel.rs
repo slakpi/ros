@@ -1,8 +1,7 @@
-use crate::drivers::video::{console, framebuffer};
-use crate::peripherals::{base, mini_uart};
-use crate::support::atags;
-use crate::support::kernel_init::ROSKernelInit;
-use crate::{dbg_print, kprint};
+use super::drivers::video::framebuffer;
+use super::peripherals::{base, mailbox, mini_uart};
+use super::support::dtb;
+use crate::dbg_print;
 use core::panic::PanicInfo;
 
 /// @fn panic(_info: &PanicInfo) -> !
@@ -15,65 +14,74 @@ fn panic(_info: &PanicInfo) -> ! {
 }
 
 /// @fn kernel_stub(blob: u32, peripheral_base: u32) -> !
-/// @brief   AArch64 kernel stub.
+/// @brief   Kernel stub.
 /// @param[in] blob            ATAG or Device Tree blob.
 /// @param[in] peripheral_base The peripheral base address.
 /// @returns Does not return
-#[cfg(target_arch = "aarch64")]
 #[no_mangle]
-pub extern "C" fn kernel_stub(_blob: u32, peripheral_base: u32) -> ! {
-  let mut init = ROSKernelInit::new();
-  init.peripheral_base = peripheral_base as usize;
-
-  // TODO: Attempt to parse a device tree if this is not an ATAG list.
-  // atags::read_atags(&mut init, blob);
-
-  ros_kernel(init)
+pub extern "C" fn kernel_stub(blob: u32, peripheral_base: u32) -> ! {
+  base::set_peripheral_base_addr(peripheral_base as usize);
+  mini_uart::uart_init();
+  ros_kernel(blob as usize);
 }
 
-/// @fn kernel_stub(machine_id: u32, blob: u32, peripheral_base: u32) -> !
-/// @brief   ARMv7 kernel stub.
-/// @param[in] machine_id      The machine ID provided by the bootloader.
-/// @param[in] blob            ATAG or Device Tree blob.
-/// @param[in] peripheral_base The peripheral base address.
-/// @returns Does not return
-#[cfg(target_arch = "arm")]
-#[no_mangle]
-pub extern "C" fn kernel_stub(_machine_id: u32, _blob: u32, peripheral_base: u32) -> ! {
-  let mut init = ROSKernelInit::new();
-  init.peripheral_base = peripheral_base as usize;
-
-  // TODO: Attempt to parse a device tree if this is not an ATAG list.
-  // atags::read_atags(&mut init, blob);
-
-  ros_kernel(init)
-}
-
-/// @fn ros_kernel(init: *const ROSKernelInit) -> !
+/// @fn ros_kernel(blob: usize) -> !
 /// @brief   Rust kernel entry point.
-/// @param[in] init Architecture-dependent initialization parameters.
+/// @param[in] blob The ATAG or DTB blob pointer.
 /// @returns Does not return.
-fn ros_kernel(init: ROSKernelInit) -> ! {
-  init_peripherals(&init);
-
+fn ros_kernel(blob: usize) -> ! {
   dbg_print!("=== ROS ===\n");
-  dbg_print!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
-
+  init_board();
+  init_devices(blob);
+  init_memory();
+  init_peripherals();
   init_drivers();
-
-  console::clear();
-  kprint!("=== ROS ===\n");
-  kprint!("Peripheral Base Address: {:#x}\n", init.peripheral_base);
-
   loop {}
 }
 
-/// @fn init_peripherals(init: &ROSKernelInit)
+fn init_board() {
+  let (ok, model) = mailbox::get_board_model();
+
+  if !ok {
+    dbg_print!("Failed to get board model.\n");
+    return;
+  }
+
+  let (ok, rev) = mailbox::get_board_revision();
+
+  if !ok {
+    dbg_print!("Failed to get board revision.\n");
+    return;
+  }
+
+  dbg_print!("Raspberry Pi model {:#x}, rev {:#x}\n", model, rev);
+}
+
+fn init_devices(blob: usize) {
+  let (valid_dtb, size) = dtb::check_dtb(blob as *const u8);
+
+  if !valid_dtb {
+    dbg_print!("Invalid dtb.\n");
+  } else {
+    dbg_print!("Found valid dtb at {:#x} with size {:#x}\n", blob as usize, size);
+  }
+}
+
+/// @fn init_peripherals()
 /// @brief Initialize peripheral devices.
-/// @param[in] init Architecture-dependent initialization parameters.
-fn init_peripherals(init: &ROSKernelInit) {
-  base::set_peripheral_base_addr(init.peripheral_base);
-  mini_uart::uart_init();
+fn init_peripherals() {
+}
+
+/// @fn init_memory()
+fn init_memory() {
+  let (ok, base, size) = mailbox::get_arm_memory();
+
+  if !ok {
+    dbg_print!("Failed to get low memory range.\n");
+    return;
+  }
+
+  dbg_print!("Low memory: {:#x} {:#x}\n", base, size);
 }
 
 /// @fn init_drivers()

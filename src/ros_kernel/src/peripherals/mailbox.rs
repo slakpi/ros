@@ -12,6 +12,14 @@ pub const _MBOX_CH_TOUCH: u32 = 6;
 pub const _MBOX_CH_COUNT: u32 = 7;
 pub const MBOX_CH_PROP: u32 = 8;
 
+pub const MBOX_TAG_REQUEST: u32 = 0;
+pub const _MBOX_TAG_TEST: u32 = 4;
+pub const MBOX_TAG_SET: u32 = 8;
+
+pub const MBOX_TAG_GET_BOARD_MODEL: u32 = 0x10001;
+pub const MBOX_TAG_GET_BOARD_REV: u32 = 0x10002;
+pub const MBOX_TAG_GET_ARM_MEM: u32 = 0x10005;
+
 pub const _MBOX_TAG_SETPOWER: u32 = 0x28001;
 pub const _MBOX_TAG_SETCLKRATE: u32 = 0x38002;
 
@@ -22,6 +30,7 @@ pub const MBOX_TAG_SETDEPTH: u32 = 0x48005;
 pub const MBOX_TAG_SETPXLORDR: u32 = 0x48006;
 pub const MBOX_TAG_GETFB: u32 = 0x40001;
 pub const MBOX_TAG_GETPITCH: u32 = 0x40008;
+
 pub const MBOX_TAG_LAST: u32 = 0;
 
 const VIDEOCORE_MBOX: usize = 0x0000B880;
@@ -37,7 +46,7 @@ const MBOX_RESPONSE: u32 = 0x80000000;
 const MBOX_FULL: u32 = 0x80000000;
 const MBOX_EMPTY: u32 = 0x40000000;
 
-pub const MAIL_SIZE: usize = 36;
+pub const MAIL_SIZE: usize = 128;
 
 pub type Mail = [u32; MAIL_SIZE];
 
@@ -65,10 +74,14 @@ static mut MAIL: _MailWrapper = _MailWrapper {
   mail: [0; MAIL_SIZE],
 };
 
+/// @fn get_buffer() -> &'static Mail
+/// @brief Get a reference to the static mailbox message buffer.
 pub fn get_buffer() -> &'static Mail {
   unsafe { &MAIL.mail }
 }
 
+/// @fn get_buffer_mut() -> &'static mut Mail
+/// @brief Get a mutable reference to the static mailbox message buffer.
 pub fn get_buffer_mut() -> &'static mut Mail {
   unsafe { &mut MAIL.mail }
 }
@@ -91,11 +104,73 @@ pub fn send(channel: u32) -> bool {
 
     // Discard any responses not related to our request.
     if base::peripheral_reg_get(MBOX_READ) == packed_addr {
-      unsafe {
-        return MAIL.mail[1] == MBOX_RESPONSE;
-      }
+      return true;
     }
   }
+}
+
+pub fn get_board_model() -> (bool, u32) {
+  let buf = get_buffer_mut();
+
+  buf[0] = 8 * 4;
+  buf[1] = MBOX_REQUEST;
+
+  buf[2] = MBOX_TAG_GET_BOARD_MODEL;
+  buf[3] = 4; // 4 bytes available for response.
+  buf[4] = MBOX_TAG_REQUEST;
+  buf[5] = 0; // Reserved for board model
+
+  buf[6] = MBOX_TAG_LAST;
+  buf[7] = 0;
+
+  if !send(MBOX_CH_PROP) {
+    return (false, 0);
+  }
+
+  (true, buf[5])
+}
+
+pub fn get_board_revision() -> (bool, u32) {
+  let buf = get_buffer_mut();
+
+  buf[0] = 8 * 4;
+  buf[1] = MBOX_REQUEST;
+
+  buf[2] = MBOX_TAG_GET_BOARD_REV;
+  buf[3] = 4; // 4 bytes available for response.
+  buf[4] = MBOX_TAG_REQUEST;
+  buf[5] = 0; // Reserved for board revision
+
+  buf[6] = MBOX_TAG_LAST;
+  buf[7] = 0;
+
+  if !send(MBOX_CH_PROP) {
+    return (false, 0);
+  }
+
+  (true, buf[5])
+}
+
+pub fn get_arm_memory() -> (bool, u32, u32) {
+  let buf = get_buffer_mut();
+
+  buf[0] = 9 * 4;
+  buf[1] = MBOX_REQUEST;
+
+  buf[2] = MBOX_TAG_GET_ARM_MEM;
+  buf[3] = 8; // 8 bytes available for response.
+  buf[4] = MBOX_TAG_REQUEST;
+  buf[5] = 0; // Reserved for base address
+  buf[6] = 0; // Reserved for memory length
+
+  buf[7] = MBOX_TAG_LAST;
+  buf[8] = 0;
+
+  if !send(MBOX_CH_PROP) {
+    return (false, 0, 0);
+  }
+
+  (true, buf[5], buf[6])
 }
 
 /// @fn pack_address_and_channel(channel: u32) -> u32

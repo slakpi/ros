@@ -50,11 +50,10 @@ Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
 Restore the entry arguments and transfer control to the kernel stub. The stub
 should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
-  mov     r0, r5
-  mov     r1, r6
-  ldr     r2, =PERIPHERAL_BASE
-  ldr     r4, =kernel_stub
-  blx     r4
+  mov     r0, r6
+  ldr     r1, =PERIPHERAL_BASE
+  ldr     r3, =kernel_stub
+  blx     r3
 
 halt:
   b       halt
