@@ -47,6 +47,7 @@ lower than EL3 are not secure.
 
 #define SPSR_DEFAULT (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL1h)
 
+
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
 
@@ -129,7 +130,8 @@ should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
   mov     w0, w5
   ldr     w1, =PERIPHERAL_BASE
-  bl      kernel_stub
+  ldr     w2, =__page_size
+  bl      ros_kernel
 
 el1_cpu_halt:
   b       el1_cpu_halt

@@ -6,10 +6,12 @@
 
 #define PERIPHERAL_BASE 0x3F000000
 
+
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
 
 
+///-------------------------------------------------------------------------------------------------
 /// @fn _start(r0, r1, r2)
 /// @brief Kernel entry point.
 /// @param[in] r0 Zero
@@ -52,8 +54,8 @@ should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
   mov     r0, r6
   ldr     r1, =PERIPHERAL_BASE
-  ldr     r3, =kernel_stub
-  blx     r3
+  ldr     r2, =__page_size
+  bl      ros_kernel
 
 halt:
   b       halt

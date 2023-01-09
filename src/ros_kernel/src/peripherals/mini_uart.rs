@@ -16,7 +16,7 @@ const AUX_MU_CNTL_REG: usize = 0x00215060;
 const _AUX_MU_STAT_REG: usize = 0x00215064;
 const AUX_MU_BAUD_REG: usize = 0x00215068;
 
-/// @fn uart_init()
+/// @fn init_uart()
 /// @brief   Intialize UART1.
 /// @details Modifies GPFSEL1 to configure GPIO14 and GPIO15 to use their
 ///          Alternate Function 5 modes, UART1 TX and RX respectively. Disable
@@ -24,7 +24,7 @@ const AUX_MU_BAUD_REG: usize = 0x00215068;
 ///
 ///          The system frequency is 250 MHz. The baud register value of 270
 ///          translates to a baudrate of 250 MHz / (8 * (270 + 1)) ~ 115200.
-pub fn uart_init() {
+pub fn init_uart() {
   base::peripheral_reg_put(0, gpio::GPPUD);
   base::peripheral_delay(gpio::GPIO_DELAY);
   base::peripheral_reg_put(3 << 14, gpio::GPPUDCLK0);
