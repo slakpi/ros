@@ -1,6 +1,6 @@
 use super::drivers::video::framebuffer;
 use super::peripherals::{base, memory, mini_uart};
-use super::support::{dtb, rpi};
+use super::support::dtb;
 use crate::dbg_print;
 use core::panic::PanicInfo;
 
@@ -24,12 +24,6 @@ pub extern "C" fn ros_kernel(blob: u32, peripheral_base: u32, page_size: u32) ->
   mini_uart::init_uart();
 
   dbg_print!("\n\n\n=== ROS ===\n");
-
-  let rpi_confg = rpi::RpiConfig::new(peripheral_base as usize, blob as usize, page_size);
-
-  memory::init_memory(&rpi_confg);
-
-  init_drivers();
 
   loop {}
 }
