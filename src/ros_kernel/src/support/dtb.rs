@@ -23,7 +23,7 @@ pub fn check_dtb(blob: usize) -> Result<u32, ()> {
     return Err(());
   }
 
-  let total_size = unsafe { u32::from_be(*dtb.offset(1)) };
+  let total_size = unsafe { u32::from_be(*dtb.add(1)) };
 
   Ok(total_size)
 }
@@ -68,6 +68,9 @@ impl DtbCursor {
     self.cur_loc = loc;
   }
 
+  /// @fn get_u8(&mut self) -> Option<u8>
+  /// @brief   Read the next u8 from the DTB.
+  /// @returns The next u8 or None if the end of the DTB has been reached.
   pub fn get_u8(&mut self) -> Option<u8> {
     if self.cur_loc > self.total_size - 1 {
       return None;
@@ -80,6 +83,10 @@ impl DtbCursor {
     Some(ret)
   }
 
+  /// @fn get_u8_slice(&mut self, size: u32) -> Option<&[u8]>
+  /// @brief   Construct a slice referencing the next @a size u8's.
+  /// @param[in] size The requested length of the slice.
+  /// @returns A slice or None if @a size overruns the DTB.
   pub fn get_u8_slice(&mut self, size: u32) -> Option<&[u8]> {
     if size > self.total_size {
       return None;
@@ -96,29 +103,71 @@ impl DtbCursor {
     Some(ret)
   }
 
+  // pub fn get_u8_slice_null_terminated(&mut self) -> Option<&[u8]> {
+  //   let mut p = self.cur_ptr;
+  //   let mut e = self.cur_loc;
+
+  //   unsafe {
+  //     while e < self.total_size {
+  //       if *p == 0 {
+  //         break;
+  //       }
+
+  //       p = p.add(1);
+  //       e += 1;
+  //     }
+  //   }
+
+  //   let ret = unsafe { slice::from_raw_parts(self.cur_ptr, e - self.cur_loc) };
+
+    
+
+  //   self.cur_ptr = p;
+  //   self.cur_loc = e;
+  // }
+
+  /// @fn get_u32(&mut self) -> Option<u32>
+  /// @brief   Read the next u32 from the DTB.
+  /// @returns The next u32 or None if the end of the DTB has been reached.
   pub fn get_u32(&mut self) -> Option<u32> {
     if self.cur_loc > self.total_size - 4 {
       return None;
     }
 
-    let ret = unsafe { *(self.cur_ptr as *const u32) };
+    let ret = unsafe { u32::from_be(*(self.cur_ptr as *const u32)) };
     self.cur_ptr = unsafe { self.cur_ptr.add(4) };
-    self.cur_loc += 1;
+    self.cur_loc += 4;
     
     Some(ret)
   }
 
-  pub fn get_reg(&mut self, cell_count: u32, size_count: u32) -> Option<(usize, usize)> {
+  /// @fn get_reg(&mut self, addr_cells: u32, size_cells: u32) -> Option<(usize, usize)>
+  /// @brief   Read the next reg pair.
+  /// @param[in] addr_cells The number of u32 words in an address.
+  /// @param[in] size_cells The number of u32 words in a range size.
+  /// @returns A tuple with the base address and size, or None if the reg
+  ///          overruns the DTB.
+  pub fn get_reg(&mut self, addr_cells: u32, size_cells: u32) -> Option<(usize, usize)> {
+    if addr_cells > 2 || size_cells > 2 {
+      return None;
+    }
+
+    let count = (4 * addr_cells) + (4 * size_cells);
+
+    if self.cur_loc > self.total_size - count {
+      return None;
+    }
+
     let mut addr = 0usize;
     let mut size = 0usize;
 
-    for _ in 0..cell_count {
+    for _ in 0..addr_cells {
       addr <<= 4;
       let word = self.get_u32()?;
       addr |= word as usize;
     }
 
-    for _ in 0..size_count {
+    for _ in 0..size_cells {
       size <<= 4;
       let word = self.get_u32()?;
       size |= word as usize;
@@ -128,11 +177,43 @@ impl DtbCursor {
   }
 }
 
+struct DtbHeader {
+  dt_struct_offset: u32,
+  dt_strings_offset: u32,
+  mem_rsv_map_offset: u32,
+  version: u32,
+  last_comp_version: u32,
+  boot_cpuid_phys: u32,
+  dt_strings_size: u32,
+  dt_struct_size: u32,
+}
+
+impl DtbHeader {
+  pub fn new(cursor: &mut DtbCursor) -> Self {
+    DtbHeader {
+      dt_struct_offset: cursor.get_u32().unwrap(),
+      dt_strings_offset: cursor.get_u32().unwrap(),
+      mem_rsv_map_offset: cursor.get_u32().unwrap(),
+      version: cursor.get_u32().unwrap(),
+      last_comp_version: cursor.get_u32().unwrap(),
+      boot_cpuid_phys: cursor.get_u32().unwrap(),
+      dt_strings_size: cursor.get_u32().unwrap(),
+      dt_struct_size: cursor.get_u32().unwrap(),
+    }
+  }
+}
+
 pub fn scan_dtb(blob: usize) {
   let total_size = match check_dtb(blob) {
     Ok(total_size) => total_size,
     Err(_) => return,
   };
 
-  let cursor = DtbCursor::new(blob as *const u8, total_size);
+  let mut cursor = DtbCursor::new(blob as *const u8, total_size);
+  cursor.set_loc(8); // Skip magic and total size.
+
+  let hdr = DtbHeader::new(&mut cursor);
+  cursor.set_loc(hdr.dt_struct_offset); // Skip to the root node.
+
+
 }

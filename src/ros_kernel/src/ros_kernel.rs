@@ -23,7 +23,7 @@ pub extern "C" fn ros_kernel(blob: u32, peripheral_base: u32, page_size: u32) ->
   base::set_peripheral_base_addr(peripheral_base as usize);
   mini_uart::init_uart();
 
-  dbg_print!("\n\n\n=== ROS ===\n");
+  dtb::scan_dtb(blob as usize);
 
   loop {}
 }
