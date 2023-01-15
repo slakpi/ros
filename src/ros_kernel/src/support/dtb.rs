@@ -1,4 +1,4 @@
-use core::{cmp, ops, slice, str};
+use core::{cmp, ops, slice};
 
 /// https://devicetree-specification.readthedocs.io/en/stable/index.html
 
@@ -333,7 +333,7 @@ pub trait DtbScanner {
 /// @param[in] blob    The DTB blob to scan.
 /// @param[in] scanner A scanner object.
 /// @returns Ok or a DtbError.
-pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError> {
+pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<u32, DtbError> {
   let total_size = check_dtb(blob)?;
 
   let mut cursor = DtbCursor::new(blob as *const u8, total_size);
@@ -349,7 +349,7 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbErr
 
     match begin {
       FDT_BEGIN_NODE => {}
-      FDT_END_NODE => continue,
+      FDT_END_NODE | FDT_NOOP => continue,
       FDT_END => break,
       _ => return Err(DtbError::InvalidDtb),
     }
@@ -364,7 +364,7 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbErr
     }
   }
 
-  Ok(())
+  Ok(total_size)
 }
 
 /// @fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbRoot, DtbError>

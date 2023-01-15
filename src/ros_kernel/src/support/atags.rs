@@ -1,5 +1,3 @@
-use core::mem;
-
 const ATAG_NONE: u32 = 0;
 const ATAG_CORE: u32 = 0x54410001;
 const ATAG_MEM: u32 = 0x54410002;
