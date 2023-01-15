@@ -47,4 +47,5 @@ SECTIONS
   }
   
   __bss_size = __bss_end - __bss_start;
+  __kernel_size = __bss_end - __text_start;
 }

@@ -55,6 +55,8 @@ should not return. If it does, we will end up halting below.
   mov     r0, r6
   ldr     r1, =PERIPHERAL_BASE
   ldr     r2, =__page_size
+  ldr     r3, =__text_start
+  ldr     r4, =__kernel_size
   bl      ros_kernel
 
 halt:

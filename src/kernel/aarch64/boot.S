@@ -131,6 +131,8 @@ should not return. If it does, we will end up halting below.
   mov     w0, w5
   ldr     w1, =PERIPHERAL_BASE
   ldr     w2, =__page_size
+  ldr     w3, =__text_start
+  ldr     w4, =__kernel_size
   bl      ros_kernel
 
 el1_cpu_halt:

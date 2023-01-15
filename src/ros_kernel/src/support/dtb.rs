@@ -344,10 +344,6 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbErr
 
   let root = scan_root_node(&hdr, &mut cursor)?;
 
-  if !FDT_CELL_COUNTS.contains(&root.addr_cells) || !FDT_CELL_COUNTS.contains(&root.size_cells) {
-    return Err(DtbError::InvalidDtb);
-  }
-
   loop {
     let begin = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
 
@@ -404,8 +400,8 @@ fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Result<DtbRoot, Dt
       _ => break,
     };
 
-    let prop_name = get_string_from_table(hdr, prop_hdr.name_offset, cursor)
-      .ok_or(DtbError::InvalidDtb)?;
+    let prop_name =
+      get_string_from_table(hdr, prop_hdr.name_offset, cursor).ok_or(DtbError::InvalidDtb)?;
 
     if "#address-cells".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
       root.addr_cells = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
@@ -472,4 +468,20 @@ pub fn get_string_from_table<'cursor>(
   cursor.set_loc(old_loc);
 
   Some(ret)
+}
+
+/// @fn get_reg_pair_size(root: &DtbRoot) -> u32
+/// @brief   Calculate the expected size of a single address / size pair in a
+///          reg property.
+/// @details A reg property is a list of address and size pairs. Each address
+///          and size is a number of u32 "cells", e.g. a 64-bit address is two
+///          u32 cells. The number of cells is restricted, so the result is
+///          guaranteed to fit in a u32.
+/// @returns The expected size if valid.
+pub fn get_reg_pair_size(root: &DtbRoot) -> Option<u32> {
+  if !FDT_CELL_COUNTS.contains(&root.addr_cells) || !FDT_CELL_COUNTS.contains(&root.size_cells) {
+    return None;
+  }
+
+  Some((root.addr_cells * FDT_WORD_BYTES) + (root.size_cells * FDT_WORD_BYTES))
 }
