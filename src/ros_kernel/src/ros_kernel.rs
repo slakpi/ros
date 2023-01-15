@@ -1,6 +1,5 @@
 use super::drivers::video::framebuffer;
 use super::peripherals::{base, memory, mini_uart};
-use super::support::dtb;
 use crate::dbg_print;
 use core::panic::PanicInfo;
 
@@ -22,8 +21,8 @@ fn panic(_info: &PanicInfo) -> ! {
 pub extern "C" fn ros_kernel(blob: u32, peripheral_base: u32, page_size: u32) -> ! {
   base::set_peripheral_base_addr(peripheral_base as usize);
   mini_uart::init_uart();
-
-  dtb::scan_dtb(blob as usize);
+  memory::init_memory(blob as usize);
+  init_drivers();
 
   loop {}
 }

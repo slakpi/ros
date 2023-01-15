@@ -1,4 +1,4 @@
-use core::{cmp, ptr, slice};
+use core::{cmp, ops, slice, str};
 
 /// https://devicetree-specification.readthedocs.io/en/stable/index.html
 
@@ -8,20 +8,27 @@ const FDT_PROP: u32 = 0x3;
 const FDT_NOOP: u32 = 0x4;
 const FDT_END: u32 = 0x9;
 const FDT_WORD_BYTES: u32 = u32::BITS / 8;
+const FDT_CELL_COUNTS: ops::Range<u32> = 1..3;
+
+/// @enum  DtbError
+/// @brief DTB scan error codes.
+pub enum DtbError {
+  InvalidDtb,
+}
 
 /// @fn check_dtb(blob: usize) -> Result<u32, ()>
 /// @brief   Fast check to verify the blob is a valid flat devicetree.
 /// @returns Ok with the size of the devicetree or Err.
-pub fn check_dtb(blob: usize) -> Result<u32, ()> {
+pub fn check_dtb(blob: usize) -> Result<u32, DtbError> {
   if blob == 0 {
-    return Err(());
+    return Err(DtbError::InvalidDtb);
   }
 
   let dtb = blob as *const u32;
   let magic = unsafe { u32::from_be(*dtb) };
 
   if magic != 0xd00dfeed {
-    return Err(());
+    return Err(DtbError::InvalidDtb);
   }
 
   let total_size = unsafe { u32::from_be(*dtb.add(1)) };
@@ -35,7 +42,7 @@ pub fn check_dtb(blob: usize) -> Result<u32, ()> {
 ///          reading raw u8's, u8 slices, u32's, and reg pairs. The DtbCursor
 ///          only verifies it has not read past the declared length of the DTB,
 ///          it does not have any semantic knowledge of the DTB structure.
-struct DtbCursor {
+pub struct DtbCursor {
   base_ptr: *const u8,
   cur_ptr: *const u8,
   cur_loc: u32,
@@ -49,7 +56,7 @@ impl DtbCursor {
   /// @param[in] ptr        The base pointer of the DTB.
   /// @param[in] total_size The total size, in bytes, of the DTB.
   /// @returns A new DtbCursor set to an offset of 0 from the base pointer.
-  pub fn new(ptr: *const u8, total_size: u32) -> Self {
+  fn new(ptr: *const u8, total_size: u32) -> Self {
     debug_assert!(total_size > FDT_WORD_BYTES);
 
     DtbCursor {
@@ -58,6 +65,13 @@ impl DtbCursor {
       cur_loc: 0,
       total_size: total_size,
     }
+  }
+
+  /// @fn get_loc(&self) -> u32
+  /// @brief   Get the current location in the blob.
+  /// @returns The current location.
+  pub fn get_loc(&self) -> u32 {
+    self.cur_loc
   }
 
   /// @fn set_loc(&mut self, loc: u32)
@@ -91,14 +105,14 @@ impl DtbCursor {
 
   /// @fn align_loc(&mut self)
   /// @brief Align the current location on a u32 boundary.
-  pub fn align_loc(&mut self) {
+  pub fn _align_loc(&mut self) {
     self.skip_and_align(0);
   }
 
   /// @fn get_u8(&mut self) -> Option<u8>
   /// @brief   Read the next u8 from the DTB.
   /// @returns The next u8 or None if the end of the DTB has been reached.
-  pub fn get_u8(&mut self) -> Option<u8> {
+  pub fn _get_u8(&mut self) -> Option<u8> {
     if self.cur_loc > self.total_size - 1 {
       return None;
     }
@@ -110,7 +124,9 @@ impl DtbCursor {
     Some(ret)
   }
 
-  pub fn unget_u8(&mut self) {
+  /// @fn unget_u8(&mut self)
+  /// @brief Move the cursor back a byte.
+  pub fn _unget_u8(&mut self) {
     if self.cur_loc < 1 {
       return;
     }
@@ -192,6 +208,8 @@ impl DtbCursor {
     Some(ret)
   }
 
+  /// @fn unget_u32(&mut self)
+  /// @brief Move the cursor back a word.
   pub fn unget_u32(&mut self) {
     if self.cur_loc < FDT_WORD_BYTES {
       return;
@@ -222,115 +240,190 @@ impl DtbCursor {
 
     for _ in 0..addr_cells {
       addr <<= FDT_WORD_BYTES;
-      let word = self.get_u32()?;
-      addr |= word as usize;
+      addr |= self.get_u32()? as usize;
     }
 
     for _ in 0..size_cells {
       size <<= FDT_WORD_BYTES;
-      let word = self.get_u32()?;
-      size |= word as usize;
+      size |= self.get_u32()? as usize;
     }
 
     Some((addr, size))
   }
 }
 
-struct DtbHeader {
+/// @struct DtbHeader
+/// @brief  DTB blob header information.
+pub struct DtbHeader {
   dt_struct_offset: u32,
   dt_strings_offset: u32,
-  mem_rsv_map_offset: u32,
-  version: u32,
-  last_comp_version: u32,
-  boot_cpuid_phys: u32,
-  dt_strings_size: u32,
-  dt_struct_size: u32,
+  _mem_rsv_map_offset: u32,
+  _version: u32,
+  _last_comp_version: u32,
+  _boot_cpuid_phys: u32,
+  _dt_strings_size: u32,
+  _dt_struct_size: u32,
 }
 
 impl DtbHeader {
-  pub fn new(cursor: &mut DtbCursor) -> Self {
-    DtbHeader {
-      dt_struct_offset: cursor.get_u32().unwrap(),
-      dt_strings_offset: cursor.get_u32().unwrap(),
-      mem_rsv_map_offset: cursor.get_u32().unwrap(),
-      version: cursor.get_u32().unwrap(),
-      last_comp_version: cursor.get_u32().unwrap(),
-      boot_cpuid_phys: cursor.get_u32().unwrap(),
-      dt_strings_size: cursor.get_u32().unwrap(),
-      dt_struct_size: cursor.get_u32().unwrap(),
-    }
+  fn new(cursor: &mut DtbCursor) -> Option<Self> {
+    Some(DtbHeader {
+      dt_struct_offset: cursor.get_u32()?,
+      dt_strings_offset: cursor.get_u32()?,
+      _mem_rsv_map_offset: cursor.get_u32()?,
+      _version: cursor.get_u32()?,
+      _last_comp_version: cursor.get_u32()?,
+      _boot_cpuid_phys: cursor.get_u32()?,
+      _dt_strings_size: cursor.get_u32()?,
+      _dt_struct_size: cursor.get_u32()?,
+    })
   }
 }
 
-/// @fn scan_dtb(blob: usize) -> Result<(), ()>
-///
-pub fn scan_dtb(blob: usize) -> Result<(), ()> {
-  let total_size = match check_dtb(blob) {
-    Ok(total_size) => total_size,
-    Err(_) => return Err(()),
-  };
+/// @struct DtbRoot
+/// @brief  Address and size cell lengths.
+pub struct DtbRoot {
+  pub addr_cells: u32,
+  pub size_cells: u32,
+}
+
+/// @struct DtbPropHeader
+/// @brief  Node property size and name string table offset.
+pub struct DtbPropHeader {
+  pub prop_size: u32,
+  pub name_offset: u32,
+}
+
+/// @trait DtbScanner
+/// @brief DTB scanner trait.
+pub trait DtbScanner {
+  /// @fn scan_node(
+  ///       &mut self,
+  ///       hdr: &DtbHeader,
+  ///       root: &DtbRoot,
+  ///       node_name: &[u8],
+  ///       cursor: &mut DtbCursor,
+  ///     ) -> Result<bool, DtbError>
+  /// @brief   Scans the current node.
+  /// @details @a scan_dtb provides the implementation with the DTB header and
+  ///          root object as well as a cursor positioned at the first property
+  ///          of the node. The implementation should NOT move to a position
+  ///          before the current position at the start of the call. The
+  ///          implementation should call @a move_to_next_property to navigate
+  ///          forward and return when @a move_to_next_property returns None and
+  ///          move beyond the last property in the node. The exception to this
+  ///          rule is that the implemenation may use @a get_string_from_table.
+  /// @param[in] hdr       The DTB header.
+  /// @param[in] root      The DTB root node.
+  /// @param[in] node_name The node name slice.
+  /// @param[in] cursor    The DTB cursor.
+  /// @returns Ok(true) if scanning should continue, Ok(false) if scanning
+  ///          stop, or Err if an error is encountered.
+  fn scan_node(
+    &mut self,
+    hdr: &DtbHeader,
+    root: &DtbRoot,
+    node_name: &[u8],
+    cursor: &mut DtbCursor,
+  ) -> Result<bool, DtbError>;
+}
+
+/// @fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError>
+/// @brief   Scans a DTB using a caller-defined scanner object.
+/// @param[in] blob    The DTB blob to scan.
+/// @param[in] scanner A scanner object.
+/// @returns Ok or a DtbError.
+pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError> {
+  let total_size = check_dtb(blob)?;
 
   let mut cursor = DtbCursor::new(blob as *const u8, total_size);
   cursor.set_loc(FDT_WORD_BYTES * 2); // Skip magic and total size.
 
-  let hdr = DtbHeader::new(&mut cursor);
+  let hdr = DtbHeader::new(&mut cursor).ok_or(DtbError::InvalidDtb)?;
   cursor.set_loc(hdr.dt_struct_offset); // Skip to the root node.
 
-  let (addr_cells, size_cells) = match scan_root_none(&hdr, &mut cursor) {
-    Some(sizes) => sizes,
-    None => return Err(()),
-  };
+  let root = scan_root_node(&hdr, &mut cursor)?;
+
+  if !FDT_CELL_COUNTS.contains(&root.addr_cells) || !FDT_CELL_COUNTS.contains(&root.size_cells) {
+    return Err(DtbError::InvalidDtb);
+  }
+
+  loop {
+    let begin = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
+
+    match begin {
+      FDT_BEGIN_NODE => {}
+      FDT_END_NODE => continue,
+      FDT_END => break,
+      _ => return Err(DtbError::InvalidDtb),
+    }
+
+    let node_name = cursor
+      .get_u8_slice_null_terminated()
+      .ok_or(DtbError::InvalidDtb)?;
+    cursor.skip_and_align(1);
+
+    if !scanner.scan_node(&hdr, &root, node_name, &mut cursor)? {
+      break;
+    }
+  }
 
   Ok(())
 }
 
-/// @fn scan_root_none<'cursor>(hdr: &DtbHeader, cursor: &'cursor mut DtbCursor) -> Option<(u32, u32)>
-///
-fn scan_root_none<'cursor>(hdr: &DtbHeader, cursor: &'cursor mut DtbCursor) -> Option<(u32, u32)> {
-  // Verify we are at the start of a node.
-  let begin = cursor.get_u32()?;
+/// @fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbRoot, DtbError>
+/// @brief   Scans the root node for required information.
+/// @param[in] hdr    The DTB header.
+/// @param[in] cursor The DTB cursor.
+/// @returns The root node information or None if invalid.
+fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Result<DtbRoot, DtbError> {
+  let begin = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
 
   if begin != FDT_BEGIN_NODE {
-    return None;
+    return Err(DtbError::InvalidDtb);
   }
 
-  // Verify zero-length name.
-  let name = cursor.get_u8_slice_null_terminated()?;
+  let name = cursor
+    .get_u8_slice_null_terminated()
+    .ok_or(DtbError::InvalidDtb)?;
 
   if name.len() != 0 {
-    return None;
+    return Err(DtbError::InvalidDtb);
   }
 
   cursor.skip_and_align(1);
 
-  let mut addr_cells = 0;
-  let mut size_cells = 0;
+  let mut root = DtbRoot {
+    addr_cells: u32::MAX,
+    size_cells: u32::MAX,
+  };
 
   loop {
-    let (prop_size, name_offset) = match move_to_next_property(hdr, cursor) {
-      Some(tuple) => tuple,
+    let prop_hdr = match move_to_next_property(cursor) {
+      Some(prop_hdr) => prop_hdr,
       _ => break,
     };
 
-    let prop_name = get_string_from_table(name_offset, cursor)?;
+    let prop_name = get_string_from_table(hdr, prop_hdr.name_offset, cursor)
+      .ok_or(DtbError::InvalidDtb)?;
 
-    if "#address_cells".as_bytes() == prop_name {
-      addr_cells = cursor.get_u32()?;
-    } else if "#size_cells".as_bytes() == prop_name {
-      size_cells = cursor.get_u32()?;
+    if "#address-cells".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
+      root.addr_cells = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
+    } else if "#size-cells".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
+      root.size_cells = cursor.get_u32().ok_or(DtbError::InvalidDtb)?;
     } else {
-      cursor.skip_and_align(prop_size);
-    }
-
-    if addr_cells > 0 && size_cells > 0 {
-      return Some((addr_cells, size_cells));
+      cursor.skip_and_align(prop_hdr.prop_size);
     }
   }
 
-  None
+  Ok(root)
 }
 
-fn move_to_next_property(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<(u32, u32)> {
+/// @fn move_to_next_property(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbPropHeader>
+/// @brief   Moves the cursor to the next property.
+/// @param[in] cursor The DTB cursor.
+/// @returns The property header or None if a property is not found.
+pub fn move_to_next_property(cursor: &mut DtbCursor) -> Option<DtbPropHeader> {
   loop {
     let begin = cursor.get_u32()?;
 
@@ -342,28 +435,38 @@ fn move_to_next_property(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<(u32
         cursor.unget_u32();
         break;
       }
-      // End of node, just break leaving the cursor past the end of node.
-      FDT_END_NODE => break,
       // Noops are allowed as necessary and can be skipped.
       FDT_NOOP => continue,
-      // Ignore anything else.
+      // All other cases, just break.
       _ => break,
     }
 
-    let prop_size = cursor.get_u32()?;
-    let name_offset = cursor.get_u32()? + hdr.dt_strings_offset;
-    return Some((prop_size, name_offset));
+    return Some(DtbPropHeader {
+      prop_size: cursor.get_u32()?,
+      name_offset: cursor.get_u32()?,
+    });
   }
 
   None
 }
 
-fn get_string_from_table<'cursor>(
+/// @fn get_string_from_table<'cursor>(
+///       hdr: &DtbHeader,
+///       str_offset: u32,
+///       cursor: &'cursor mut DtbCursor,
+///     ) -> Option<&'cursor [u8]>
+/// @brief   Retrieves a slice from the string table given an offset.
+/// @param[in] hdr        The DTB header.
+/// @param[in] str_offset The absolute offset of the string.
+/// @param[in] cursor     The DTB cursor.
+/// @returns The string as a slice or None if the string is invalid.
+pub fn get_string_from_table<'cursor>(
+  hdr: &DtbHeader,
   str_offset: u32,
   cursor: &'cursor mut DtbCursor,
 ) -> Option<&'cursor [u8]> {
   let old_loc = cursor.cur_loc;
-  cursor.set_loc(str_offset);
+  cursor.set_loc(hdr.dt_strings_offset + str_offset);
 
   let ret = cursor.get_u8_slice_null_terminated()?;
   cursor.set_loc(old_loc);
