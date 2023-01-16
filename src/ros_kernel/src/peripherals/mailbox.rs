@@ -12,13 +12,13 @@ pub const _MBOX_CH_TOUCH: u32 = 6;
 pub const _MBOX_CH_COUNT: u32 = 7;
 pub const MBOX_CH_PROP: u32 = 8;
 
-pub const MBOX_TAG_REQUEST: u32 = 0;
+pub const _MBOX_TAG_REQUEST: u32 = 0;
 pub const _MBOX_TAG_TEST: u32 = 4;
 pub const MBOX_TAG_SET: u32 = 8;
 
-pub const MBOX_TAG_GET_BOARD_MODEL: u32 = 0x10001;
-pub const MBOX_TAG_GET_BOARD_REV: u32 = 0x10002;
-pub const MBOX_TAG_GET_ARM_MEM: u32 = 0x10005;
+pub const _MBOX_TAG_GET_BOARD_MODEL: u32 = 0x10001;
+pub const _MBOX_TAG_GET_BOARD_REV: u32 = 0x10002;
+pub const _MBOX_TAG_GET_ARM_MEM: u32 = 0x10005;
 
 pub const _MBOX_TAG_SETPOWER: u32 = 0x28001;
 pub const _MBOX_TAG_SETCLKRATE: u32 = 0x38002;
@@ -42,7 +42,7 @@ const MBOX_STATUS: usize = VIDEOCORE_MBOX + 0x18;
 const _MBOX_CONFIG: usize = VIDEOCORE_MBOX + 0x1C;
 const MBOX_WRITE: usize = VIDEOCORE_MBOX + 0x20;
 
-const MBOX_RESPONSE: u32 = 0x80000000;
+const _MBOX_RESPONSE: u32 = 0x80000000;
 const MBOX_FULL: u32 = 0x80000000;
 const MBOX_EMPTY: u32 = 0x40000000;
 

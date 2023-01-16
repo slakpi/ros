@@ -11,7 +11,6 @@ const _ATAG_CMDLINE: u32 = 0x54410009;
 
 pub enum AtagError {
   InvalidAtagList,
-  InvalidAtag,
 }
 
 /// @struct AtagHeader
@@ -74,17 +73,19 @@ pub struct Atag {
 pub trait AtagScanner {
   /// @fn scan_core_tag(&mut self, core: &AtagCore) -> Result<bool, AtagError>
   /// @brief   Scans a CORE tag.
+  /// @param[in] core The CORE tag data.
   /// @returns Ok(true) if scanning should continue, Ok(false) if scanning
   ///          stop, or Err if an error is encountered.
-  fn scan_core_tag(&mut self, core: &AtagCore) -> Result<bool, AtagError> {
+  fn scan_core_tag(&mut self, _core: &AtagCore) -> Result<bool, AtagError> {
     Ok(true) // Just skip by default.
   }
 
   /// @fn scan_mem_tag(&mut self, mem: &AtagMem) -> Result<bool, AtagError>
   /// @brief   Scans a MEM tag.
+  /// @param[in] mem The MEM tag data.
   /// @returns Ok(true) if scanning should continue, Ok(false) if scanning
   ///          stop, or Err if an error is encountered.
-  fn scan_mem_tag(&mut self, mem: &AtagMem) -> Result<bool, AtagError> {
+  fn scan_mem_tag(&mut self, _mem: &AtagMem) -> Result<bool, AtagError> {
     Ok(true) // Just skip by default.
   }
 }

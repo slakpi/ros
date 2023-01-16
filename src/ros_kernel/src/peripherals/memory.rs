@@ -176,7 +176,7 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
     &mut self,
     hdr: &dtb::DtbHeader,
     root: &dtb::DtbRoot,
-    node_name: &[u8],
+    _node_name: &[u8],
     cursor: &mut dtb::DtbCursor,
   ) -> Result<bool, dtb::DtbError> {
     let mut dev_type = (u32::MAX, 0);

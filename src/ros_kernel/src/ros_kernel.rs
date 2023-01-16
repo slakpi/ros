@@ -1,6 +1,5 @@
 use super::drivers::video::framebuffer;
 use super::peripherals::{base, memory, mini_uart};
-use crate::dbg_print;
 use core::panic::PanicInfo;
 
 /// @fn panic(_info: &PanicInfo) -> !
