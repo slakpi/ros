@@ -333,7 +333,7 @@ pub trait DtbScanner {
 /// @param[in] blob    The DTB blob to scan.
 /// @param[in] scanner A scanner object.
 /// @returns Ok or a DtbError.
-pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<u32, DtbError> {
+pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError> {
   let total_size = check_dtb(blob)?;
 
   let mut cursor = DtbCursor::new(blob as *const u8, total_size);
@@ -364,7 +364,7 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<u32, DtbEr
     }
   }
 
-  Ok(total_size)
+  Ok(())
 }
 
 /// @fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbRoot, DtbError>
