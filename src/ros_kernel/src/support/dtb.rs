@@ -1,3 +1,4 @@
+use super::align;
 use core::{cmp, ops, slice};
 
 /// https://devicetree-specification.readthedocs.io/en/stable/index.html
@@ -9,29 +10,38 @@ const FDT_NOOP: u32 = 0x4;
 const FDT_END: u32 = 0x9;
 const FDT_WORD_BYTES: u32 = u32::BITS / 8;
 const FDT_CELL_COUNTS: ops::Range<u32> = 1..3;
+const FDT_MAGIC: u32 = 0xd00dfeed;
+const FDT_MAX_SIZE: u32 = 0x4000000; // 64 MB should be plenty.
 
 /// @enum  DtbError
-/// @brief DTB scan error codes.
+/// @brief DTB error codes.
 pub enum DtbError {
+  NotADtb,
   InvalidDtb,
 }
 
 /// @fn check_dtb(blob: usize) -> Result<u32, ()>
 /// @brief   Fast check to verify the blob is a valid flat devicetree.
+/// @details Verifies the magic value that should be at the beginning of the DTB
+///          and verifies that the size is sane.
 /// @returns Ok with the size of the devicetree or Err.
 pub fn check_dtb(blob: usize) -> Result<u32, DtbError> {
   if blob == 0 {
-    return Err(DtbError::InvalidDtb);
+    return Err(DtbError::NotADtb);
   }
 
   let dtb = blob as *const u32;
   let magic = unsafe { u32::from_be(*dtb) };
 
-  if magic != 0xd00dfeed {
-    return Err(DtbError::InvalidDtb);
+  if magic != FDT_MAGIC {
+    return Err(DtbError::NotADtb);
   }
 
   let total_size = unsafe { u32::from_be(*dtb.add(1)) };
+
+  if total_size > FDT_MAX_SIZE {
+    return Err(DtbError::InvalidDtb);
+  }
 
   Ok(total_size)
 }
@@ -88,8 +98,8 @@ impl DtbCursor {
 
   /// @fn skip_and_align(&mut self, skip_bytes: u32)
   /// @brief Skip past a number of bytes and align the new location. Useful
-  ///        shortcut for skipping past a property or the null terminator of a
-  ///        string.
+  ///        shortcut for skipping past a property, or the null terminator of a
+  ///        string, and any padding after.
   /// @param[in] skip_bytes The number of bytes to skip before alignment.
   pub fn skip_and_align(&mut self, skip_bytes: u32) {
     let offset = cmp::min(self.total_size - self.cur_loc, skip_bytes);
@@ -97,7 +107,7 @@ impl DtbCursor {
     let new_loc = if self.cur_loc + offset > self.total_size - FDT_WORD_BYTES {
       self.total_size
     } else {
-      (self.cur_loc + offset + (FDT_WORD_BYTES - 1)) & (-(FDT_WORD_BYTES as i32) as u32)
+      align::align_up(self.cur_loc + offset, FDT_WORD_BYTES)
     };
 
     self.set_loc(new_loc);
@@ -332,8 +342,8 @@ pub trait DtbScanner {
 /// @brief   Scans a DTB using a caller-defined scanner object.
 /// @param[in] blob    The DTB blob to scan.
 /// @param[in] scanner A scanner object.
-/// @returns Ok or a DtbError.
-pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError> {
+/// @returns Ok with the total size or a DtbError.
+pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<u32, DtbError> {
   let total_size = check_dtb(blob)?;
 
   let mut cursor = DtbCursor::new(blob as *const u8, total_size);
@@ -364,7 +374,7 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbErr
     }
   }
 
-  Ok(())
+  Ok(total_size)
 }
 
 /// @fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbRoot, DtbError>

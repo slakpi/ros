@@ -1,4 +1,4 @@
-use crate::support::{atags, dtb};
+use crate::support::{align, atags, dtb};
 use core::cmp;
 
 const MEM_RANGES: usize = 64;
@@ -278,13 +278,18 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
 
   config.page_size = page_size;
 
-  match dtb::check_dtb(blob) {
+  match init_memory_from_dtb(blob, config) {
     Ok(total_size) => {
-      init_memory_from_dtb(blob, config);
       excl[1].base = blob;
       excl[1].size = total_size as usize;
-    }
-    _ => init_memory_from_atags(blob, config),
+    },
+    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config),
+    Err(_) => {
+      debug_assert!(false);
+      config.range_count = 0;
+      config.page_size = 0;
+      return;
+    },
   };
 
   // Trim the memory configuration before doing exclusion operations.
@@ -303,11 +308,12 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
 }
 
 /// @fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig)
-/// @brief Initialize the system memory configuration from a DTB.
+/// @brief   Initialize the system memory configuration from a DTB.
 /// @param[in] blob The DTB blob.
-fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) {
+/// @returns The scan result.
+fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, dtb::DtbError> {
   let mut scanner = DtbMemoryScanner { config: config };
-  _ = dtb::scan_dtb(blob, &mut scanner);
+  dtb::scan_dtb(blob, &mut scanner)
 }
 
 /// @fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig)
@@ -437,7 +443,9 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange) {
     // If neither element is valid, remove the current range. Do not increment
     // the index yet.
     if a_none && b_none {
-      config.ranges.copy_within((i + 1)..config.range_count as usize, i);
+      config
+        .ranges
+        .copy_within((i + 1)..config.range_count as usize, i);
       config.range_count -= 1;
       continue;
     }
@@ -492,8 +500,8 @@ fn split_range(
     return (None, None);
   }
 
-  let end = page_align_address_down(excl.base, page_size);
-  let base = page_align_address_up(excl_end, page_size);
+  let end = align::align_down(excl.base, page_size);
+  let base = align::align_up(excl_end, page_size);
 
   let a = if end > range.base {
     Some(MemoryRange {
@@ -514,18 +522,4 @@ fn split_range(
   };
 
   (a, b)
-}
-
-/// @fn page_align_address_down(addr: usize, page_size: usize) -> usize
-/// @brief   Aligns an address with the start of the address's page.
-/// @returns The new address.
-fn page_align_address_down(addr: usize, page_size: usize) -> usize {
-  addr & (-(page_size as isize) as usize)
-}
-
-/// @fn page_align_address_up(addr: usize, page_size: usize) -> usize
-/// @brief   Aligns an address with the start of the next page.
-/// @returns The new address.
-fn page_align_address_up(addr: usize, page_size: usize) -> usize {
-  (addr + (page_size - 1)) & (-(page_size as isize) as usize)
 }
