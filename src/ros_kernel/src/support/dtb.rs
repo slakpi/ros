@@ -1,4 +1,4 @@
-use super::align;
+use super::bits;
 use core::{cmp, ops, slice};
 
 /// https://devicetree-specification.readthedocs.io/en/stable/index.html
@@ -107,7 +107,7 @@ impl DtbCursor {
     let new_loc = if self.cur_loc + offset > self.total_size - FDT_WORD_BYTES {
       self.total_size
     } else {
-      align::align_up(self.cur_loc + offset, FDT_WORD_BYTES)
+      bits::align_up(self.cur_loc + offset, FDT_WORD_BYTES)
     };
 
     self.set_loc(new_loc);

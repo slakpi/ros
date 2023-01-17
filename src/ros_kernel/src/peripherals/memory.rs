@@ -1,4 +1,5 @@
-use crate::support::{align, atags, dtb};
+use crate::dbg_print;
+use crate::support::{atags, bits, dtb};
 use core::cmp;
 
 const MEM_RANGES: usize = 64;
@@ -261,13 +262,20 @@ static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
 };
 
 /// @fn init_memory(blob: usize)
-/// @brief Initialize the system memory configuration.
+/// @brief   Initialize the system memory configuration.
 /// @param[in] blob        The DTB or ATAGs blob.
 /// @param[in] page_size   The memory page size to use.
 /// @param[in] kernel_base The location of the kernel in memory.
 /// @param[in] kernel_size The size of the kernel image.
-pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_size: usize) {
+/// @returns True if memory is successfully initialized.
+pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_size: usize) -> bool {
   let config = unsafe { &mut MEMORY_CONFIG };
+
+  // For now, the kernel and DTB are the only holes we need to poke in the
+  // configured address ranges. We exclude 0 up to the kernel size which
+  // includes ATAGs (based at 0x100). This assumes the kernel is somewhere near
+  // the beginning of the address range...which is an assumption that may need
+  // to be checked at some point.
   let mut excl = [
     MemoryRange {
       base: 0,
@@ -276,35 +284,39 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
     MemoryRange { base: 0, size: 0 },
   ];
 
-  config.page_size = page_size;
+  debug_assert!(config.range_count == 0);
+
+  if page_size == 0 || !bits::is_power_of_2(page_size) {
+    dbg_print!("Memory: Page size is not a power of 2.\n");
+    debug_assert!(false);
+    return false;
+  }
 
   match init_memory_from_dtb(blob, config) {
     Ok(total_size) => {
       excl[1].base = blob;
       excl[1].size = total_size as usize;
-    },
+    }
     Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config),
     Err(_) => {
+      dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
       debug_assert!(false);
       config.range_count = 0;
-      config.page_size = 0;
-      return;
-    },
+      return false;
+    }
   };
 
-  // Trim the memory configuration before doing exclusion operations.
-  trim_ranges(config);
+  config.page_size = page_size;
 
-  // For now, the kernel and DTB are the only holes we need to poke in the
-  // configured address ranges. We exclude 0 up to the kernel size which
-  // includes ATAGs (based at 0x100). This assumes the kernel is somewhere near
-  // the beginning of the address range...which is an assumption that may need
-  // to be checked at some point.
-  exclude_range(config, &excl[0]);
-  exclude_range(config, &excl[1]);
+  finalize_ranges(config, &excl);
 
-  // Re-trim to get any empty ranges left over after exclusion.
-  trim_ranges(config);
+  if config.range_count == 0 {
+    dbg_print!("Memory: No valid memory ranges available.\n");
+    debug_assert!(false);
+    return false;
+  }
+
+  true
 }
 
 /// @fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig)
@@ -322,6 +334,24 @@ fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, d
 fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) {
   let mut scanner = AtagMemoryScanner { config: config };
   _ = atags::scan_atags(blob, &mut scanner);
+}
+
+/// @fn finalize_ranges(config: &mut MemoryConfig, excl: &[MemoryRange])
+/// @brief Modifies the configured ranges to exclude the specified ranges and
+///        trims any empty ranges.
+/// @param[in] config The memory configuration.
+/// @param[in] excl   The ranges to exclude.
+fn finalize_ranges(config: &mut MemoryConfig, excl: &[MemoryRange]) {
+  // Trim the memory configuration before doing exclusion operations.
+  trim_ranges(config);
+
+  for e in excl {
+    exclude_range(config, e);
+    exclude_range(config, e);
+  }
+
+  // Re-trim to get any empty ranges left over after exclusion.
+  trim_ranges(config);
 }
 
 /// @fn fn trim_ranges(config: &mut MemoryConfig)
@@ -500,8 +530,8 @@ fn split_range(
     return (None, None);
   }
 
-  let end = align::align_down(excl.base, page_size);
-  let base = align::align_up(excl_end, page_size);
+  let end = bits::align_down(excl.base, page_size);
+  let base = bits::align_up(excl_end, page_size);
 
   let a = if end > range.base {
     Some(MemoryRange {
