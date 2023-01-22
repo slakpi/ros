@@ -1,7 +1,9 @@
+/// @file dtb.rs
+/// @brief   Device Tree Utilities
+/// @details https://devicetree-specification.readthedocs.io/en/stable/index.html
+
 use super::bits;
 use core::{cmp, ops, slice};
-
-/// https://devicetree-specification.readthedocs.io/en/stable/index.html
 
 const FDT_BEGIN_NODE: u32 = 0x1;
 const FDT_END_NODE: u32 = 0x2;

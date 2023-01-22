@@ -1,3 +1,6 @@
+/// @file print.rs
+/// @brief Kernel Printing Utilities
+
 use core::fmt;
 
 /// @var WRITE_BUFFER
@@ -10,7 +13,7 @@ static mut WRITE_BUFFER: [u8; 2048] = [0; 2048];
 ///         formatting.
 pub struct WriteBuffer<'buffer> {
   buf: &'buffer mut [u8],
-  offs: usize,
+  offset: usize,
 }
 
 impl<'buffer> WriteBuffer<'buffer> {
@@ -18,13 +21,13 @@ impl<'buffer> WriteBuffer<'buffer> {
   /// @brief Create a new wrapper around the specified buffer.
   /// @param[in] buf The buffer to wrap.
   pub fn new(buf: &'buffer mut [u8]) -> Self {
-    WriteBuffer { buf: buf, offs: 0 }
+    WriteBuffer { buf: buf, offset: 0 }
   }
 
   /// @fn as_bytes(&self) -> &[u8]
   /// @returns The buffer's byte array.
   pub fn as_bytes(&self) -> &[u8] {
-    &self.buf[..self.offs]
+    &self.buf[..self.offset]
   }
 }
 
@@ -35,7 +38,7 @@ impl<'buffer> fmt::Write for WriteBuffer<'buffer> {
   /// @returns fmt::Error if the string will not fit in the space remaining.
   fn write_str(&mut self, s: &str) -> fmt::Result {
     let bytes = s.as_bytes();
-    let dest = &mut self.buf[self.offs..];
+    let dest = &mut self.buf[self.offset..];
 
     if dest.len() < bytes.len() {
       return Err(fmt::Error);
@@ -43,12 +46,17 @@ impl<'buffer> fmt::Write for WriteBuffer<'buffer> {
 
     let dest = &mut dest[..bytes.len()];
     dest.copy_from_slice(bytes);
-    self.offs += bytes.len();
+    self.offset += bytes.len();
 
     Ok(())
   }
 }
 
+/// @fn new_string_format_buffer() -> WriteBuffer<'static>
+/// @brief   Get a string format buffer.
+/// @details The string format buffer wraps static memory that should only be
+///          used single-threaded.
+/// @returns Returns a new string format buffer.
 pub fn new_string_format_buffer() -> WriteBuffer<'static> {
   unsafe { WriteBuffer::new(&mut WRITE_BUFFER) }
 }

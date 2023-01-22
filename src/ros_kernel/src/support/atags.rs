@@ -1,3 +1,7 @@
+/// @file atags.rs
+/// @brief   ATAGs Utilities
+/// @details http://www.simtec.co.uk/products/SWLINUX/files/booting_article.html#appendix_tag_reference
+
 const ATAG_NONE: u32 = 0;
 const ATAG_CORE: u32 = 0x54410001;
 const ATAG_MEM: u32 = 0x54410002;
