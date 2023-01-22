@@ -74,11 +74,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
       .get_u8_slice(size - 1)
       .ok_or(dtb::DtbError::InvalidDtb)?;
 
-    if "memory".as_bytes().cmp(dev_type) != cmp::Ordering::Equal {
-      return Ok(false);
-    }
-
-    Ok(true)
+    Ok("memory".as_bytes().cmp(dev_type) == cmp::Ordering::Equal)
   }
 
   /// @fn read_reg(
@@ -144,6 +140,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
         .get_reg(root.addr_cells, root.size_cells)
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
+      // Insert the new range in sorted order by range base.
       for i in 0..=self.config.range_count as usize {
         if base <= self.config.ranges[i].base {
           self
@@ -180,8 +177,8 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
     _node_name: &[u8],
     cursor: &mut dtb::DtbCursor,
   ) -> Result<bool, dtb::DtbError> {
-    let mut dev_type = (u32::MAX, 0);
-    let mut reg = (u32::MAX, 0);
+    let mut dev_type = (0u32, 0, false);
+    let mut reg = (0u32, 0, false);
 
     loop {
       let prop_hdr = match dtb::move_to_next_property(cursor) {
@@ -193,29 +190,28 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
       if "device_type".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
-        dev_type = (cursor.get_loc(), prop_hdr.prop_size);
+        dev_type = (cursor.get_loc(), prop_hdr.prop_size, true);
       } else if "reg".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
-        reg = (cursor.get_loc(), prop_hdr.prop_size);
+        reg = (cursor.get_loc(), prop_hdr.prop_size, true);
       }
 
       cursor.skip_and_align(prop_hdr.prop_size);
     }
 
-    if dev_type.0 == u32::MAX || reg.0 == u32::MAX {
+    // If the node did not contain device_type or reg, keep scanning.
+    if !dev_type.2 || !reg.2 {
       return Ok(true);
     }
 
+    // If the node is not a memory device, keep scanning.
     if !DtbMemoryScanner::check_device_type(dev_type.0, dev_type.1, cursor)? {
       return Ok(true);
     }
 
     _ = self.read_reg(reg.0, reg.1, root, cursor)?;
 
-    if self.config.range_count as usize == MEM_RANGES {
-      return Ok(false);
-    }
-
-    Ok(true)
+    // Keep scanning if we have not filled the memory ranges yet.
+    Ok((self.config.range_count as usize) < MEM_RANGES)
   }
 }
 
@@ -292,19 +288,25 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
     return false;
   }
 
-  match init_memory_from_dtb(blob, config) {
+  let ok = match init_memory_from_dtb(blob, config) {
+    // Success scanning the DTB, exclude the memory region it occupies.
     Ok(total_size) => {
       excl[1].base = blob;
       excl[1].size = total_size as usize;
+      true
     }
-    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config),
-    Err(_) => {
-      dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
-      debug_assert!(false);
-      config.range_count = 0;
-      return false;
-    }
+    // The memory does not contain a DTB, try ATAGs.
+    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config).is_ok(),
+    // The DTB was invalid, fail out.
+    Err(_) => false,
   };
+
+  if !ok {
+    dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
+    debug_assert!(false);
+    config.range_count = 0;
+    return false;
+  }
 
   config.page_size = page_size;
 
@@ -331,9 +333,9 @@ fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, d
 /// @fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig)
 /// @brief Initialize the system memory configuration from ATAGs.
 /// @param[in] blob The ATAGs blob.
-fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) {
+fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), atags::AtagError> {
   let mut scanner = AtagMemoryScanner { config: config };
-  _ = atags::scan_atags(blob, &mut scanner);
+  atags::scan_atags(blob, &mut scanner)
 }
 
 /// @fn finalize_ranges(config: &mut MemoryConfig, excl: &[MemoryRange])
