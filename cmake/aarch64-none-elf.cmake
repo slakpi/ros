@@ -41,3 +41,4 @@ set(ROS_KERNEL_IMAGE_FILE kernel8.img)
 # quiet the warning about it being unused.
 set(ignore_QEMU_BUILD ${QEMU_BUILD})
 set(ROS_KERNEL_BASE_ADDRESS 0x80000)
+# set(ROS_KERNEL_BASE_ADDRESS 0xffff000000000000)

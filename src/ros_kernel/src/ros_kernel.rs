@@ -2,6 +2,16 @@ use super::drivers::video::framebuffer;
 use super::peripherals::{base, memory, mini_uart};
 use core::panic::PanicInfo;
 
+#[repr(C)]
+pub struct KernelConfig {
+  peripheral_base: usize,
+  page_size: usize,
+  kernel_base: usize,
+  kernel_size: usize,
+  kernel_pages_start: usize,
+  kernel_pages_size: usize,
+}
+
 /// @fn panic(_info: &PanicInfo) -> !
 /// @brief   Panic handler.
 /// @param[in] info The panic info.
@@ -11,38 +21,20 @@ fn panic(_info: &PanicInfo) -> ! {
   loop {}
 }
 
-/// @pub extern "C" fn ros_kernel(
-///        blob: u32,
-///        peripheral_base: u32,
-///        page_size: u32,
-///        kernel_base: u32,
-///        kernel_size: u32,
-///      ) -> ! {
+/// @fn ros_kernel(blob: usize, config: *const KernelConfig) -> ! {
 /// @brief   Kernel stub.
-/// @details TODO: The page size comes across in ATAGs. Should research if it
-///          also comes across in the device tree and consider not passing it in
-///          as a parameter here.
-/// @param[in] blob            ATAG or Device Tree blob.
-/// @param[in] peripheral_base The peripheral base address.
-/// @param[in] page_size       Configured memory page size.
-/// @param[in] kernel_base     Base address of the kernel.
-/// @param[in] kernel_size     Kernel image size.
+/// @param[in] blob   ATAG or Device Tree blob.
+/// @param[in] config Kernel configuration struct.
 /// @returns Does not return
 #[no_mangle]
-pub extern "C" fn ros_kernel(
-  blob: u32,
-  peripheral_base: u32,
-  page_size: u32,
-  kernel_base: u32,
-  kernel_size: u32,
-) -> ! {
-  base::set_peripheral_base_addr(peripheral_base as usize);
+pub extern "C" fn ros_kernel(blob: usize, config: *const KernelConfig) -> ! {
+  base::set_peripheral_base_addr(unsafe { (*config).peripheral_base });
   mini_uart::init_uart();
   memory::init_memory(
     blob as usize,
-    page_size as usize,
-    kernel_base as usize,
-    kernel_size as usize,
+    unsafe { (*config).page_size },
+    unsafe { (*config).kernel_base },
+    unsafe { (*config).kernel_size },
   );
   init_drivers();
   loop {}

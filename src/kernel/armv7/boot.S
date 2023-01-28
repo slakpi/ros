@@ -4,7 +4,7 @@
 #error "Invalid Raspberry Pi board version for ARMv7."
 #endif
 
-#define PERIPHERAL_BASE 0x3F000000
+#define PERIPHERAL_BASE 0x3f000000
 
 
 // The linker script forces this section to reside at the kernel base address.
@@ -17,7 +17,7 @@
 /// @param[in] r0 Zero
 /// @param[in] r1 Machine ID
 /// @param[in] r2 Start of ATAGS
-.globl _start
+.global _start
 _start:
 /*------------------------------------------------------------------------------
 Save the entry arguments
@@ -55,7 +55,7 @@ should not return. If it does, we will end up halting below.
   mov     r0, r6
   ldr     r1, =PERIPHERAL_BASE
   ldr     r2, =__page_size
-  ldr     r3, =__text_start
+  ldr     r3, =__kernel_start
   ldr     r4, =__kernel_size
   bl      ros_kernel
 
