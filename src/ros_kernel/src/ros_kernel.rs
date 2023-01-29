@@ -21,20 +21,20 @@ fn panic(_info: &PanicInfo) -> ! {
   loop {}
 }
 
-/// @fn ros_kernel(blob: usize, config: *const KernelConfig) -> ! {
+/// @fn ros_kernel(blob: usize, config: KernelConfig) -> ! {
 /// @brief   Kernel stub.
 /// @param[in] blob   ATAG or Device Tree blob.
 /// @param[in] config Kernel configuration struct.
 /// @returns Does not return
 #[no_mangle]
-pub extern "C" fn ros_kernel(blob: usize, config: *const KernelConfig) -> ! {
-  base::set_peripheral_base_addr(unsafe { (*config).peripheral_base });
+pub extern "C" fn ros_kernel(blob: usize, config: KernelConfig) -> ! {
+  base::set_peripheral_base_addr(config.peripheral_base);
   mini_uart::init_uart();
   memory::init_memory(
     blob as usize,
-    unsafe { (*config).page_size },
-    unsafe { (*config).kernel_base },
-    unsafe { (*config).kernel_size },
+    config.page_size,
+    config.kernel_base,
+    config.kernel_size,
   );
   init_drivers();
   loop {}
