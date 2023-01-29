@@ -3,8 +3,6 @@ set(CMAKE_SYSTEM_PROCESSOR armv7) # 32-bit Armv7
 
 set(cross_compiler ${TC_PATH}/bin/arm-none-eabi-)
 
-set(CMAKE_C_COMPILER ${cross_compiler}gcc)
-set(CMAKE_CXX_COMPILER ${cross_compiler}g++)
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
@@ -15,14 +13,14 @@ set(CMAKE_OBJCOPY ${cross_compiler}objcopy
 set(CMAKE_OBJDUMP ${cross_compiler}objdump
     CACHE FILEPATH "The toolchain objdump command " FORCE )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostartfiles")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdlib")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles")
 # -mfloat-abi is unnecessary; this toolchain assumes software floating-point.
 # -mfpu is unnecessary.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=cortex-a7")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a7")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
-set(CMAKE_ASM_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "")
+set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
 
 # Set the Rust target. Use the software floating-point variant. The kernel does
 # not allow floating-point or vector instructions.
