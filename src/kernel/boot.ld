@@ -53,9 +53,11 @@ SECTIONS
   .data.stack :
   {
     __kernel_stack_end = .;
-    . += (1024 * 1024);
+    . += (256 * __page_size);
     __kernel_stack_start = .;
   }
+
+  __kernel_size = __kernel_stack_start - __kernel_start;
 
   /* Reserve three pages for the kernel's bootstrap page table. */
   .data.pgd :
@@ -66,5 +68,4 @@ SECTIONS
   }
 
   __kernel_pages_size = __kernel_pages_end - __kernel_pages_start;
-  __kernel_size = __kernel_pages_end - __kernel_start;
 }

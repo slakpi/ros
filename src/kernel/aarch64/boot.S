@@ -2,17 +2,7 @@
 
 #include "abi.h"
 #include "mmu.h"
-
-#define RPI4_PERIPHERAL_BASE 0xfe000000
-#define RPI3_PERIPHERAL_BASE 0x3f000000
-
-#if (!defined RPI_VERSION) || (RPI_VERSION == 3)
-#define PERIPHERAL_BASE RPI3_PERIPHERAL_BASE
-#elif RPI_VERSION > 3
-#define PERIPHERAL_BASE RPI4_PERIPHERAL_BASE
-#else
-#error "Invalid Raspberry Pi board version for AArch64."
-#endif
+#include "peripherals.h"
 
 #define DTB_MAGIC 0xd00dfeed
 
@@ -165,8 +155,9 @@ Write kernel configuration struct.
 /*------------------------------------------------------------------------------
 Setup the MMU.
 ------------------------------------------------------------------------------*/
+  // Using ttbr0_el1 for now to do identity mapping.
   ldr     x9, =__kernel_pages_start
-  msr     ttbr1_el1, x9
+  msr     ttbr0_el1, x9
 
   ldr     x9, =(TCR_VALUE)
   msr     tcr_el1, x9

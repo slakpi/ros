@@ -1,9 +1,10 @@
 #include "abi.h"
 #include "mmu.h"
+#include "peripherals.h"
 
-// #define VA_START        0xffff000000000000
-#define VA_START        0x0
-#define PAGE_MASK       0xfffffffffffff000
+#define PHYS_START      0x0
+#define VIRT_START      0x0
+// #define VIRT_START      0xffff000000000000
 #define PAGE_SHIFT      12
 #define TABLE_SHIFT     9
 #define SECTION_SHIFT   (PAGE_SHIFT + TABLE_SHIFT)
@@ -42,7 +43,7 @@
   mov     \tmp1, #\flags
   orr     \phys, \tmp1, \phys, lsl #SECTION_SHIFT
 9999:
-	str     \phys, [\tbl, \start, lsl #3]
+  str     \phys, [\tbl, \start, lsl #3]
   add     \start, \start, #1
   add     \phys, \phys, #SECTION_SIZE
   cmp     \start, \end
@@ -53,58 +54,72 @@
 ///-------------------------------------------------------------------------------------------------
 /// @fn create_kernel_pages(x0, x1)
 /// @brief   Create the bootstrap kernel pages.
-/// @details Maps the kernel and, as necessary, the DTB. The kernel will create
-///          additional pages after parsing the memory configuration.
+/// @details Maps the kernel and, as necessary, the DTB into 2 MiB sections. The
+///          kernel will re-map the pages after determining the memory layout.
 /// @param[in] x0 The base of the blob.
 /// @param[in] x1 The size of the DTB or 0 if the blob is not a DTB.
 .global create_kernel_pages
 create_kernel_pages:
   fn_entry
+  stp     x19, x20, [sp, #-16]!
+  stp     x21, x22, [sp, #-16]!
 
+/*------------------------------------------------------------------------------
+Align the blob size on a section.
+------------------------------------------------------------------------------*/
   mov     x19, x0
   mov     x0, x1
   bl      section_align_size
   mov     x20, x0
 
+/*------------------------------------------------------------------------------
+Align the size of the kernel area on a section.
+------------------------------------------------------------------------------*/
+  ldr     x0, =__kernel_pages_end
+  bl      section_align_size
+  mov     x21, x0
+
+/*------------------------------------------------------------------------------
+Clear the page tables.
+------------------------------------------------------------------------------*/
   ldr     x0, =__kernel_pages_start
   mov     x1, #0
   ldr     x2, =__kernel_pages_size
   bl      memset
 
+/*------------------------------------------------------------------------------
+Create the first- and second-level page tables.
+------------------------------------------------------------------------------*/
   ldr     x9, =__kernel_pages_start
-  ldr     x10, =__kernel_start
-  create_pgd_entry x9, x10, x11, x12
+  ldr     x11, =VIRT_START
+  create_pgd_entry x9, x11, x12, x13
 
-  ldr     x0, =__kernel_size
-  bl      section_align_size
-  mov     x21, x0
-  add     x22, x21, x10
+/*------------------------------------------------------------------------------
+Map the kernel area. Do not reset x9, it has been incremented to the start of
+the third-level table.
+------------------------------------------------------------------------------*/
+  ldr     x10, =PHYS_START
+  ldr     x11, =VIRT_START
+  create_block_map x9, x10, x11, x21, MMU_FLAGS, x12
 
-  mov     x11, xzr
-  mov     x12, #VA_START
-  create_block_map x0, x11, x12, x22, MMU_FLAGS, x13
+/*------------------------------------------------------------------------------
+Map the DTB area.
+------------------------------------------------------------------------------*/
+  ldr     x11, =VIRT_START
+  add     x11, x11, x19
+  create_block_map x9, x19, x11, x20, MMU_FLAGS, x12
 
+/*------------------------------------------------------------------------------
+Map the peripheral area.
+------------------------------------------------------------------------------*/
+  ldr     x10, =PERIPHERAL_BASE
+  ldr     x11, =(VIRT_START + PERIPHERAL_BASE)
+  ldr     x12, =(VIRT_START + PERIPHERAL_BASE + PERIPHERAL_BLOCK_SIZE - 1)
+  create_block_map x9, x10, x11, x12, MMU_FLAGS, x13
+
+  ldp     x21, x22, [sp], #16
+  ldp     x19, x20, [sp], #16
   fn_exit
-  ret
-
-
-///-------------------------------------------------------------------------------------------------
-/// @fn page_align_size(x0)
-/// @brief   Page-align the size with the next page higher.
-/// @param[in] x0 The size to align.
-/// @returns The paged-aligned size.
-page_align_size:
-  // no fn_entry required.
-
-  ldr     x9, =__page_size
-  sub     x9, x9, #1
-  add     x0, x0, x9
-
-  add     x9, x9, #1
-  neg     x9, x9
-  and     x0, x0, x9
-
-  // no fn_exit required.
   ret
 
 
@@ -116,10 +131,10 @@ page_align_size:
 section_align_size:
   // no fn_entry required.
 
-  mov     x9, #SECTION_SIZE - 1
-  add     x0, x0, x9
-
   mov     x9, #SECTION_SIZE
+  sub     x10, x9, 1
+  add     x0, x0, x10
+
   neg     x9, x9
   and     x0, x0, x9
 
