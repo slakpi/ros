@@ -16,41 +16,6 @@
 #define PMD_SHIFT (PAGE_SHIFT + TABLE_SHIFT)
 
 
-.macro create_pgd_entry, tbl, virt, tmp1, tmp2
-  create_table_entry \tbl, \virt, PGD_SHIFT, \tmp1, \tmp2
-  create_table_entry \tbl, \virt, PUD_SHIFT, \tmp1, \tmp2
-.endm
-
-
-.macro create_table_entry, tbl, virt, shift, tmp1, tmp2
-  lsr     \tmp1, \virt, #\shift
-  and     \tmp1, \tmp1, #TABLE_ENTRY_CNT - 1
-  ldr     \tmp2, =__page_size
-  add     \tmp2, \tbl, \tmp2
-  orr     \tmp2, \tmp2, #MM_TYPE_PAGE_TABLE	
-  str     \tmp2, [\tbl, \tmp1, lsl #3]
-  ldr     \tmp2, =__page_size
-  add     \tbl, \tbl, \tmp2
-.endm
-
-
-.macro create_block_map, tbl, phys, start, end, flags, tmp1
-  lsr     \start, \start, #SECTION_SHIFT
-  and     \start, \start, #TABLE_ENTRY_CNT - 1
-  lsr     \end, \end, #SECTION_SHIFT
-  and     \end, \end, #TABLE_ENTRY_CNT - 1
-  lsr     \phys, \phys, #SECTION_SHIFT
-  mov     \tmp1, #\flags
-  orr     \phys, \tmp1, \phys, lsl #SECTION_SHIFT
-9999:
-  str     \phys, [\tbl, \start, lsl #3]
-  add     \start, \start, #1
-  add     \phys, \phys, #SECTION_SIZE
-  cmp     \start, \end
-  b.ls    9999b
-.endm
-
-
 ///-------------------------------------------------------------------------------------------------
 /// @fn create_kernel_pages(x0, x1)
 /// @brief   Create the bootstrap kernel pages.
@@ -90,32 +55,44 @@ Clear the page tables.
 /*------------------------------------------------------------------------------
 Create the first- and second-level page tables.
 ------------------------------------------------------------------------------*/
-  ldr     x9, =__kernel_pages_start
-  ldr     x11, =VIRT_START
-  create_pgd_entry x9, x11, x12, x13
+  ldr     x0, =__kernel_pages_start
+  ldr     x1, =VIRT_START
+  bl      init_tables
+  mov     x22, x0
 
 /*------------------------------------------------------------------------------
-Map the kernel area. Do not reset x9, it has been incremented to the start of
-the third-level table.
+Map the kernel area.
 ------------------------------------------------------------------------------*/
-  ldr     x10, =PHYS_START
-  ldr     x11, =VIRT_START
-  create_block_map x9, x10, x11, x21, MMU_FLAGS, x12
+  mov     x0, x22
+  ldr     x1, =PHYS_START
+  ldr     x2, =VIRT_START
+  mov     x3, x21
+  sub     x3, x3, 1
+  mov     x4, #MMU_FLAGS
+  bl      map_block
 
 /*------------------------------------------------------------------------------
 Map the DTB area.
 ------------------------------------------------------------------------------*/
-  ldr     x11, =VIRT_START
-  add     x11, x11, x19
-  create_block_map x9, x19, x11, x20, MMU_FLAGS, x12
+  mov     x0, x22
+  ldr     x1, =PHYS_START
+  add     x1, x1, x19
+  ldr     x2, =VIRT_START
+  add     x2, x2, x19
+  add     x3, x2, x20
+  sub     x3, x3, 1
+  mov     x4, #MMU_FLAGS
+  bl      map_block
 
 /*------------------------------------------------------------------------------
 Map the peripheral area.
 ------------------------------------------------------------------------------*/
-  ldr     x10, =PERIPHERAL_BASE
-  ldr     x11, =(VIRT_START + PERIPHERAL_BASE)
-  ldr     x12, =(VIRT_START + PERIPHERAL_BASE + PERIPHERAL_BLOCK_SIZE - 1)
-  create_block_map x9, x10, x11, x12, MMU_FLAGS, x13
+  mov     x0, x22
+  ldr     x1, =PERIPHERAL_BASE
+  ldr     x2, =(VIRT_START + PERIPHERAL_BASE)
+  ldr     x3, =(VIRT_START + PERIPHERAL_BASE + PERIPHERAL_BLOCK_SIZE - 1)
+  mov     x4, #MMU_FLAGS
+  bl      map_block
 
   ldp     x21, x22, [sp], #16
   ldp     x19, x20, [sp], #16
@@ -137,6 +114,82 @@ section_align_size:
 
   neg     x9, x9
   and     x0, x0, x9
+
+  // no fn_exit required.
+  ret
+
+
+///-------------------------------------------------------------------------------------------------
+/// @fn init_tables(x0, x1)
+/// @brief Create first- and second-level page tables for the first 1 GiB of the
+///        virtual address space.
+/// @param[in] x0 The base address of the PGD table.
+/// @param[in] x1 The base address of the virtual address space.
+init_tables:
+  fn_entry
+  stp     x19, x20, [sp, #16]!
+
+  mov     x19, x0
+  mov     x20, x1
+
+  mov     x2, #PGD_SHIFT
+  bl      create_table_entry
+
+  mov     x1, x20
+  mov     x2, #PUD_SHIFT
+  bl      create_table_entry
+
+  ldp     x19, x20, [sp], #16
+  fn_exit
+  ret
+
+
+///-------------------------------------------------------------------------------------------------
+/// @fn create_table_entry(x0, x1, x2)
+/// @brief Helper for @a init_tables. Do not call directly.
+/// @param[in] x0 The base address of the PGD table.
+/// @param[in] x1 The base address of the virtual address space.
+/// @param[in] x2 The shift specifying the PGD or PUD table.
+create_table_entry:
+  // no fn_entry required.
+
+  lsr     x9, x1, x2
+  and     x9, x9, #TABLE_ENTRY_CNT - 1
+  ldr     x10, =__page_size
+  add     x10, x0, x10
+  orr     x10, x10, #MM_TYPE_PAGE_TABLE	
+  str     x10, [x0, x9, lsl #3]
+  ldr     x10, =__page_size
+  add     x0, x0, x10
+
+  // no fn_exit required.
+  ret
+
+
+///-------------------------------------------------------------------------------------------------
+/// @fn map_block(x0, x1, x2, x3, x4)
+/// @brief Map a block of addresses within the first 1 GiB of the physical
+///        address space into the virtual address space.
+/// @param[in] tbl   The base address of the PMD table.
+/// @param[in] phys  The base physical address.
+/// @param[in] start The base virtual address.
+/// @param[in] end   The last virtual address.
+/// @param[in] flags The entry flags.
+map_block:
+  // no fn_entry required.
+
+  lsr     x2, x2, #SECTION_SHIFT
+  and     x2, x2, #TABLE_ENTRY_CNT - 1
+  lsr     x3, x3, #SECTION_SHIFT
+  and     x3, x3, #TABLE_ENTRY_CNT - 1
+  lsr     x1, x1, #SECTION_SHIFT
+  orr     x1, x4, x1, lsl #SECTION_SHIFT
+map_block_loop:
+  str     x1, [x0, x2, lsl #3]
+  add     x2, x2, #1
+  add     x1, x1, #SECTION_SIZE
+  cmp     x2, x3
+  b.ls    map_block_loop
 
   // no fn_exit required.
   ret
