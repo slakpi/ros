@@ -99,13 +99,19 @@ _el2_entry:
 ///          EL1 -> EL0.
 _el1_entry:
 /*------------------------------------------------------------------------------
-Setup the stack and frame pointers for the kernel.
-TODO: This needs to be generalized once memory management is a thing.
+Temporary stack setup before turning on the MMU.
 ------------------------------------------------------------------------------*/
-  ldr     x9, =__kernel_stack_start
+  adrp    x9, __kernel_stack_start
   mov     sp, x9
   mov     x29, sp
-  sub     sp, sp, #(6 * 8)
+
+/*------------------------------------------------------------------------------
+Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
+------------------------------------------------------------------------------*/
+  adrp    x0, __bss_start
+  mov     x1, #0
+  ldr     x2, =__bss_size
+  bl      memset
 
 /*------------------------------------------------------------------------------
 Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
@@ -114,7 +120,6 @@ strap kernel pages.
 ------------------------------------------------------------------------------*/
   ldr     x9, =0xffffffff
   and     x19, x19, x9
-
   mov     x0, x19
   bl      quick_dtb_check
 
@@ -123,23 +128,53 @@ strap kernel pages.
   bl      create_kernel_pages
 
 /*------------------------------------------------------------------------------
-Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
+Setup the MMU. The identity map in ttbr0_el1 is going to allow us to get to the
+next instruction after we switch on the MMU.
 ------------------------------------------------------------------------------*/
-  ldr     x0, =__bss_start
-  mov     x1, #0
-  ldr     x2, =__bss_size
-  bl      memset
+  adrp    x9, __kernel_id_pages_start
+  msr     ttbr0_el1, x9
+
+  adrp    x9, __kernel_pages_start
+  msr     ttbr1_el1, x9
+
+  ldr     x9, =(TCR_VALUE)
+  msr     tcr_el1, x9
+
+  ldr     x9, =(MAIR_VALUE)
+  msr     mair_el1, x0
+
+  ldr     x20, =begin_virt_addressing
+  ldr     x21, =ros_kernel
+  mov     x9, #SCTLR_MMU_ENABLED
+  msr     sctlr_el1, x9
 
 /*------------------------------------------------------------------------------
-Setup exception vectors.
+Jump using our first virtual address to switch the program counter over to
+virtual addressing. Once the program counter is using virtual addresses, clear
+ttbr0_el1, we no longer need the temporary identity map.
 ------------------------------------------------------------------------------*/
-  adr     x9, vectors
-  msr     vbar_el1, x9
+  br      x20
+begin_virt_addressing:
+  mov     x9, #0
+  msr     ttbr0_el1, x9
+
+/*------------------------------------------------------------------------------
+Real stack setup.
+------------------------------------------------------------------------------*/
+  ldr     x9, =__kernel_stack_start
+  mov     sp, x9
+  mov     x29, sp
+  sub     sp, sp, #(8 * 8)
 
 /*------------------------------------------------------------------------------
 Write kernel configuration struct.
 ------------------------------------------------------------------------------*/
+  ldr     x10, =__virtual_start
+  str     x10, [x29, #-64]
+  add     x9, x19, x10
+  str     x9, [x29, #-56]
   ldr     x9, =PERIPHERAL_BASE
+  add     x9, x9, x10
   str     x9, [x29, #-48]
   ldr     x9, =__page_size
   str     x9, [x29, #-40]
@@ -153,29 +188,11 @@ Write kernel configuration struct.
   str     x9, [x29, #-8]
 
 /*------------------------------------------------------------------------------
-Setup the MMU.
-------------------------------------------------------------------------------*/
-  // Using ttbr0_el1 for now to do identity mapping.
-  ldr     x9, =__kernel_pages_start
-  msr     ttbr0_el1, x9
-
-  ldr     x9, =(TCR_VALUE)
-  msr     tcr_el1, x9
-
-  ldr     x9, =(MAIR_VALUE)
-  msr     mair_el1, x0
-
-  ldr     x10, =ros_kernel
-  mov     x9, #SCTLR_MMU_ENABLED
-  msr     sctlr_el1, x9
-
-/*------------------------------------------------------------------------------
 Transfer control to the kernel stub. The stub should not return. If it does, we
 will end up halting below.
 ------------------------------------------------------------------------------*/
-  mov     x0, x19
-  sub     x1, x29, #48
-  br      x10
+  sub     x0, x29, #64
+  br      x21
 
 el1_cpu_halt:
   b       el1_cpu_halt
@@ -236,7 +253,7 @@ quick_dtb_check:
 
   ldr     w11, =DTB_MAGIC
   cmp     w10, w11
-  bne     quick_dtb_check_exit
+  b.ne    quick_dtb_check_exit
 
   ldr     w0, [x9, #4]
   rev     w0, w0

@@ -2,9 +2,6 @@
 #include "mmu.h"
 #include "peripherals.h"
 
-#define PHYS_START      0x0
-#define VIRT_START      0x0
-// #define VIRT_START      0xffff000000000000
 #define PAGE_SHIFT      12
 #define TABLE_SHIFT     9
 #define SECTION_SHIFT   (PAGE_SHIFT + TABLE_SHIFT)
@@ -28,6 +25,7 @@ create_kernel_pages:
   fn_entry
   stp     x19, x20, [sp, #-16]!
   stp     x21, x22, [sp, #-16]!
+  stp     x23, x24, [sp, #-16]!
 
 /*------------------------------------------------------------------------------
 Align the blob size on a section.
@@ -40,60 +38,87 @@ Align the blob size on a section.
 /*------------------------------------------------------------------------------
 Align the size of the kernel area on a section.
 ------------------------------------------------------------------------------*/
-  ldr     x0, =__kernel_pages_end
+  adrp    x0, __kernel_pages_end
   bl      section_align_size
   mov     x21, x0
 
 /*------------------------------------------------------------------------------
 Clear the page tables.
 ------------------------------------------------------------------------------*/
-  ldr     x0, =__kernel_pages_start
+  adrp    x0, __kernel_pages_start
   mov     x1, #0
   ldr     x2, =__kernel_pages_size
+  bl      memset
+
+  adrp    x0, __kernel_id_pages_start
+  mov     x1, #0
+  ldr     x2, =__kernel_id_pages_size
   bl      memset
 
 /*------------------------------------------------------------------------------
 Create the first- and second-level page tables.
 ------------------------------------------------------------------------------*/
-  ldr     x0, =__kernel_pages_start
-  ldr     x1, =VIRT_START
+  adrp    x0, __kernel_pages_start
+  ldr     x1, =__virtual_start
   bl      init_tables
   mov     x22, x0
+
+  adrp    x0, __kernel_id_pages_start
+  mov     x1, #0
+  bl      init_tables
+  mov     x23, x0
 
 /*------------------------------------------------------------------------------
 Map the kernel area.
 ------------------------------------------------------------------------------*/
   mov     x0, x22
-  ldr     x1, =PHYS_START
-  ldr     x2, =VIRT_START
-  mov     x3, x21
-  sub     x3, x3, 1
+  mov     x1, #0
+  ldr     x2, =__virtual_start
+  add     x3, x2, x21
+  sub     x3, x3, #1
+  mov     x4, #MMU_FLAGS
+  bl      map_block
+
+  mov     x0, x23
+  mov     x1, #0
+  mov     x2, #0
+  add     x3, x2, x21
+  sub     x3, x3, #1
   mov     x4, #MMU_FLAGS
   bl      map_block
 
 /*------------------------------------------------------------------------------
-Map the DTB area.
+Map the DTB area. Skip this if the DTB size is zero. Do not need to create an
+identity map. The kernel will switch to virtual addresses before the DTB is
+needed.
 ------------------------------------------------------------------------------*/
+  cbz     x20, skip_dtb_mapping
   mov     x0, x22
-  ldr     x1, =PHYS_START
+  mov     x1, #0
   add     x1, x1, x19
-  ldr     x2, =VIRT_START
+  ldr     x2, =__virtual_start
   add     x2, x2, x19
   add     x3, x2, x20
-  sub     x3, x3, 1
+  sub     x3, x3, #1
   mov     x4, #MMU_FLAGS
   bl      map_block
+skip_dtb_mapping:
 
 /*------------------------------------------------------------------------------
-Map the peripheral area.
+Map the peripheral area. Do not need to create an identity map. The kernel will
+switch to virtual addresses before the peripherals are needed.
 ------------------------------------------------------------------------------*/
   mov     x0, x22
   ldr     x1, =PERIPHERAL_BASE
-  ldr     x2, =(VIRT_START + PERIPHERAL_BASE)
-  ldr     x3, =(VIRT_START + PERIPHERAL_BASE + PERIPHERAL_BLOCK_SIZE - 1)
+  ldr     x2, =__virtual_start
+  add     x2, x2, x1
+  ldr     x3, =PERIPHERAL_BLOCK_SIZE
+  add     x3, x3, x2
+  sub     x3, x3, #1
   mov     x4, #MMU_FLAGS
   bl      map_block
 
+  ldp     x23, x24, [sp], #16
   ldp     x21, x22, [sp], #16
   ldp     x19, x20, [sp], #16
   fn_exit
@@ -108,10 +133,10 @@ Map the peripheral area.
 section_align_size:
   // no fn_entry required.
 
-  mov     x9, #SECTION_SIZE
-  sub     x10, x9, 1
+  mov     x9, #SECTION_SIZE - 1
   add     x0, x0, x10
 
+  mov     x9, #SECTION_SIZE
   neg     x9, x9
   and     x0, x0, x9
 
@@ -121,25 +146,20 @@ section_align_size:
 
 ///-------------------------------------------------------------------------------------------------
 /// @fn init_tables(x0, x1)
-/// @brief Create first- and second-level page tables for the first 1 GiB of the
-///        virtual address space.
+/// @brief   Create first- and second-level page tables for the first 1 GiB of
+///          the virtual address space.
 /// @param[in] x0 The base address of the PGD table.
 /// @param[in] x1 The base address of the virtual address space.
+/// @returns Returns the base address of the third-level page table.
 init_tables:
   fn_entry
-  stp     x19, x20, [sp, #16]!
-
-  mov     x19, x0
-  mov     x20, x1
 
   mov     x2, #PGD_SHIFT
   bl      create_table_entry
 
-  mov     x1, x20
   mov     x2, #PUD_SHIFT
   bl      create_table_entry
 
-  ldp     x19, x20, [sp], #16
   fn_exit
   ret
 

@@ -7,8 +7,7 @@ add_executable(
          ${CMAKE_SYSTEM_PROCESSOR}/pages.S)
 target_compile_definitions(kernel PRIVATE RPI_VERSION=${RPI_VERSION})
 target_link_libraries(kernel PRIVATE ROS::Kernel)
-target_link_options(
-  kernel PUBLIC -T ${CMAKE_CURRENT_LIST_DIR}/boot.ld -Ttext ${ROS_KERNEL_BASE_ADDRESS})
+target_link_options(kernel PUBLIC -T ${CMAKE_CURRENT_LIST_DIR}/boot.ld)
 
 #-------------------------------------------------------------------------------
 # Build the raw binary image file.

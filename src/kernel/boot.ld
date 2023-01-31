@@ -1,12 +1,16 @@
+/* Use the standard 4 KiB page size. */
 __page_size = (4 * 1024);
+__virtual_start = 0xffff000000000000;
+__kernel_start = __virtual_start + 0x80000;
 
 ENTRY(_start)
 
 SECTIONS
 {
+  . = __kernel_start;
+
   .text :
   {
-    __kernel_start = .;
     __text_start = .;
 
     KEEP(*(.text.boot))
@@ -49,7 +53,7 @@ SECTIONS
   
   __bss_size = __bss_end - __bss_start;
 
-  /* Reserve 1MiB for the kernel stack. Note the reversal of start and end. */
+  /* Reserve 1 MiB for the kernel stack. Note the reversal of start and end. */
   .data.stack :
   {
     __kernel_stack_end = .;
@@ -59,7 +63,7 @@ SECTIONS
 
   __kernel_size = __kernel_stack_start - __kernel_start;
 
-  /* Reserve three pages for the kernel's bootstrap page table. */
+  /* Reserve three pages for the kernel's bootstrap virtual page table. */
   .data.pgd :
   {
     __kernel_pages_start = .;
@@ -68,4 +72,21 @@ SECTIONS
   }
 
   __kernel_pages_size = __kernel_pages_end - __kernel_pages_start;
+
+  /* Reserve three pages for the kernel's bootstrap identity page page. The
+   * moment we turn the MMU on, the program counter is still using a physical
+   * address. This identity map, loaded into ttbr0_el1, will allow moving to the
+   * next instruction which will perform a branch to a virtual address. After
+   * that branch, these tables will be discarded. As such, this table must be
+   * after __kernel_pages_end so that the kernel can reuse it as it extends the
+   * virtual page table.
+   */
+  .data.idpgd :
+  {
+    __kernel_id_pages_start = .;
+    . += (3 * __page_size);
+    __kernel_id_pages_end = .;
+  }
+
+  __kernel_id_pages_size = __kernel_id_pages_end - __kernel_id_pages_start;
 }

@@ -38,5 +38,3 @@ set(ROS_KERNEL_IMAGE_FILE kernel8.img)
 # QEMU_BUILD is not used by AArch64. It has no effect, so go ahead and just
 # quiet the warning about it being unused.
 set(ignore_QEMU_BUILD ${QEMU_BUILD})
-set(ROS_KERNEL_BASE_ADDRESS 0x80000)
-# set(ROS_KERNEL_BASE_ADDRESS 0xffff000000080000)

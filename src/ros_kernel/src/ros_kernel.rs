@@ -1,9 +1,12 @@
+use crate::dbg_print;
 use super::drivers::video::framebuffer;
 use super::peripherals::{base, memory, mini_uart};
 use core::panic::PanicInfo;
 
 #[repr(C)]
 pub struct KernelConfig {
+  virtual_base: usize,
+  blob: usize,
   peripheral_base: usize,
   page_size: usize,
   kernel_base: usize,
@@ -23,20 +26,24 @@ fn panic(_info: &PanicInfo) -> ! {
 
 /// @fn ros_kernel(blob: usize, config: KernelConfig) -> ! {
 /// @brief   Kernel stub.
-/// @param[in] blob   ATAG or Device Tree blob.
 /// @param[in] config Kernel configuration struct.
 /// @returns Does not return
 #[no_mangle]
-pub extern "C" fn ros_kernel(blob: usize, config: KernelConfig) -> ! {
+pub extern "C" fn ros_kernel(config: KernelConfig) -> ! {
   base::set_peripheral_base_addr(config.peripheral_base);
   mini_uart::init_uart();
+
+  dbg_print!("=== ROS ===\n");
+
   memory::init_memory(
-    blob as usize,
+    config.blob,
     config.page_size,
     config.kernel_base,
     config.kernel_size,
   );
+
   init_drivers();
+  
   loop {}
 }
 
