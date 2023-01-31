@@ -1,0 +1,65 @@
+/* Use the standard 4 KiB page size. */
+__page_size = (4 * 1024);
+__virtual_start = VIRT_BASE;
+__kernel_start = __virtual_start + KERNEL_BASE;
+
+ENTRY(_start)
+
+SECTIONS
+{
+  . = __kernel_start;
+
+  .text :
+  {
+    __text_start = .;
+
+    KEEP(*(.text.boot))
+    *(.text)
+
+    . = ALIGN(__page_size);
+    __text_end = .;
+  }
+
+  .rodata :
+  {
+    __rodata_start = .;
+
+    *(.rodata)
+
+    . = ALIGN(__page_size);
+    __rodata_end = .;
+  }
+
+  .data :
+  {
+    __data_start = .;
+
+    *(.data)
+
+    . = ALIGN(__page_size);
+    __data_end = .;
+  }
+
+  .bss :
+  {
+    __bss_start = .;
+
+    bss = .;
+    *(.bss .bss.*)
+
+    . = ALIGN(__page_size);
+    __bss_end = .;
+  }
+  
+  __bss_size = __bss_end - __bss_start;
+
+  /* Reserve 1 MiB for the kernel stack. Note the reversal of start and end. */
+  .data.stack :
+  {
+    __kernel_stack_end = .;
+    . += (256 * __page_size);
+    __kernel_stack_start = .;
+  }
+
+  __kernel_size = __kernel_stack_start - __kernel_start;
+}

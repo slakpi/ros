@@ -1,11 +1,7 @@
 // ARMv7
  
-#if RPI_VERSION > 2
-#error "Invalid Raspberry Pi board version for ARMv7."
-#endif
-
-#define PERIPHERAL_BASE 0x3f000000
-
+#include "abi.h"
+#include "peripherals.h"
 
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
@@ -20,7 +16,7 @@
 .global _start
 _start:
 /*------------------------------------------------------------------------------
-Save the entry arguments
+Save the entry arguments.
 ------------------------------------------------------------------------------*/
   mov     r5, r1
   mov     r6, r2
@@ -35,10 +31,11 @@ Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
 
 /*------------------------------------------------------------------------------
 Setup the stack pointer for the kernel.
-TODO: This needs to be generalized once memory management is a thing.
 ------------------------------------------------------------------------------*/
-  ldr     r0, =_start
+  ldr     r0, =__kernel_stack_start
   mov     sp, r0
+  mov     fp, sp
+  sub     sp, sp, #(8 * 4)
 
 /*------------------------------------------------------------------------------
 Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
@@ -49,14 +46,31 @@ Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
   bl      memset
 
 /*------------------------------------------------------------------------------
+Write kernel configuration struct.
+------------------------------------------------------------------------------*/
+  ldr     r2, =__virtual_start
+  str     r2, [fp, #-32]
+  add     r1, r6, r2
+  str     r1, [fp, #-28]
+  ldr     r1, =PERIPHERAL_BASE
+  add     r1, r1, r2
+  str     r1, [fp, #-24]
+  ldr     r1, =__page_size
+  str     r1, [fp, #-20]
+  ldr     r1, =__kernel_start
+  str     r1, [fp, #-16]
+  ldr     r1, =__kernel_size
+  str     r1, [fp, #-12]
+  mov     r1, #0
+  str     r1, [fp, #-8]
+  mov     r1, #0
+  str     r1, [fp, #-4]
+
+/*------------------------------------------------------------------------------
 Restore the entry arguments and transfer control to the kernel stub. The stub
 should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
-  mov     r0, r6
-  ldr     r1, =PERIPHERAL_BASE
-  ldr     r2, =__page_size
-  ldr     r3, =__kernel_start
-  ldr     r4, =__kernel_size
+  sub     r0, fp, #32
   bl      ros_kernel
 
 halt:

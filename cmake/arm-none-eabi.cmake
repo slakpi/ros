@@ -4,12 +4,11 @@ set(CMAKE_SYSTEM_PROCESSOR armv7) # 32-bit Armv7
 set(cross_compiler ${TC_PATH}/bin/arm-none-eabi-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
-
+set(CMAKE_C_COMPILER ${cross_compiler}gcc)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 set(CMAKE_OBJCOPY ${cross_compiler}objcopy
     CACHE FILEPATH "The toolchain objcopy command " FORCE)
-
 set(CMAKE_OBJDUMP ${cross_compiler}objdump
     CACHE FILEPATH "The toolchain objdump command " FORCE )
 
@@ -33,3 +32,4 @@ if(${QEMU_BUILD})
 else()
   set(ROS_KERNEL_BASE_ADDRESS 0x8000)
 endif()
+set(ROS_VIRTUAL_BASE_ADDRESS 0x0)
