@@ -21,6 +21,7 @@ add_executable(
          ${CMAKE_SYSTEM_PROCESSOR}/exceptions.S
          ${CMAKE_SYSTEM_PROCESSOR}/pages.S)
 add_dependencies(kernel boot_script)
+target_include_directories(kernel PRIVATE ${CMAKE_SYSTEM_PROCESSOR}/include)
 target_compile_definitions(kernel PRIVATE RPI_VERSION=${RPI_VERSION})
 target_link_libraries(kernel PRIVATE ROS::Kernel)
 target_link_options(kernel PUBLIC -T ${ld_out})
