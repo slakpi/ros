@@ -25,7 +25,7 @@ static mut FRAMEBUFFER: Framebuffer = Framebuffer {
   _isrgb: 0,
 };
 
-/// @fn fb_init()
+/// @fn fb_init
 /// @brief Initialize the default framebuffer.
 pub fn fb_init() {
   // Setup the framebuffer properties and send them to the VideoCore.
@@ -37,7 +37,7 @@ pub fn fb_init() {
   }
 }
 
-/// @fn get_fb() -> &'static Framebuffer
+/// @fn get_fb
 /// @brief Get a reference to the framebuffer.
 pub fn get_fb() -> &'static Framebuffer {
   unsafe {
@@ -46,7 +46,7 @@ pub fn get_fb() -> &'static Framebuffer {
   }
 }
 
-/// @fn configure_properties()
+/// @fn configure_properties
 /// @brief Configure a mailbox message to request a framebuffer from the
 ///        VideoCore.
 fn configure_properties() {
@@ -98,7 +98,7 @@ fn configure_properties() {
   buf[35] = 0;
 }
 
-/// @fn configure_fb(buf: &'static mailbox::Mail)
+/// @fn configure_fb
 /// @brief Configure the default framebuffer from the VideoCore response.
 fn configure_fb(buf: &'static mailbox::Mail) {
   // Verify we have a buffer with 32-bit depth and a pointer. Convert the

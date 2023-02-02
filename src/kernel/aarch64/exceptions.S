@@ -90,7 +90,7 @@ vectors:
   ventry  _trap_exception   // EL0 Error (32-bit)
 
 
-/// @fn _trap_exception()
+/// @fn _trap_exception
 /// @brief Default exception trap stub.
 _trap_exception:
   kernel_entry

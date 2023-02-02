@@ -16,7 +16,7 @@ pub struct WriteBuffer<'buffer> {
 }
 
 impl<'buffer> WriteBuffer<'buffer> {
-  /// @fn new(buf: &'buffer mut [u8]) -> Self
+  /// @fn WriteBuffer::new
   /// @brief Create a new wrapper around the specified buffer.
   /// @param[in] buf The buffer to wrap.
   pub fn new(buf: &'buffer mut [u8]) -> Self {
@@ -26,7 +26,7 @@ impl<'buffer> WriteBuffer<'buffer> {
     }
   }
 
-  /// @fn as_bytes(&self) -> &[u8]
+  /// @fn WriteBuffer::as_bytes
   /// @returns The buffer's byte array.
   pub fn as_bytes(&self) -> &[u8] {
     &self.buf[..self.offset]
@@ -34,7 +34,7 @@ impl<'buffer> WriteBuffer<'buffer> {
 }
 
 impl<'buffer> fmt::Write for WriteBuffer<'buffer> {
-  /// @fn write_str(&mut self, s: &str) -> fmt::Result
+  /// @fn WriteBuffer::write_str
   /// @brief   Implements fmt::Write::write_str to write a string to the buffer.
   /// @param[in] s The string to write.
   /// @returns fmt::Error if the string will not fit in the space remaining.
@@ -54,7 +54,7 @@ impl<'buffer> fmt::Write for WriteBuffer<'buffer> {
   }
 }
 
-/// @fn new_string_format_buffer() -> WriteBuffer<'static>
+/// @fn new_string_format_buffer
 /// @brief   Get a string format buffer.
 /// @details The string format buffer wraps static memory that should only be
 ///          used single-threaded.

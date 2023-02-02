@@ -75,7 +75,7 @@ pub struct Atag {
 /// @trait AtagScanner
 /// @brief ATAG scanner trait.
 pub trait AtagScanner {
-  /// @fn scan_core_tag(&mut self, core: &AtagCore) -> Result<bool, AtagError>
+  /// @fn scan_core_tag
   /// @brief   Scans a CORE tag.
   /// @param[in] core The CORE tag data.
   /// @returns Ok(true) if scanning should continue, Ok(false) if scanning
@@ -84,7 +84,7 @@ pub trait AtagScanner {
     Ok(true) // Just skip by default.
   }
 
-  /// @fn scan_mem_tag(&mut self, mem: &AtagMem) -> Result<bool, AtagError>
+  /// @fn scan_mem_tag
   /// @brief   Scans a MEM tag.
   /// @param[in] mem The MEM tag data.
   /// @returns Ok(true) if scanning should continue, Ok(false) if scanning

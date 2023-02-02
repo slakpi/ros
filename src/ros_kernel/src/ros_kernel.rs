@@ -20,7 +20,7 @@ pub struct KernelConfig {
   kernel_pages_size: usize,
 }
 
-/// @fn panic(_info: &PanicInfo) -> !
+/// @fn panic
 /// @brief   Panic handler.
 /// @param[in] info The panic info.
 /// @returns Does not return.
@@ -29,7 +29,7 @@ fn panic(_info: &PanicInfo) -> ! {
   loop {}
 }
 
-/// @fn ros_kernel(blob: usize, config: KernelConfig) -> ! {
+/// @fn ros_kernel
 /// @brief   Kernel stub.
 /// @param[in] config Kernel configuration struct.
 /// @returns Does not return
@@ -53,7 +53,7 @@ pub extern "C" fn ros_kernel(config: KernelConfig) -> ! {
   loop {}
 }
 
-/// @fn init_drivers()
+/// @fn init_drivers
 /// @brief Initialize drivers.
 fn init_drivers() {
   framebuffer::fb_init();

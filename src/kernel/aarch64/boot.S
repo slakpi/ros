@@ -48,7 +48,7 @@ lower than EL3 are not secure.
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn _start(x0, x1, x2, x3, x4)
+/// @fn _start
 /// @brief Kernel entry point.
 /// @param[in] x0 32-bit pointer to the DTB (primary core)
 /// @param[in] x1 Zero
@@ -85,14 +85,14 @@ start_cpu_halt:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn _el2_entry()
+/// @fn _el2_entry
 /// @brief Dummy entry point for EL3 -> E2.
 _el2_entry:
   eret
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn _el1_entry()
+/// @fn _el1_entry
 /// @brief   Entry point for EL2 -> EL1.
 /// @details Runs once when the kernel drops from EL2 to EL1 during bootstrap.
 ///          All subsequent exception level changes will be EL0 -> EL1 or
@@ -196,7 +196,7 @@ el1_cpu_halt:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn _init_kernel_el()
+/// @fn _init_kernel_el
 /// @brief Initialize the kernel in the correct exception level.
 _init_kernel_el:
   mrs     x9, CurrentEL
@@ -235,7 +235,7 @@ in_el1:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn quick_dtb_check(x0)
+/// @fn quick_dtb_check
 /// @brief   Performs a quick check to see if the blob is a DTB.
 /// @param[in] x0 The blob address.
 /// @returns The total size of the DTB or 0 if the blob is not a DTB.

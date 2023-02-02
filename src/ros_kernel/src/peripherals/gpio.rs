@@ -120,7 +120,7 @@ pub enum GPIOPinFunction {
 
 pub const GPIO_DELAY: u64 = 150;
 
-/// @fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction)
+/// @fn set_pin_function
 /// @brief Changes the function assignment for a GPIO pin.
 /// @param[in] pin  The pin to change.
 /// @param[in] func The new function assginment.
@@ -146,7 +146,7 @@ pub fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction) {
   base::peripheral_reg_put(val, reg);
 }
 
-/// @fn write_to_pin(pin: GPIOPin, val: bool)
+/// @fn write_to_pin
 /// @brief Write to a GPIO pin.
 /// @param[in] pin The pin to write.
 /// @param[in] val The truth value to write.

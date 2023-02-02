@@ -8,7 +8,7 @@
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn _start(r0, r1, r2)
+/// @fn _start
 /// @brief Kernel entry point.
 /// @param[in] r0 Zero
 /// @param[in] r1 Machine ID

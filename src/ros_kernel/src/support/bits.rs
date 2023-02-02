@@ -7,7 +7,7 @@
 ///          as { ($n: expr) => { $n & ($n - 1) } }.
 use core::{cmp, ops};
 
-/// @fn align_down(addr: T, boundary: T) -> T
+/// @fn align_down
 /// @brief   Aligns an address with the start of the boundary.
 /// @param[in] addr     The address to align.
 /// @param[in] boundary The alignment boundary size.
@@ -19,7 +19,7 @@ where
   addr & !(boundary - 1.into())
 }
 
-/// @fn align_up(addr: T, boundary: T) -> T
+/// @fn align_up
 /// @brief   Aligns an address with the start of the next boundary.
 /// @param[in] addr     The address to align.
 /// @param[in] boundary The alignment boundary size.
@@ -37,7 +37,7 @@ where
   (addr + b) & !b
 }
 
-/// @fn is_power_of_2<T>(n: T) -> bool
+/// @fn is_power_of_2
 /// @brief   Fast check if a value is a power of 2.
 /// @param[in] n The value to check.
 /// @returns True if the value is a power of 2.

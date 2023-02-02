@@ -21,7 +21,7 @@ pub enum DtbError {
   InvalidDtb,
 }
 
-/// @fn check_dtb(blob: usize) -> Result<u32, ()>
+/// @fn check_dtb
 /// @brief   Fast check to verify the blob is a valid flat devicetree.
 /// @details Verifies the magic value that should be at the beginning of the DTB
 ///          and verifies that the size is sane.
@@ -61,7 +61,7 @@ pub struct DtbCursor {
 }
 
 impl DtbCursor {
-  /// @fn new(ptr: *const u8, total_size: u32) -> Self
+  /// @fn DtbCursor::new
   /// @brief   Construct a new cursor with the given base pointer and total
   ///          size.
   /// @param[in] ptr        The base pointer of the DTB.
@@ -78,14 +78,14 @@ impl DtbCursor {
     }
   }
 
-  /// @fn get_loc(&self) -> u32
+  /// @fn DtbCursor::get_loc
   /// @brief   Get the current location in the blob.
   /// @returns The current location.
   pub fn get_loc(&self) -> u32 {
     self.cur_loc
   }
 
-  /// @fn set_loc(&mut self, loc: u32)
+  /// @fn DtbCursor::set_loc
   /// @brief   Move the cursor to an offset from the beginning of the DTB.
   /// @details The cursor will not move beyond the end of the DTB. If @a loc is
   ///          greater than the total size, the cursor will move to the end of
@@ -97,7 +97,7 @@ impl DtbCursor {
     self.cur_loc = loc;
   }
 
-  /// @fn skip_and_align(&mut self, skip_bytes: u32)
+  /// @fn DtbCursor::skip_and_align
   /// @brief Skip past a number of bytes and align the new location. Useful
   ///        shortcut for skipping past a property, or the null terminator of a
   ///        string, and any padding after.
@@ -114,13 +114,13 @@ impl DtbCursor {
     self.set_loc(new_loc);
   }
 
-  /// @fn align_loc(&mut self)
+  /// @fn DtbCursor::align_loc
   /// @brief Align the current location on a u32 boundary.
   pub fn _align_loc(&mut self) {
     self.skip_and_align(0);
   }
 
-  /// @fn get_u8(&mut self) -> Option<u8>
+  /// @fn DtbCursor::get_u8
   /// @brief   Read the next u8 from the DTB.
   /// @returns The next u8 or None if the end of the DTB has been reached.
   pub fn _get_u8(&mut self) -> Option<u8> {
@@ -135,7 +135,7 @@ impl DtbCursor {
     Some(ret)
   }
 
-  /// @fn unget_u8(&mut self)
+  /// @fn DtbCursor::unget_u8
   /// @brief Move the cursor back a byte.
   pub fn _unget_u8(&mut self) {
     if self.cur_loc < 1 {
@@ -145,7 +145,7 @@ impl DtbCursor {
     self.set_loc(self.cur_loc - 1);
   }
 
-  /// @fn fn get_u8_slice<'cursor>(&mut self, size: u32) -> Option<&'cursor [u8]>
+  /// @fn DtbCursor::get_u8_slice
   /// @brief   Construct a slice referencing the next @a size u8's.
   /// @param[in] size The requested length of the slice.
   /// @returns A slice or None if @a size overruns the DTB.
@@ -167,7 +167,7 @@ impl DtbCursor {
     Some(ret)
   }
 
-  /// @fn get_u8_slice_null_terminated<'cursor>(&mut self) -> Option<&'cursor [u8]>
+  /// @fn DtbCursor::get_u8_slice_null_terminated
   /// @brief   Create a slice from a null terminated string.
   /// @details Use @a get_u8_slice when the size is already known. The cursor
   ///          will point to the null terminator when successful.
@@ -204,7 +204,7 @@ impl DtbCursor {
     Some(ret)
   }
 
-  /// @fn get_u32(&mut self) -> Option<u32>
+  /// @fn DtbCursor::get_u32
   /// @brief   Read the next u32 from the DTB.
   /// @returns The next u32 or None if the end of the DTB has been reached.
   pub fn get_u32(&mut self) -> Option<u32> {
@@ -219,7 +219,7 @@ impl DtbCursor {
     Some(ret)
   }
 
-  /// @fn unget_u32(&mut self)
+  /// @fn DtbCursor::unget_u32
   /// @brief Move the cursor back a word.
   pub fn unget_u32(&mut self) {
     if self.cur_loc < FDT_WORD_BYTES {
@@ -229,7 +229,7 @@ impl DtbCursor {
     self.set_loc(self.cur_loc - FDT_WORD_BYTES);
   }
 
-  /// @fn get_reg(&mut self, addr_cells: u32, size_cells: u32) -> Option<(usize, usize)>
+  /// @fn DtbCursor::get_reg
   /// @brief   Read the next reg pair.
   /// @param[in] addr_cells The number of u32 words in an address.
   /// @param[in] size_cells The number of u32 words in a range size.
@@ -277,6 +277,9 @@ pub struct DtbHeader {
 }
 
 impl DtbHeader {
+  /// @fn DtbHeader::new
+  /// @brief Construct a new instance starting from the location at @a cursor.
+  /// param[in] cursor The starting position of the DTB.
   fn new(cursor: &mut DtbCursor) -> Option<Self> {
     Some(DtbHeader {
       dt_struct_offset: cursor.get_u32()?,
@@ -308,13 +311,7 @@ pub struct DtbPropHeader {
 /// @trait DtbScanner
 /// @brief DTB scanner trait.
 pub trait DtbScanner {
-  /// @fn scan_node(
-  ///       &mut self,
-  ///       hdr: &DtbHeader,
-  ///       root: &DtbRoot,
-  ///       node_name: &[u8],
-  ///       cursor: &mut DtbCursor,
-  ///     ) -> Result<bool, DtbError>
+  /// @fn DtbScanner::scan_node
   /// @brief   Scans the current node.
   /// @details @a scan_dtb provides the implementation with the DTB header and
   ///          root object as well as a cursor positioned at the first property
@@ -339,7 +336,7 @@ pub trait DtbScanner {
   ) -> Result<bool, DtbError>;
 }
 
-/// @fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<(), DtbError>
+/// @fn scan_dtb
 /// @brief   Scans a DTB using a caller-defined scanner object.
 /// @param[in] blob    The DTB blob to scan.
 /// @param[in] scanner A scanner object.
@@ -378,7 +375,7 @@ pub fn scan_dtb(blob: usize, scanner: &mut impl DtbScanner) -> Result<u32, DtbEr
   Ok(total_size)
 }
 
-/// @fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbRoot, DtbError>
+/// @fn scan_root_node
 /// @brief   Scans the root node for required information.
 /// @param[in] hdr    The DTB header.
 /// @param[in] cursor The DTB cursor.
@@ -426,7 +423,7 @@ fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Result<DtbRoot, Dt
   Ok(root)
 }
 
-/// @fn move_to_next_property(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Option<DtbPropHeader>
+/// @fn move_to_next_property
 /// @brief   Moves the cursor to the next property.
 /// @param[in] cursor The DTB cursor.
 /// @returns The property header or None if a property is not found.
@@ -457,11 +454,7 @@ pub fn move_to_next_property(cursor: &mut DtbCursor) -> Option<DtbPropHeader> {
   None
 }
 
-/// @fn get_string_from_table<'cursor>(
-///       hdr: &DtbHeader,
-///       str_offset: u32,
-///       cursor: &'cursor mut DtbCursor,
-///     ) -> Option<&'cursor [u8]>
+/// @fn get_string_from_table
 /// @brief   Retrieves a slice from the string table given an offset.
 /// @param[in] hdr        The DTB header.
 /// @param[in] str_offset The absolute offset of the string.
@@ -481,7 +474,7 @@ pub fn get_string_from_table<'cursor>(
   Some(ret)
 }
 
-/// @fn get_reg_pair_size(root: &DtbRoot) -> u32
+/// @fn get_reg_pair_size
 /// @brief   Calculate the expected size of a single address / size pair in a
 ///          reg property.
 /// @details A reg property is a list of address and size pairs. Each address

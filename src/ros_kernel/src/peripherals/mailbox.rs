@@ -74,19 +74,19 @@ static mut MAIL: _MailWrapper = _MailWrapper {
   mail: [0; MAIL_SIZE],
 };
 
-/// @fn get_buffer() -> &'static Mail
+/// @fn get_buffer
 /// @brief Get a reference to the static mailbox message buffer.
 pub fn get_buffer() -> &'static Mail {
   unsafe { &MAIL.mail }
 }
 
-/// @fn get_buffer_mut() -> &'static mut Mail
+/// @fn get_buffer_mut
 /// @brief Get a mutable reference to the static mailbox message buffer.
 pub fn get_buffer_mut() -> &'static mut Mail {
   unsafe { &mut MAIL.mail }
 }
 
-/// @fn send(channel: u32, mail: &Mail) -> bool
+/// @fn send
 /// @brief   Send a request to the GPU mailbox.
 /// @param[in] channel The mailbox channel.
 /// @returns True if the request succeeds.
@@ -109,7 +109,7 @@ pub fn send(channel: u32) -> bool {
   }
 }
 
-/// @fn pack_address_and_channel(channel: u32) -> u32
+/// @fn pack_address_and_channel
 /// @brief   Packs the channel number into the buffer address for MBOX_WRITE.
 /// @details The buffer address must by 16-byte aligned so that the least-
 ///          significant 4 bits are 0. The VideoCore mailbox expect to find the

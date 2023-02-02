@@ -282,7 +282,7 @@ struct Console {
 
 static mut CONSOLE: Console = Console { x: 0, y: 0 };
 
-/// @fn clear()
+/// @fn clear
 /// @brief Clear the frame buffer.
 pub fn clear() {
   let fb = framebuffer::get_fb();
@@ -296,7 +296,7 @@ pub fn clear() {
   }
 }
 
-/// @fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8)
+/// @fn print_char
 /// @brief Print a character to a framebuffer using the default font.
 /// @param[in] fb   The framebuffer for output.
 /// @param[in] ch   The character to print.
@@ -342,7 +342,7 @@ fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
   }
 }
 
-/// @fn scroll_console(fb: &framebuffer::Framebuffer)
+/// @fn scroll_console
 /// @brief Scroll a framebuffer up one line.
 /// @param[in] fb The framebuffer to scroll.
 fn scroll_console(fb: &framebuffer::Framebuffer) {
@@ -354,7 +354,7 @@ fn scroll_console(fb: &framebuffer::Framebuffer) {
   }
 }
 
-/// @fn print_string(s: &[u8], attr: u8)
+/// @fn print_string
 /// @brief Print a string to the console.
 /// @param[in] s    An array of single-byte, characters to print.
 /// @param[in] attr The font colors. See @a print_char.
@@ -391,7 +391,7 @@ fn print_string(s: &[u8], attr: u8) {
   }
 }
 
-/// @fn kprint(args: fmt::Arguments<'_>)
+/// @fn kprint
 /// @brief Formats the arguments to a string and writes it to the console.
 /// @param[in] args The formatting arguments built by format_args!.
 pub fn kprint(args: fmt::Arguments<'_>) {

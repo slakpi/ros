@@ -2,7 +2,7 @@ use crate::peripherals::mini_uart;
 use crate::support::print;
 use core::fmt::{self, Write};
 
-/// @fn dbg_print(args: fmt::Arguments<'_>)
+/// @fn dbg_print
 /// @brief Formats the arguments to a string and writes it to the mini UART.
 /// @param[in] args The formatting arguments built by format_args!.
 pub fn dbg_print(args: fmt::Arguments<'_>) {

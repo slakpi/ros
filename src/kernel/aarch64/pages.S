@@ -14,7 +14,7 @@
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn create_kernel_pages(x0, x1)
+/// @fn create_kernel_pages
 /// @brief   Create the bootstrap kernel pages.
 /// @details Maps the kernel and, as necessary, the DTB into 2 MiB sections. The
 ///          kernel will re-map the pages after determining the memory layout.
@@ -126,7 +126,7 @@ switch to virtual addresses before the peripherals are needed.
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn section_align_size(x0)
+/// @fn section_align_size
 /// @brief   Section-align the size with the next section higher.
 /// @param[in] x0 The size to align.
 /// @returns The section-aligned size.
@@ -145,7 +145,7 @@ section_align_size:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn init_tables(x0, x1)
+/// @fn init_tables
 /// @brief   Create first- and second-level page tables for the first 1 GiB of
 ///          the virtual address space.
 /// @param[in] x0 The base address of the PGD table.
@@ -165,7 +165,7 @@ init_tables:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn create_table_entry(x0, x1, x2)
+/// @fn create_table_entry
 /// @brief Helper for @a init_tables. Do not call directly.
 /// @param[in] x0 The base address of the PGD table.
 /// @param[in] x1 The base address of the virtual address space.
@@ -187,7 +187,7 @@ create_table_entry:
 
 
 ///-------------------------------------------------------------------------------------------------
-/// @fn map_block(x0, x1, x2, x3, x4)
+/// @fn map_block
 /// @brief Map a block of addresses within the first 1 GiB of the physical
 ///        address space into the virtual address space.
 /// @param[in] tbl   The base address of the PMD table.

@@ -16,7 +16,7 @@ const AUX_MU_CNTL_REG: usize = 0x00215060;
 const _AUX_MU_STAT_REG: usize = 0x00215064;
 const AUX_MU_BAUD_REG: usize = 0x00215068;
 
-/// @fn init_uart()
+/// @fn init_uart
 /// @brief   Intialize UART1.
 /// @details Modifies GPFSEL1 to configure GPIO14 and GPIO15 to use their
 ///          Alternate Function 5 modes, UART1 TX and RX respectively. Disable
@@ -44,7 +44,7 @@ pub fn init_uart() {
   base::peripheral_reg_put(3, AUX_MU_CNTL_REG);
 }
 
-/// @fn uart_recv() -> u8
+/// @fn uart_recv
 /// @brief   Receive a byte from UART1. Blocks until the a arrives.
 /// @returns The received byte.
 pub fn _uart_recv() -> u8 {
@@ -58,7 +58,7 @@ pub fn _uart_recv() -> u8 {
   (base::peripheral_reg_get(AUX_MU_IO_REG) & 0xff) as u8
 }
 
-/// @fn uart_send(c: u8)
+/// @fn uart_send
 /// @brief Send a byte to UART1. Blocks until the UART is ready.
 /// @param[in] c The byte to send.
 pub fn uart_send(c: u8) {
@@ -72,7 +72,7 @@ pub fn uart_send(c: u8) {
   base::peripheral_reg_put(c as u32, AUX_MU_IO_REG);
 }
 
-/// @fn uart_send_bytes(s: &[u8])
+/// @fn uart_send_bytes
 /// @brief Send an array of bytes to the mini UART.
 /// @param[in] s The byte array to send.
 pub fn uart_send_bytes(s: &[u8]) {
@@ -81,7 +81,7 @@ pub fn uart_send_bytes(s: &[u8]) {
   }
 }
 
-/// @fn uart_send_string(s: &str)
+/// @fn uart_send_string
 /// @brief Convenience function to send UTF-8 bytes to the mini UART.
 /// @param[in] s The string to send.
 pub fn uart_send_string(s: &str) {

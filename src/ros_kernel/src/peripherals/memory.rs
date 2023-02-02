@@ -28,11 +28,7 @@ struct DtbMemoryScanner<'mem> {
 }
 
 impl<'mem> DtbMemoryScanner<'mem> {
-  /// @fn check_device_type(
-  ///       loc: u32,
-  ///       size: u32,
-  ///       cursor: &mut dtb::DtbCursor,
-  ///     ) -> Result<bool, dtb::DtbError>
+  /// @fn DtbMemoryScanner::check_device_type
   /// @brief   Wrapper for @a check_device_type_internal.
   /// @param[in] loc    The location of the property data in the node.
   /// @param[in] size   The size of the property.
@@ -52,10 +48,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
     ret
   }
 
-  /// @fn check_device_type_internal(
-  ///       size: u32,
-  ///       cursor: &mut dtb::DtbCursor,
-  ///     ) -> Result<bool, dtb::DtbError>
+  /// @fn DtbMemoryScanner::check_device_type_internal
   /// @brief   Check if this node describes a memory device.
   /// @pre     The cursor has been positioned at the property.
   /// @param[in] size   The size of the property.
@@ -77,13 +70,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
     Ok("memory".as_bytes().cmp(dev_type) == cmp::Ordering::Equal)
   }
 
-  /// @fn read_reg(
-  ///       &mut self,
-  ///       loc: u32,
-  ///       size: u32,
-  ///       root: &dtb::DtbRoot,
-  ///       cursor: &mut dtb::DtbCursor,
-  ///     ) -> Result<(), dtb::DtbError>
+  /// @fn DtbMemoryScanner::read_reg
   /// @brief   Wrapper for @a read_reg_internal.
   /// @param[in] loc    The location of the property data in the node.
   /// @param[in] size   The size of the property data.
@@ -106,12 +93,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
     ret
   }
 
-  /// @fn read_reg_internal(
-  ///       &mut self,
-  ///       size: u32,
-  ///       root: &dtb::DtbRoot,
-  ///       cursor: &mut dtb::DtbCursor,
-  ///     ) -> Result<(), dtb::DtbError>
+  /// @fn DtbMemoryScanner::read_reg_internal
   /// @brief   Read a reg property.
   /// @pre     The cursor has been positioned at the property.
   /// @param[in] size   The size of the property data.
@@ -119,7 +101,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
   /// @param[in] cursor The DTB cursor.
   /// @returns Ok if the reg property is valid or Err if an error is
   ///          encountered.
-  fn read_reg_internal(
+  fn DtbMemoryScanner::read_reg_internal(
     &mut self,
     size: u32,
     root: &dtb::DtbRoot,
@@ -154,13 +136,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
 }
 
 impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
-  /// @fn scan_node(
-  ///       &mut self,
-  ///       hdr: &dtb::DtbHeader,
-  ///       root: &dtb::DtbRoot,
-  ///       node_name: &[u8],
-  ///       cursor: &mut dtb::DtbCursor,
-  ///     ) -> Result<bool, dtb::DtbError>
+  /// @fn DtbMemoryScanner::scan_node
   /// @brief See @a dtb::DtbScanner.
   fn scan_node(
     &mut self,
@@ -214,7 +190,7 @@ struct AtagMemoryScanner<'mem> {
 }
 
 impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
-  /// @fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError>
+  /// @fn AtagMemoryScanner::scan_mem_tag
   /// @brief See @a atags::AtagScanner.
   fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError> {
     insert_range(
@@ -246,13 +222,7 @@ static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
   range_count: 0,
 };
 
-/// @fn init_memory(
-///       blob_virt: usize,
-///       blob_phys: usize,
-///       page_size: usize,
-///       kernel_base: usize,
-///       kernel_size: usize,
-///     ) -> bool
+/// @fn init_memory
 /// @brief   Initialize the system memory configuration.
 /// @param[in] blob_virt   The DTB or ATAGs blob virtual address.
 /// @param[in] blob_phys   The DTB or ATAGs blob physical address.
@@ -314,7 +284,7 @@ pub fn init_memory(
   true
 }
 
-/// @fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig)
+/// @fn init_memory_from_dtb
 /// @brief   Initialize the system memory configuration from a DTB.
 /// @param[in] blob The DTB blob.
 /// @returns The scan result.
@@ -323,7 +293,7 @@ fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, d
   dtb::scan_dtb(blob, &mut scanner)
 }
 
-/// @fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig)
+/// @fn init_memory_from_atags
 /// @brief Initialize the system memory configuration from ATAGs.
 /// @param[in] blob The ATAGs blob.
 fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), atags::AtagError> {
@@ -331,7 +301,7 @@ fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), 
   atags::scan_atags(blob, &mut scanner)
 }
 
-/// @fn insert_range(config: &mut MemoryConfig, range: MemoryRange)
+/// @fn insert_range
 /// @brief Insert a new memory range in order sorted by base.
 /// @param[in] config The memory configuration.
 /// @param[in] range  The range to add.
@@ -346,7 +316,7 @@ fn insert_range(config: &mut MemoryConfig, range: MemoryRange) {
   }
 }
 
-/// @fn finalize_ranges(config: &mut MemoryConfig, rsrv: &[(usize, usize)], page_size: usize)
+/// @fn finalize_ranges
 /// @brief Trims empty ranges. Modifies overlapping ranges to be disjoint,
 ///        possibly removing ranges completely covered by another range. Then
 ///        reserves the ranges in @a rsrv.
@@ -372,7 +342,7 @@ fn finalize_ranges(config: &mut MemoryConfig, rsrv: &[(usize, usize)], page_size
   trim_ranges(config);
 }
 
-/// @fn fn trim_ranges(config: &mut MemoryConfig)
+/// @fn fn trim_ranges
 /// @brief Removes overlapping or null ranges from the configured ranges.
 /// @pre   The configured ranges must be sorted by base address.
 /// @param[in] config The current memory configuration.
@@ -381,7 +351,7 @@ fn trim_ranges(config: &mut MemoryConfig) {
   trim_overlapping_ranges(config);
 }
 
-/// @fn fn trim_empty_ranges(config: &mut MemoryConfig)
+/// @fn fn trim_empty_ranges
 /// @brief Removes empty ranges from the configured ranges.
 /// @pre   The configured ranges must be sorted by base address.
 /// @param[in] config The current memory configuration.
@@ -399,7 +369,7 @@ fn trim_empty_ranges(config: &mut MemoryConfig) {
   }
 }
 
-/// @fn fn trim_overlapping_ranges(config: &mut MemoryConfig)
+/// @fn fn trim_overlapping_ranges
 /// @brief Removes overlapping ranges from the configured ranges.
 /// @pre   The configured ranges must be sorted by base address.
 /// @param[in] config The current memory configuration.
@@ -436,7 +406,7 @@ fn trim_overlapping_ranges(config: &mut MemoryConfig) {
   }
 }
 
-/// @fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange)
+/// @fn exclude_range
 /// @brief Excludes a memory range from the configured ranges.
 /// @pre   The configured ranges must be sorted by base address and empty ranges
 ///        have been trimmed.
@@ -495,11 +465,7 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange, page_size: usize
   }
 }
 
-/// @fn split_range(
-///       range: &MemoryRange,
-///       excl: &MemoryRange,
-///       page_size: usize,
-///     ) -> (Option<MemoryRange>, Option<MemoryRange>)
+/// @fn split_range
 /// @brief   Splits a range using an exclusion range.
 /// @returns Handles the following cases:
 ///
