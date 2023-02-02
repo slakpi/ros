@@ -5,7 +5,6 @@
 ///          implementations. For example, 1,000,000,000 iterations of
 ///          @a is_power_of_2 is as fast as a simple macro implementation such
 ///          as { ($n: expr) => { $n & ($n - 1) } }.
-
 use core::{cmp, ops};
 
 /// @fn align_down(addr: T, boundary: T) -> T

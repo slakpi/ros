@@ -73,7 +73,7 @@ SECTIONS
 
   __kernel_pages_size = __kernel_pages_end - __kernel_pages_start;
 
-  /* Reserve three pages for the kernel's bootstrap identity page page. The
+  /* Reserve three pages for the kernel's bootstrap identity page map. The
    * moment we turn the MMU on, the program counter is still using a physical
    * address. This identity map, loaded into ttbr0_el1, will allow moving to the
    * next instruction which will perform a branch to a virtual address. After

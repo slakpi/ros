@@ -10,6 +10,7 @@ const MEM_RANGES: usize = 64;
 struct MemoryRange {
   base: usize,
   size: usize,
+  reserved: bool,
 }
 
 /// @struct MemoryConfig
@@ -17,8 +18,7 @@ struct MemoryRange {
 ///         page size.
 struct MemoryConfig {
   ranges: [MemoryRange; MEM_RANGES],
-  range_count: u8,
-  page_size: usize,
+  range_count: usize,
 }
 
 /// @struct DtbMemoryScanner
@@ -139,22 +139,14 @@ impl<'mem> DtbMemoryScanner<'mem> {
       let (base, size) = cursor
         .get_reg(root.addr_cells, root.size_cells)
         .ok_or(dtb::DtbError::InvalidDtb)?;
-
-      // Insert the new range in sorted order by range base.
-      for i in 0..=self.config.range_count as usize {
-        if base <= self.config.ranges[i].base {
-          self
-            .config
-            .ranges
-            .copy_within(i..self.config.range_count as usize, i + 1);
-          self.config.range_count += 1;
-
-          let range = &mut self.config.ranges[i];
-          range.base = base;
-          range.size = size;
-          break;
-        }
-      }
+      insert_range(
+        &mut self.config,
+        MemoryRange {
+          base: base,
+          size: size,
+          reserved: false,
+        },
+      );
     }
 
     Ok(())
@@ -211,7 +203,7 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
     _ = self.read_reg(reg.0, reg.1, root, cursor)?;
 
     // Keep scanning if we have not filled the memory ranges yet.
-    Ok((self.config.range_count as usize) < MEM_RANGES)
+    Ok(self.config.range_count < MEM_RANGES)
   }
 }
 
@@ -225,22 +217,16 @@ impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
   /// @fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError>
   /// @brief See @a atags::AtagScanner.
   fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError> {
-    for i in 0..=self.config.range_count as usize {
-      if mem.base as usize <= self.config.ranges[i].base {
-        self
-          .config
-          .ranges
-          .copy_within(i..self.config.range_count as usize, i + 1);
-        self.config.range_count += 1;
+    insert_range(
+      &mut self.config,
+      MemoryRange {
+        base: mem.base as usize,
+        size: mem.size as usize,
+        reserved: false,
+      },
+    );
 
-        let range = &mut self.config.ranges[i];
-        range.base = mem.base as usize;
-        range.size = mem.size as usize;
-        break;
-      }
-    }
-
-    if self.config.range_count as usize == MEM_RANGES {
+    if self.config.range_count == MEM_RANGES {
       return Ok(false);
     }
 
@@ -252,33 +238,43 @@ impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
 /// @brief The system memory configuration. The kernel is single-threaded, so
 ///        directly accessing the value is safe.
 static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
-  ranges: [MemoryRange { base: 0, size: 0 }; MEM_RANGES],
+  ranges: [MemoryRange {
+    base: 0,
+    size: 0,
+    reserved: false,
+  }; MEM_RANGES],
   range_count: 0,
-  page_size: 0,
 };
 
-/// @fn init_memory(blob: usize)
+/// @fn init_memory(
+///       blob_virt: usize,
+///       blob_phys: usize,
+///       page_size: usize,
+///       kernel_base: usize,
+///       kernel_size: usize,
+///     ) -> bool
 /// @brief   Initialize the system memory configuration.
-/// @param[in] blob        The DTB or ATAGs blob.
-/// @param[in] page_size   The memory page size to use.
+/// @param[in] blob_virt   The DTB or ATAGs blob virtual address.
+/// @param[in] blob_phys   The DTB or ATAGs blob physical address.
+/// @param[in] page_size   The memory page size for alignment.
 /// @param[in] kernel_base The location of the kernel in memory.
 /// @param[in] kernel_size The size of the kernel image.
 /// @returns True if memory is successfully initialized.
-pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_size: usize) -> bool {
+pub fn init_memory(
+  blob_virt: usize,
+  blob_phys: usize,
+  page_size: usize,
+  kernel_base: usize,
+  kernel_size: usize,
+) -> bool {
   let config = unsafe { &mut MEMORY_CONFIG };
 
   // For now, the kernel and DTB are the only holes we need to poke in the
-  // configured address ranges. We exclude 0 up to the kernel size which
-  // includes ATAGs (based at 0x100). This assumes the kernel is somewhere near
-  // the beginning of the address range...which is an assumption that may need
-  // to be checked at some point.
-  let mut excl = [
-    MemoryRange {
-      base: 0,
-      size: kernel_base + kernel_size,
-    },
-    MemoryRange { base: 0, size: 0 },
-  ];
+  // configured address ranges. Reserve 0 up to the kernel size which includes
+  // ATAGs (based at 0x100). This assumes the kernel is somewhere near the
+  // beginning of the address range...which is an assumption that may need to be
+  // checked at some point.
+  let mut rsrv: [(usize, usize); 2] = [(0, kernel_base + kernel_size), (0, 0)];
 
   debug_assert!(config.range_count == 0);
 
@@ -288,15 +284,14 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
     return false;
   }
 
-  let ok = match init_memory_from_dtb(blob, config) {
-    // Success scanning the DTB, exclude the memory region it occupies.
+  let ok = match init_memory_from_dtb(blob_virt, config) {
+    // Success scanning the DTB, reserve the memory region it occupies.
     Ok(total_size) => {
-      excl[1].base = blob;
-      excl[1].size = total_size as usize;
+      rsrv[1] = (blob_phys, bits::align_up(total_size as usize, page_size));
       true
     }
     // The memory does not contain a DTB, try ATAGs.
-    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config).is_ok(),
+    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob_virt, config).is_ok(),
     // The DTB was invalid, fail out.
     Err(_) => false,
   };
@@ -308,9 +303,7 @@ pub fn init_memory(blob: usize, page_size: usize, kernel_base: usize, kernel_siz
     return false;
   }
 
-  config.page_size = page_size;
-
-  finalize_ranges(config, &excl);
+  finalize_ranges(config, &rsrv, page_size);
 
   if config.range_count == 0 {
     dbg_print!("Memory: No valid memory ranges available.\n");
@@ -338,21 +331,44 @@ fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), 
   atags::scan_atags(blob, &mut scanner)
 }
 
-/// @fn finalize_ranges(config: &mut MemoryConfig, excl: &[MemoryRange])
-/// @brief Modifies the configured ranges to exclude the specified ranges and
-///        trims any empty ranges.
+/// @fn insert_range(config: &mut MemoryConfig, range: MemoryRange)
+/// @brief Insert a new memory range in order sorted by base.
 /// @param[in] config The memory configuration.
-/// @param[in] excl   The ranges to exclude.
-fn finalize_ranges(config: &mut MemoryConfig, excl: &[MemoryRange]) {
-  // Trim the memory configuration before doing exclusion operations.
+/// @param[in] range  The range to add.
+fn insert_range(config: &mut MemoryConfig, range: MemoryRange) {
+  for i in 0..=config.range_count {
+    if range.base <= config.ranges[i].base {
+      config.ranges.copy_within(i..config.range_count, i + 1);
+      config.range_count += 1;
+      config.ranges[i] = range;
+      break;
+    }
+  }
+}
+
+/// @fn finalize_ranges(config: &mut MemoryConfig, rsrv: &[(usize, usize)], page_size: usize)
+/// @brief Trims empty ranges. Modifies overlapping ranges to be disjoint,
+///        possibly removing ranges completely covered by another range. Then
+///        reserves the ranges in @a rsrv.
+/// @param[in] config    The memory configuration.
+/// @param[in] rsrv      The ranges to reserve.
+/// @param[in] page_size The page size to use for alignment.
+fn finalize_ranges(config: &mut MemoryConfig, rsrv: &[(usize, usize)], page_size: usize) {
+  // Trim the memory configuration before doing reservation operations.
   trim_ranges(config);
 
-  for e in excl {
-    exclude_range(config, e);
-    exclude_range(config, e);
+  for r in rsrv {
+    let rng = MemoryRange {
+      base: r.0,
+      size: r.1,
+      reserved: true,
+    };
+
+    exclude_range(config, &rng, page_size);
+    insert_range(config, rng);
   }
 
-  // Re-trim to get any empty ranges left over after exclusion.
+  // Re-trim to get any empty ranges left over after reserving ranges.
   trim_ranges(config);
 }
 
@@ -372,15 +388,13 @@ fn trim_ranges(config: &mut MemoryConfig) {
 fn trim_empty_ranges(config: &mut MemoryConfig) {
   let mut i = 0usize;
 
-  while i < config.range_count as usize {
+  while i < config.range_count {
     if config.ranges[i].size > 0 {
       i += 1;
       continue;
     }
 
-    config
-      .ranges
-      .copy_within((i + 1)..config.range_count as usize, i);
+    config.ranges.copy_within((i + 1)..config.range_count, i);
     config.range_count -= 1;
   }
 }
@@ -396,7 +410,7 @@ fn trim_overlapping_ranges(config: &mut MemoryConfig) {
 
   let mut i = 0usize;
 
-  while i < (config.range_count - 1) as usize {
+  while i < config.range_count - 1 {
     let a = &config.ranges[i];
     let b = &config.ranges[i + 1];
     let a_end = a.base + a.size;
@@ -406,18 +420,16 @@ fn trim_overlapping_ranges(config: &mut MemoryConfig) {
       // This range encompasses the next range, remove the next range.
       config
         .ranges
-        .copy_within((i + 2)..config.range_count as usize, i + 1);
+        .copy_within((i + 2)..config.range_count, i + 1);
     } else if b.base < a.base && b_end > a_end {
       // The next range encompasses this range, remove this range.
-      config
-        .ranges
-        .copy_within((i + 1)..config.range_count as usize, i);
+      config.ranges.copy_within((i + 1)..config.range_count, i);
     } else if a.base <= b.base && a_end > b.base {
       // This range overlaps the next, union the ranges.
       config.ranges[i].size = b_end - a.base;
       config
         .ranges
-        .copy_within((i + 2)..config.range_count as usize, i + 1);
+        .copy_within((i + 2)..config.range_count, i + 1);
     } else {
       i += 1;
     }
@@ -428,17 +440,18 @@ fn trim_overlapping_ranges(config: &mut MemoryConfig) {
 /// @brief Excludes a memory range from the configured ranges.
 /// @pre   The configured ranges must be sorted by base address and empty ranges
 ///        have been trimmed.
-/// @param[in] config The current memory configuration.
-/// @param[in] excl   The exclusion range. Does not need to be page aligned.
-fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange) {
+/// @param[in] config    The current memory configuration.
+/// @param[in] excl      The exclusion range. Does not need to be page aligned.
+/// @param[in] page_size The memory page size for alignment.
+fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange, page_size: usize) {
   if excl.size == 0 {
     return;
   }
 
   let mut i = 0usize;
 
-  while i < config.range_count as usize {
-    let split = split_range(&config.ranges[i], excl, config.page_size);
+  while i < config.range_count {
+    let split = split_range(&config.ranges[i], excl, page_size);
     let mut a_none = false;
     let mut b_none = false;
 
@@ -455,10 +468,8 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange) {
     if let Some(b) = split.1 {
       if a_none {
         config.ranges[i] = b;
-      } else if (config.range_count as usize) < MEM_RANGES {
-        config
-          .ranges
-          .copy_within(i..config.range_count as usize, i + 1);
+      } else if config.range_count < MEM_RANGES {
+        config.ranges.copy_within(i..config.range_count, i + 1);
         config.range_count += 1;
         config.ranges[i + 1] = b;
         i += 1;
@@ -475,9 +486,7 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange) {
     // If neither element is valid, remove the current range. Do not increment
     // the index yet.
     if a_none && b_none {
-      config
-        .ranges
-        .copy_within((i + 1)..config.range_count as usize, i);
+      config.ranges.copy_within((i + 1)..config.range_count, i);
       config.range_count -= 1;
       continue;
     }
@@ -539,6 +548,7 @@ fn split_range(
     Some(MemoryRange {
       base: range.base,
       size: end - range.base,
+      reserved: range.reserved,
     })
   } else {
     None
@@ -548,6 +558,7 @@ fn split_range(
     Some(MemoryRange {
       base: base,
       size: range_end - base,
+      reserved: range.reserved,
     })
   } else {
     None

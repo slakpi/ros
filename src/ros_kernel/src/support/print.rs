@@ -1,6 +1,5 @@
 /// @file print.rs
 /// @brief Kernel Printing Utilities
-
 use core::fmt;
 
 /// @var WRITE_BUFFER
@@ -21,7 +20,10 @@ impl<'buffer> WriteBuffer<'buffer> {
   /// @brief Create a new wrapper around the specified buffer.
   /// @param[in] buf The buffer to wrap.
   pub fn new(buf: &'buffer mut [u8]) -> Self {
-    WriteBuffer { buf: buf, offset: 0 }
+    WriteBuffer {
+      buf: buf,
+      offset: 0,
+    }
   }
 
   /// @fn as_bytes(&self) -> &[u8]

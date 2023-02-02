@@ -1,7 +1,6 @@
 /// @file dtb.rs
 /// @brief   Device Tree Utilities
 /// @details https://devicetree-specification.readthedocs.io/en/stable/index.html
-
 use super::bits;
 use core::{cmp, ops, slice};
 

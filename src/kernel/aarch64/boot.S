@@ -167,25 +167,22 @@ Real stack setup.
   sub     sp, sp, #(8 * 8)
 
 /*------------------------------------------------------------------------------
-Write kernel configuration struct.
+Write kernel configuration struct. Provide all addresses as physical.
 ------------------------------------------------------------------------------*/
-  ldr     x10, =__virtual_start
-  str     x10, [x29, #-64]
-  add     x9, x19, x10
-  str     x9, [x29, #-56]
-  ldr     x9, =PERIPHERAL_BASE
-  add     x9, x9, x10
-  str     x9, [x29, #-48]
-  ldr     x9, =__page_size
-  str     x9, [x29, #-40]
+  ldr     x11, =__virtual_start
+  ldr     x10, =__page_size
+  stp     x11, x10, [x29, #-64]
+  mov     x9, x19
+  ldr     x10, =PERIPHERAL_BASE
+  stp     x9, x10, [x29, #-48]
   ldr     x9, =__kernel_start
-  str     x9, [x29, #-32]
-  ldr     x9, =__kernel_size
-  str     x9, [x29, #-24]
+  sub     x9, x9, x11
+  ldr     x10, =__kernel_size
+  stp     x9, x10, [x29, #-32]
   ldr     x9, =__kernel_pages_start
-  str     x9, [x29, #-16]
-  ldr     x9, =__kernel_pages_size
-  str     x9, [x29, #-8]
+  sub     x9, x9, x11
+  ldr     x10, =__kernel_pages_size
+  stp     x9, x10, [x29, #-16]
 
 /*------------------------------------------------------------------------------
 Transfer control to the kernel stub. The stub should not return. If it does, we
