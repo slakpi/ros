@@ -1,4 +1,5 @@
 use super::drivers::video::framebuffer;
+use super::exceptions;
 use super::peripherals::{base, memory, mini_uart};
 use crate::dbg_print;
 use core::panic::PanicInfo;
@@ -34,7 +35,9 @@ fn panic(_info: &PanicInfo) -> ! {
 /// @param[in] config Kernel configuration struct.
 /// @returns Does not return
 #[no_mangle]
-pub extern "C" fn ros_kernel(config: KernelConfig) -> ! {
+extern "C" fn ros_kernel(config: KernelConfig) -> ! {
+  exceptions::init_exception_vectors();
+
   base::set_peripheral_base_addr(config.peripheral_base + config.virtual_base);
   mini_uart::init_uart();
 

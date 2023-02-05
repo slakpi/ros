@@ -97,5 +97,7 @@ _trap_exception:
   mrs     x0, esr_el1
   mrs     x1, far_el1
   bl      trap_exception    // Transfer to Rustland
+  // For now just halt.
+  // kernel_exit
 halt:
   b       halt
