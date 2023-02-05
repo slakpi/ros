@@ -22,10 +22,10 @@ pub enum DtbError {
 }
 
 /// @fn check_dtb
-/// @brief   Fast check to verify the blob is a valid flat devicetree.
+/// @brief   Fast check to verify the blob is a valid flat device tree.
 /// @details Verifies the magic value that should be at the beginning of the DTB
 ///          and verifies that the size is sane.
-/// @returns Ok with the size of the devicetree or Err.
+/// @returns Ok with the size of the device tree or Err.
 pub fn check_dtb(blob: usize) -> Result<u32, DtbError> {
   if blob == 0 {
     return Err(DtbError::NotADtb);
@@ -74,7 +74,7 @@ impl DtbCursor {
       base_ptr: ptr,
       cur_ptr: ptr,
       cur_loc: 0,
-      total_size: total_size,
+      total_size,
     }
   }
 
@@ -320,7 +320,7 @@ pub trait DtbScanner {
   ///          implementation should call @a move_to_next_property to navigate
   ///          forward and return when @a move_to_next_property returns None and
   ///          move beyond the last property in the node. The exception to this
-  ///          rule is that the implemenation may use @a get_string_from_table.
+  ///          rule is that the implementation may use @a get_string_from_table.
   /// @param[in] hdr       The DTB header.
   /// @param[in] root      The DTB root node.
   /// @param[in] node_name The node name slice.
@@ -391,7 +391,7 @@ fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Result<DtbRoot, Dt
     .get_u8_slice_null_terminated()
     .ok_or(DtbError::InvalidDtb)?;
 
-  if name.len() != 0 {
+  if !name.is_empty() {
     return Err(DtbError::InvalidDtb);
   }
 
@@ -402,12 +402,7 @@ fn scan_root_node(hdr: &DtbHeader, cursor: &mut DtbCursor) -> Result<DtbRoot, Dt
     size_cells: u32::MAX,
   };
 
-  loop {
-    let prop_hdr = match move_to_next_property(cursor) {
-      Some(prop_hdr) => prop_hdr,
-      _ => break,
-    };
-
+  while let Some(prop_hdr) = move_to_next_property(cursor) {
     let prop_name =
       get_string_from_table(hdr, prop_hdr.name_offset, cursor).ok_or(DtbError::InvalidDtb)?;
 

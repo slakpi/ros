@@ -101,7 +101,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
   /// @param[in] cursor The DTB cursor.
   /// @returns Ok if the reg property is valid or Err if an error is
   ///          encountered.
-  fn DtbMemoryScanner::read_reg_internal(
+  fn read_reg_internal(
     &mut self,
     size: u32,
     root: &dtb::DtbRoot,
@@ -122,10 +122,10 @@ impl<'mem> DtbMemoryScanner<'mem> {
         .get_reg(root.addr_cells, root.size_cells)
         .ok_or(dtb::DtbError::InvalidDtb)?;
       insert_range(
-        &mut self.config,
+        self.config,
         MemoryRange {
-          base: base,
-          size: size,
+          base,
+          size,
           reserved: false,
         },
       );
@@ -148,12 +148,7 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
     let mut dev_type = (0u32, 0, false);
     let mut reg = (0u32, 0, false);
 
-    loop {
-      let prop_hdr = match dtb::move_to_next_property(cursor) {
-        Some(prop_hdr) => prop_hdr,
-        _ => break,
-      };
-
+    while let Some(prop_hdr) = dtb::move_to_next_property(cursor) {
       let prop_name = dtb::get_string_from_table(hdr, prop_hdr.name_offset, cursor)
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
@@ -176,7 +171,7 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
       return Ok(true);
     }
 
-    _ = self.read_reg(reg.0, reg.1, root, cursor)?;
+    self.read_reg(reg.0, reg.1, root, cursor)?;
 
     // Keep scanning if we have not filled the memory ranges yet.
     Ok(self.config.range_count < MEM_RANGES)
@@ -194,7 +189,7 @@ impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
   /// @brief See @a atags::AtagScanner.
   fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError> {
     insert_range(
-      &mut self.config,
+      self.config,
       MemoryRange {
         base: mem.base as usize,
         size: mem.size as usize,
@@ -289,7 +284,7 @@ pub fn init_memory(
 /// @param[in] blob The DTB blob.
 /// @returns The scan result.
 fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, dtb::DtbError> {
-  let mut scanner = DtbMemoryScanner { config: config };
+  let mut scanner = DtbMemoryScanner { config };
   dtb::scan_dtb(blob, &mut scanner)
 }
 
@@ -297,7 +292,7 @@ fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, d
 /// @brief Initialize the system memory configuration from ATAGs.
 /// @param[in] blob The ATAGs blob.
 fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), atags::AtagError> {
-  let mut scanner = AtagMemoryScanner { config: config };
+  let mut scanner = AtagMemoryScanner { config };
   atags::scan_atags(blob, &mut scanner)
 }
 
@@ -483,7 +478,7 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange, page_size: usize
 ///
 ///            If the up page-aligned end, EB, of the exclusion range is less
 ///            than the range end, returns a new range in the second element of
-///            the tuple with EB as the base a new size calcuated using the
+///            the tuple with EB as the base a new size calculated using the
 ///            original end. Otherwise, returns None in the second element of
 ///            the tuple.
 ///
@@ -522,7 +517,7 @@ fn split_range(
 
   let b = if base < range_end {
     Some(MemoryRange {
-      base: base,
+      base,
       size: range_end - base,
       reserved: range.reserved,
     })

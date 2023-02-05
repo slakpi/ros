@@ -103,7 +103,7 @@ pub enum GPIOPin {
 }
 
 /// @enum GPIOPinFunction
-/// @brief GPIO pin functions. Refer to the BCM283x and BCM2711 datasheets for
+/// @brief GPIO pin functions. Refer to the BCM283x and BCM2711 data sheets for
 ///        the alternate function assignments.
 #[derive(Copy, Clone)]
 #[repr(u8)]
@@ -123,7 +123,7 @@ pub const GPIO_DELAY: u64 = 150;
 /// @fn set_pin_function
 /// @brief Changes the function assignment for a GPIO pin.
 /// @param[in] pin  The pin to change.
-/// @param[in] func The new function assginment.
+/// @param[in] func The new function assignment.
 pub fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction) {
   let pin_val = pin as u8;
   let shift = (pin_val % 10) * 3;
@@ -135,8 +135,7 @@ pub fn set_pin_function(pin: GPIOPin, func: GPIOPinFunction) {
     4 => GPFSEL4,
     5 => GPFSEL5,
     _ => {
-      assert!(false, "Invalid GPIO register."); // Should never happen
-      0
+      panic!("Invalid GPIO register."); // Should never happen
     }
   };
 
@@ -169,8 +168,7 @@ pub fn write_to_pin(pin: GPIOPin, val: bool) {
       }
     }
     _ => {
-      assert!(false, "Invalid GPIO register."); // Should never happen
-      0
+      panic!("Invalid GPIO register."); // Should never happen
     }
   };
 

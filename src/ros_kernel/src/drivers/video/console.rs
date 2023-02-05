@@ -319,15 +319,15 @@ fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
   for r in 0..FONT_HEIGHT {
     let mut row: [u32; FONT_WIDTH] = [0; FONT_WIDTH];
 
-    for c in 0..FONT_WIDTH {
+    for (c, px) in row.iter_mut().enumerate() {
       let mask = 1 << c;
-      let px: usize = if (FONT_GLYPHS[ch][r] & mask) != 0 {
+      let pal: usize = if (FONT_GLYPHS[ch][r] & mask) != 0 {
         (attr & 0x0f).into()
       } else {
         ((attr & 0xf0) >> 4).into()
       };
 
-      row[c] = VGA_PAL[px];
+      *px = VGA_PAL[pal];
     }
 
     unsafe {
@@ -338,7 +338,7 @@ fn print_char(fb: &framebuffer::Framebuffer, ch: u8, x: u32, y: u32, attr: u8) {
       );
     }
 
-    offs = offs + p;
+    offs += p;
   }
 }
 
@@ -367,22 +367,22 @@ fn print_string(s: &[u8], attr: u8) {
   for b in s {
     if c >= fb.width {
       c = 0;
-      r = r + y_inc;
+      r += y_inc;
     }
 
     while r >= fb.height {
       scroll_console(fb);
-      r = r - y_inc;
+      r -= y_inc;
     }
 
     if *b == 0xd {
       c = 0;
     } else if *b == 0xa {
       c = 0;
-      r = r + y_inc;
+      r += y_inc;
     } else {
       print_char(fb, *b, c, r, attr);
-      c = c + x_inc;
+      c += x_inc;
     }
   }
 

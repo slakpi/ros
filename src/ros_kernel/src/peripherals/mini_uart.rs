@@ -23,7 +23,7 @@ const AUX_MU_BAUD_REG: usize = 0x00215068;
 ///          Pull-up/-down. Then enable and configure UART1.
 ///
 ///          The system frequency is 250 MHz. The baud register value of 270
-///          translates to a baudrate of 250 MHz / (8 * (270 + 1)) ~ 115200.
+///          translates to a baud rate of 250 MHz / (8 * (270 + 1)) ~ 115200.
 pub fn init_uart() {
   base::peripheral_reg_put(0, gpio::GPPUD);
   base::peripheral_delay(gpio::GPIO_DELAY);

@@ -35,7 +35,7 @@ pub const MBOX_TAG_LAST: u32 = 0;
 
 const VIDEOCORE_MBOX: usize = 0x0000B880;
 
-const MBOX_READ: usize = VIDEOCORE_MBOX + 0x0;
+const MBOX_READ: usize = VIDEOCORE_MBOX;
 const _MBOX_POLL: usize = VIDEOCORE_MBOX + 0x10;
 const _MBOX_SENDER: usize = VIDEOCORE_MBOX + 0x14;
 const MBOX_STATUS: usize = VIDEOCORE_MBOX + 0x18;
@@ -58,7 +58,7 @@ struct _Align16;
 /// @struct  MailWrapper
 /// @brief   Alignment wrapper for the mail data.
 /// @details The Mailbox peripheral requires the data pointer to be a 32-bit
-///          pointer where the 28 most-signifcant bits are the address and the
+///          pointer where the 28 most-significant bits are the address and the
 ///          4-bit channel is in the 4 least-significant bits. Thus, the array
 ///          must be aligned on a 16-byte boundary.
 struct _MailWrapper {

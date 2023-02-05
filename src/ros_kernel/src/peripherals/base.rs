@@ -7,7 +7,7 @@ use core::ptr;
 static mut PERIPHERAL_BASE: usize = 0;
 
 /// @fn set_peripheral_base_addr
-/// @brief   Sets the peripherial base address provided by the kernel stub.
+/// @brief   Sets the peripheral base address provided by the kernel stub.
 /// @details Must only be called once upon kernel entry.
 /// @param[in] base The peripheral base address.
 pub fn set_peripheral_base_addr(base: usize) {
