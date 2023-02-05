@@ -38,7 +38,7 @@ Align the blob size on a section.
 /*------------------------------------------------------------------------------
 Align the size of the kernel area on a section.
 ------------------------------------------------------------------------------*/
-  adrp    x0, __kernel_pages_end
+  adrp    x0, __kernel_id_pages_end
   bl      section_align_size
   mov     x21, x0
 
@@ -134,7 +134,7 @@ section_align_size:
   // no fn_entry required.
 
   mov     x9, #SECTION_SIZE - 1
-  add     x0, x0, x10
+  add     x0, x0, x9
 
   mov     x9, #SECTION_SIZE
   neg     x9, x9
