@@ -1,5 +1,6 @@
 use super::drivers::video::framebuffer;
 use super::exceptions;
+use super::mm::pages;
 use super::peripherals::{base, memory, mini_uart};
 use crate::dbg_print;
 use core::panic::PanicInfo;
@@ -51,6 +52,8 @@ extern "C" fn ros_kernel(config: KernelConfig) -> ! {
     config.kernel_size,
   );
 
+  pages::init_page_table(config.kernel_pages_start + config.virtual_base, config.page_size);
+  
   init_drivers();
 
   loop {}

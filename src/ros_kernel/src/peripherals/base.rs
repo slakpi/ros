@@ -12,7 +12,7 @@ static mut PERIPHERAL_BASE: usize = 0;
 /// @param[in] base The peripheral base address.
 pub fn set_peripheral_base_addr(base: usize) {
   unsafe {
-    assert!(PERIPHERAL_BASE == 0);
+    debug_assert!(PERIPHERAL_BASE == 0);
     PERIPHERAL_BASE = base;
   }
 }

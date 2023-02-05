@@ -7,7 +7,7 @@ const MEM_RANGES: usize = 64;
 /// @struct MemoryRange
 /// @brief  Represents a range of memory available to the system.
 #[derive(Copy, Clone)]
-struct MemoryRange {
+pub struct MemoryRange {
   base: usize,
   size: usize,
   reserved: bool,
@@ -16,7 +16,7 @@ struct MemoryRange {
 /// @struct MemoryConfig
 /// @brief  Stores the ranges of memory available to the system and the memory
 ///         page size.
-struct MemoryConfig {
+pub struct MemoryConfig {
   ranges: [MemoryRange; MEM_RANGES],
   range_count: usize,
 }
@@ -219,17 +219,17 @@ static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
 
 /// @fn init_memory
 /// @brief   Initialize the system memory configuration.
-/// @param[in] blob_virt   The DTB or ATAGs blob virtual address.
-/// @param[in] blob_phys   The DTB or ATAGs blob physical address.
-/// @param[in] page_size   The memory page size for alignment.
-/// @param[in] kernel_base The location of the kernel in memory.
-/// @param[in] kernel_size The size of the kernel image.
+/// @param[in] blob_virt        The DTB or ATAGs blob virtual address.
+/// @param[in] blob_phys        The DTB or ATAGs blob physical address.
+/// @param[in] page_size        The memory page size for alignment.
+/// @param[in] kernel_base_phys The kernel's base physical address.
+/// @param[in] kernel_size      The size of the kernel image.
 /// @returns True if memory is successfully initialized.
 pub fn init_memory(
   blob_virt: usize,
   blob_phys: usize,
   page_size: usize,
-  kernel_base: usize,
+  kernel_base_phys: usize,
   kernel_size: usize,
 ) -> bool {
   let config = unsafe { &mut MEMORY_CONFIG };
@@ -239,7 +239,7 @@ pub fn init_memory(
   // ATAGs (based at 0x100). This assumes the kernel is somewhere near the
   // beginning of the address range...which is an assumption that may need to be
   // checked at some point.
-  let mut rsrv: [(usize, usize); 2] = [(0, kernel_base + kernel_size), (0, 0)];
+  let mut rsrv: [(usize, usize); 2] = [(0, kernel_base_phys + kernel_size), (0, 0)];
 
   debug_assert!(config.range_count == 0);
 
@@ -277,6 +277,13 @@ pub fn init_memory(
   }
 
   true
+}
+
+/// @fn get_memory_config
+/// @brief   Get the current memory configuration.
+/// @returns The current memory configuration.
+pub fn get_memory_config() -> &'static MemoryConfig {
+  unsafe { &MEMORY_CONFIG }
 }
 
 /// @fn init_memory_from_dtb

@@ -41,7 +41,7 @@ pub fn fb_init() {
 /// @brief Get a reference to the framebuffer.
 pub fn get_fb() -> &'static Framebuffer {
   unsafe {
-    assert!(FRAMEBUFFER.fb_ptr.is_null());
+    debug_assert!(FRAMEBUFFER.fb_ptr.is_null());
     &FRAMEBUFFER
   }
 }
