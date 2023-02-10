@@ -2,6 +2,7 @@ use super::drivers::video::framebuffer;
 use super::exceptions;
 use super::mm::pages;
 use super::peripherals::{base, memory, mini_uart};
+use super::support::{bits, dtb};
 use crate::dbg_print;
 use core::panic::PanicInfo;
 
@@ -28,7 +29,21 @@ pub struct KernelConfig {
 /// @param[in] info The panic info.
 /// @returns Does not return.
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+  dbg_print!("Kernel panic ");
+
+  if let Some(location) = info.location() {
+    dbg_print!("{} at line {} ", location.file(), location.line());
+  } else {
+    dbg_print!("<unknown location> ");
+  }
+
+  if let Some(s) = info.payload().downcast_ref::<&str>() {
+    dbg_print!("{}\n", s);
+  } else {
+    dbg_print!("\n");
+  }
+
   loop {}
 }
 
@@ -37,27 +52,47 @@ fn panic(_info: &PanicInfo) -> ! {
 /// @param[in] config Kernel configuration struct.
 /// @returns Does not return
 #[no_mangle]
-extern "C" fn ros_kernel(config: KernelConfig) -> ! {
-  exceptions::init_exception_vectors();
-
-  base::set_peripheral_base_addr(config.peripheral_base + config.virtual_base);
-  mini_uart::init_uart();
-
+extern "C" fn ros_kernel(init: KernelConfig) -> ! {
+  init_exceptions();
+  init_peripherals(&init);
+  
   dbg_print!("=== ROS ===\n");
 
-  memory::init_memory(
-    config.blob + config.virtual_base,
-    config.blob,
-    config.page_size,
-    config.kernel_base,
-    config.kernel_size,
-  );
-
-  pages::init_page_table(config.kernel_pages_start + config.virtual_base, config.page_size);
-  
+  init_memory(&init);
   init_drivers();
 
   loop {}
+}
+
+fn init_exceptions() {
+  exceptions::init_exception_vectors();
+}
+
+fn init_peripherals(init: &KernelConfig) {
+  base::set_peripheral_base_addr(init.peripheral_base + init.virtual_base);
+  mini_uart::init_uart();
+}
+
+fn init_memory(init: &KernelConfig) {
+  let blob = init.blob + init.virtual_base;
+  let kernel_pages_start = init.kernel_pages_start + init.virtual_base;
+
+  let mut rsrv = [
+    (0, init.kernel_base + init.kernel_size),
+    (init.peripheral_base, init.peripheral_block_size),
+    (0, 0),
+  ];
+
+  if let Ok(total_size) = dtb::check_dtb(blob) {
+    rsrv[2].0 = init.blob;
+    rsrv[2].1 = bits::align_up(total_size as usize, init.page_size);
+  }
+
+  if !memory::init_memory(blob, init.page_size, &rsrv) {
+    panic!();
+  }
+  
+  pages::init_page_table(kernel_pages_start, init.page_size);
 }
 
 /// @fn init_drivers

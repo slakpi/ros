@@ -219,60 +219,37 @@ static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
 
 /// @fn init_memory
 /// @brief   Initialize the system memory configuration.
-/// @param[in] blob_virt        The DTB or ATAGs blob virtual address.
-/// @param[in] blob_phys        The DTB or ATAGs blob physical address.
-/// @param[in] page_size        The memory page size for alignment.
-/// @param[in] kernel_base_phys The kernel's base physical address.
-/// @param[in] kernel_size      The size of the kernel image.
+/// @param[in] blob      The DTB or ATAGs blob address.
+/// @param[in] page_size The memory page size for alignment.
+/// @param[in] rsrv      Physical address reservations.  
 /// @returns True if memory is successfully initialized.
-pub fn init_memory(
-  blob_virt: usize,
-  blob_phys: usize,
-  page_size: usize,
-  kernel_base_phys: usize,
-  kernel_size: usize,
-) -> bool {
+pub fn init_memory(blob: usize, page_size: usize, rsrv: &[(usize, usize)]) -> bool {
   let config = unsafe { &mut MEMORY_CONFIG };
-
-  // For now, the kernel and DTB are the only holes we need to poke in the
-  // configured address ranges. Reserve 0 up to the kernel size which includes
-  // ATAGs (based at 0x100). This assumes the kernel is somewhere near the
-  // beginning of the address range...which is an assumption that may need to be
-  // checked at some point.
-  let mut rsrv: [(usize, usize); 2] = [(0, kernel_base_phys + kernel_size), (0, 0)];
-
   debug_assert!(config.range_count == 0);
 
   if page_size == 0 || !bits::is_power_of_2(page_size) {
-    dbg_print!("Memory: Page size is not a power of 2.\n");
-    debug_assert!(false);
+    dbg_print!("Memory: Page size is not a power of 2.");
     return false;
   }
 
-  let ok = match init_memory_from_dtb(blob_virt, config) {
-    // Success scanning the DTB, reserve the memory region it occupies.
-    Ok(total_size) => {
-      rsrv[1] = (blob_phys, bits::align_up(total_size as usize, page_size));
-      true
-    }
-    // The memory does not contain a DTB, try ATAGs.
-    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob_virt, config).is_ok(),
+  let ok = match init_memory_from_dtb(blob, config) {
+    // Successfully read the DTB memory configuration.
+    Ok(_) => true,
+    // The blob does not contain a DTB, try ATAGs.
+    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config).is_ok(),
     // The DTB was invalid, fail out.
     Err(_) => false,
   };
 
   if !ok {
-    dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
-    debug_assert!(false);
-    config.range_count = 0;
+    dbg_print!("Memory: Could not read a valid device tree or ATAG list.");
     return false;
   }
 
   finalize_ranges(config, &rsrv, page_size);
 
   if config.range_count == 0 {
-    dbg_print!("Memory: No valid memory ranges available.\n");
-    debug_assert!(false);
+    dbg_print!("Memory: No valid memory ranges available.");
     return false;
   }
 
@@ -308,14 +285,22 @@ fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), 
 /// @param[in] config The memory configuration.
 /// @param[in] range  The range to add.
 fn insert_range(config: &mut MemoryConfig, range: MemoryRange) {
-  for i in 0..=config.range_count {
+  if config.range_count >= MEM_RANGES {
+    return;
+  }
+
+  let mut ins = config.range_count;
+
+  for i in 0..config.range_count {
     if range.base <= config.ranges[i].base {
-      config.ranges.copy_within(i..config.range_count, i + 1);
-      config.range_count += 1;
-      config.ranges[i] = range;
+      ins = i;
       break;
     }
   }
+
+  config.ranges.copy_within(ins..config.range_count, ins + 1);
+  config.range_count += 1;
+  config.ranges[ins] = range;
 }
 
 /// @fn finalize_ranges
@@ -449,7 +434,7 @@ fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange, page_size: usize
         // TODO: Either we hit a bug or we're not accounting for configurations
         // that create a bunch of memory ranges. Either way, there is probably a
         // more graceful way to handle this.
-        debug_assert!(false);
+        panic!("Unable to exclude memory range.");
       }
     } else {
       b_none = true;
