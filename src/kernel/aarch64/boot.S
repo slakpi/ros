@@ -164,31 +164,37 @@ Real stack setup.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
   mov     x29, sp
-  sub     sp, sp, #(8 * 8)
+  sub     sp, sp, #(10 * 8)
 
 /*------------------------------------------------------------------------------
 Write kernel configuration struct. Provide all addresses as physical.
 ------------------------------------------------------------------------------*/
   ldr     x11, =__virtual_start
   ldr     x10, =__page_size
-  stp     x11, x10, [x29, #-64]
+  stp     x11, x10, [x29, #-80]
+
   mov     x9, x19
   ldr     x10, =PERIPHERAL_BASE
+  stp     x9, x10, [x29, #-64]
+
+  ldr     x9, =PERIPHERAL_BLOCK_SIZE
+  ldr     x10, =__kernel_start
+  sub     x10, x10, x11
   stp     x9, x10, [x29, #-48]
-  ldr     x9, =__kernel_start
-  sub     x9, x9, x11
-  ldr     x10, =__kernel_size
+
+  ldr     x9, =__kernel_size
+  ldr     x10, =__kernel_pages_start
+  sub     x10, x10, x11
   stp     x9, x10, [x29, #-32]
-  ldr     x9, =__kernel_pages_start
-  sub     x9, x9, x11
-  ldr     x10, =__kernel_pages_size
-  stp     x9, x10, [x29, #-16]
+
+  ldr     x9, =__kernel_pages_size
+  str     x9, [x29, #-16]
 
 /*------------------------------------------------------------------------------
 Transfer control to the kernel stub. The stub should not return. If it does, we
 will end up halting below.
 ------------------------------------------------------------------------------*/
-  sub     x0, x29, #64
+  sub     x0, x29, #80
   br      x21
 
 el1_cpu_halt:

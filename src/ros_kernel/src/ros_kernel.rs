@@ -16,6 +16,7 @@ pub struct KernelConfig {
   page_size: usize,
   blob: usize,
   peripheral_base: usize,
+  peripheral_block_size: usize,
   kernel_base: usize,
   kernel_size: usize,
   kernel_pages_start: usize,
