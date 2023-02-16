@@ -8,17 +8,233 @@ const MEM_RANGES: usize = 64;
 /// @brief  Represents a range of memory available to the system.
 #[derive(Copy, Clone)]
 pub struct MemoryRange {
-  base: usize,
-  size: usize,
-  reserved: bool,
+  pub base: usize,
+  pub size: usize,
 }
 
 /// @struct MemoryConfig
 /// @brief  Stores the ranges of memory available to the system and the memory
 ///         page size.
+#[derive(Copy, Clone)]
 pub struct MemoryConfig {
   ranges: [MemoryRange; MEM_RANGES],
   range_count: usize,
+}
+
+impl MemoryConfig {
+  /// @fn MemoryConfig::new
+  /// @brief   Construct a new MemoryConfig.
+  /// @returns An empty MemoryConfig.
+  pub fn new() -> Self {
+    MemoryConfig {
+      ranges: [MemoryRange { base: 0, size: 0 }; MEM_RANGES],
+      range_count: 0,
+    }
+  }
+
+  /// @fn MemoryConfig::get_ranges
+  /// @brief   Access the configured memory ranges.
+  /// @returns A slice with the configured memory ranges.
+  pub fn get_ranges(&self) -> &[MemoryRange] {
+    &self.ranges[0..self.range_count]
+  }
+
+  /// @fn MemoryConfig::insert_range
+  /// @brief Insert a new memory range in order sorted by base.
+  /// @param[in] range  The range to add.
+  pub fn insert_range(&mut self, range: MemoryRange) {
+    if self.range_count >= MEM_RANGES {
+      return;
+    }
+
+    let mut ins = self.range_count;
+
+    for i in 0..self.range_count {
+      if range.base <= self.ranges[i].base {
+        ins = i;
+        break;
+      }
+    }
+
+    self.ranges.copy_within(ins..self.range_count, ins + 1);
+    self.range_count += 1;
+    self.ranges[ins] = range;
+  }
+
+  /// @fn MemoryConfig::exclude_range
+  /// @brief Excludes a memory range from the configured ranges.
+  /// @param[in] excl      The exclusion range. Does not need to be page aligned.
+  /// @param[in] page_size The memory page size for alignment.
+  pub fn exclude_range(&mut self, excl: &MemoryRange, page_size: usize) {
+    if excl.size == 0 {
+      return;
+    }
+
+    self.trim_ranges();
+
+    let mut i = 0usize;
+
+    while i < self.range_count {
+      let split = Self::split_range(&self.ranges[i], excl, page_size);
+
+      // If the first element is valid, the current range can simply be
+      // replaced.
+      if let Some(a) = split.0 {
+        self.ranges[i] = a;
+      }
+
+      if let Some(b) = split.1 {
+        if split.0.is_none() {
+          // Just replace the current range.
+          self.ranges[i] = b;
+        } else if self.range_count < MEM_RANGES {
+          // Insert the new range after the current range. Increment the index
+          // an extra time.
+          self.ranges.copy_within(i..self.range_count, i + 1);
+          self.range_count += 1;
+          self.ranges[i + 1] = b;
+          i += 1;
+        } else {
+          // TODO: Either we hit a bug or we're not accounting for
+          // configurations that create a bunch of memory ranges. Either way,
+          // there is probably a more graceful way to handle this.
+          panic!("Unable to exclude memory range.");
+        }
+      }
+
+      // If neither element is valid, remove the current range. Do not increment
+      // the index yet.
+      if split.0.is_none() && split.1.is_none() {
+        self.ranges.copy_within((i + 1)..self.range_count, i);
+        self.range_count -= 1;
+        continue;
+      }
+
+      i += 1;
+    }
+  }
+
+  /// @fn MemoryConfig::trim_ranges
+  /// @brief Removes overlapping or null ranges from the configured ranges.
+  /// @param[in] config The current memory configuration.
+  pub fn trim_ranges(&mut self) {
+    self.trim_empty_ranges();
+    self.trim_overlapping_ranges();
+  }
+
+  /// @fn MemoryConfig::trim_empty_ranges
+  /// @brief Removes empty ranges from the configured ranges.
+  fn trim_empty_ranges(&mut self) {
+    let mut i = 0usize;
+
+    while i < self.range_count {
+      if self.ranges[i].size > 0 {
+        i += 1;
+        continue;
+      }
+
+      self.ranges.copy_within((i + 1)..self.range_count, i);
+      self.range_count -= 1;
+    }
+  }
+
+  /// @fn MemoryConfig::trim_overlapping_ranges
+  /// @brief Removes overlapping ranges from the configured ranges.
+  fn trim_overlapping_ranges(&mut self) {
+    if self.range_count < 2 {
+      return;
+    }
+
+    let mut i = 0usize;
+
+    while i < self.range_count - 1 {
+      let a = &self.ranges[i];
+      let b = &self.ranges[i + 1];
+      let a_end = a.base + a.size;
+      let b_end = b.base + b.size;
+
+      if a.base <= b.base && a_end >= b_end {
+        // This range encompasses the next range, remove the next range.
+        self.ranges.copy_within((i + 2)..self.range_count, i + 1);
+      } else if b.base < a.base && b_end > a_end {
+        // The next range encompasses this range, remove this range.
+        self.ranges.copy_within((i + 1)..self.range_count, i);
+      } else if a.base <= b.base && a_end > b.base {
+        // This range overlaps the next, union the ranges.
+        self.ranges[i].size = b_end - a.base;
+        self.ranges.copy_within((i + 2)..self.range_count, i + 1);
+      } else {
+        i += 1;
+      }
+    }
+  }
+
+  /// @fn MemoryRange::split_range
+  /// @brief   Splits a range using an exclusion range.
+  /// @returns A tuple handling the following cases:
+  ///
+  ///          * If the ranges are mutually exclusive, returns the original
+  ///            range as the first element in the tuple and None for the
+  ///            second.
+  ///
+  ///          * If the exclusion range fully encompasses the range, returns
+  ///            None for both elements of the tuple.
+  ///
+  ///          * If the down page-aligned base, EE, of the exclusion range is
+  ///            greater than the range base, returns a new range in the first
+  ///            element of the tuple with the original base and a new size
+  ///            calculated using EE as the end. Otherwise, returns None in the
+  ///            first element of the tuple.
+  ///
+  ///            If the up page-aligned end, EB, of the exclusion range is less
+  ///            than the range end, returns a new range in the second element
+  ///            of the tuple with EB as the base a new size calculated using
+  ///            the original end. Otherwise, returns None in the second element
+  ///            of the tuple.
+  ///
+  ///          The last case handles the exclusion range being fully encompassed
+  ///          by the range as well as the exclusion range overlapping either
+  ///          end of the range and handles returning None if the overlap
+  ///          results in empty ranges.
+  fn split_range(
+    range: &MemoryRange,
+    excl: &MemoryRange,
+    page_size: usize,
+  ) -> (Option<MemoryRange>, Option<MemoryRange>) {
+    let range_end = range.base + range.size;
+    let excl_end = excl.base + excl.size;
+
+    if excl_end < range.base || range_end < excl.base {
+      return (Some(*range), None);
+    }
+
+    if excl.base <= range.base && excl_end >= range_end {
+      return (None, None);
+    }
+
+    let end = bits::align_down(excl.base, page_size);
+    let base = bits::align_up(excl_end, page_size);
+
+    let a = if end > range.base {
+      Some(MemoryRange {
+        base: range.base,
+        size: end - range.base,
+      })
+    } else {
+      None
+    };
+
+    let b = if base < range_end {
+      Some(MemoryRange {
+        base,
+        size: range_end - base,
+      })
+    } else {
+      None
+    };
+
+    (a, b)
+  }
 }
 
 /// @struct DtbMemoryScanner
@@ -121,14 +337,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
       let (base, size) = cursor
         .get_reg(root.addr_cells, root.size_cells)
         .ok_or(dtb::DtbError::InvalidDtb)?;
-      insert_range(
-        self.config,
-        MemoryRange {
-          base,
-          size,
-          reserved: false,
-        },
-      );
+      self.config.insert_range(MemoryRange { base, size });
     }
 
     Ok(())
@@ -188,14 +397,10 @@ impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
   /// @fn AtagMemoryScanner::scan_mem_tag
   /// @brief See @a atags::AtagScanner.
   fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError> {
-    insert_range(
-      self.config,
-      MemoryRange {
-        base: mem.base as usize,
-        size: mem.size as usize,
-        reserved: false,
-      },
-    );
+    self.config.insert_range(MemoryRange {
+      base: mem.base as usize,
+      size: mem.size as usize,
+    });
 
     if self.config.range_count == MEM_RANGES {
       return Ok(false);
@@ -205,317 +410,56 @@ impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
   }
 }
 
-/// @var   MEMORY_CONFIG
-/// @brief The system memory configuration. The kernel is single-threaded, so
-///        directly accessing the value is safe.
-static mut MEMORY_CONFIG: MemoryConfig = MemoryConfig {
-  ranges: [MemoryRange {
-    base: 0,
-    size: 0,
-    reserved: false,
-  }; MEM_RANGES],
-  range_count: 0,
-};
-
-/// @fn init_memory
-/// @brief   Initialize the system memory configuration.
+/// @fn get_memory_layout
+/// @brief   Get the system memory layout.
 /// @param[in] blob      The DTB or ATAGs blob address.
-/// @param[in] page_size The memory page size for alignment.
-/// @param[in] rsrv      Physical address reservations.  
-/// @returns True if memory is successfully initialized.
-pub fn init_memory(blob: usize, page_size: usize, rsrv: &[(usize, usize)]) -> bool {
-  let config = unsafe { &mut MEMORY_CONFIG };
-  debug_assert!(config.range_count == 0);
+/// @returns The memory layout or None if unable to read the DTB or ATAGs.
+pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
+  let mut config = MemoryConfig::new();
 
-  if page_size == 0 || !bits::is_power_of_2(page_size) {
-    dbg_print!("Memory: Page size is not a power of 2.");
-    return false;
-  }
-
-  let ok = match init_memory_from_dtb(blob, config) {
+  let ok = match get_memory_layout_from_dtb(blob, &mut config) {
     // Successfully read the DTB memory configuration.
     Ok(_) => true,
     // The blob does not contain a DTB, try ATAGs.
-    Err(dtb::DtbError::NotADtb) => init_memory_from_atags(blob, config).is_ok(),
+    Err(dtb::DtbError::NotADtb) => get_memory_layout_from_atags(blob, &mut config).is_ok(),
     // The DTB was invalid, fail out.
     Err(_) => false,
   };
 
   if !ok {
     dbg_print!("Memory: Could not read a valid device tree or ATAG list.");
-    return false;
+    return None;
   }
 
-  finalize_ranges(config, &rsrv, page_size);
+  config.trim_ranges();
 
   if config.range_count == 0 {
     dbg_print!("Memory: No valid memory ranges available.");
-    return false;
+    return None;
   }
 
-  true
+  Some(config)
 }
 
-/// @fn get_memory_config
-/// @brief   Get the current memory configuration.
-/// @returns The current memory configuration.
-pub fn get_memory_config() -> &'static MemoryConfig {
-  unsafe { &MEMORY_CONFIG }
-}
-
-/// @fn init_memory_from_dtb
-/// @brief   Initialize the system memory configuration from a DTB.
+/// @fn get_memory_layout_from_dtb
+/// @brief   Get the system memory layout from a DTB.
 /// @param[in] blob The DTB blob.
 /// @returns The scan result.
-fn init_memory_from_dtb(blob: usize, config: &mut MemoryConfig) -> Result<u32, dtb::DtbError> {
+fn get_memory_layout_from_dtb(
+  blob: usize,
+  config: &mut MemoryConfig,
+) -> Result<u32, dtb::DtbError> {
   let mut scanner = DtbMemoryScanner { config };
   dtb::scan_dtb(blob, &mut scanner)
 }
 
-/// @fn init_memory_from_atags
-/// @brief Initialize the system memory configuration from ATAGs.
+/// @fn get_memory_layout_from_atags
+/// @brief Get the system memory layout from ATAGs.
 /// @param[in] blob The ATAGs blob.
-fn init_memory_from_atags(blob: usize, config: &mut MemoryConfig) -> Result<(), atags::AtagError> {
+fn get_memory_layout_from_atags(
+  blob: usize,
+  config: &mut MemoryConfig,
+) -> Result<(), atags::AtagError> {
   let mut scanner = AtagMemoryScanner { config };
   atags::scan_atags(blob, &mut scanner)
-}
-
-/// @fn insert_range
-/// @brief Insert a new memory range in order sorted by base.
-/// @param[in] config The memory configuration.
-/// @param[in] range  The range to add.
-fn insert_range(config: &mut MemoryConfig, range: MemoryRange) {
-  if config.range_count >= MEM_RANGES {
-    return;
-  }
-
-  let mut ins = config.range_count;
-
-  for i in 0..config.range_count {
-    if range.base <= config.ranges[i].base {
-      ins = i;
-      break;
-    }
-  }
-
-  config.ranges.copy_within(ins..config.range_count, ins + 1);
-  config.range_count += 1;
-  config.ranges[ins] = range;
-}
-
-/// @fn finalize_ranges
-/// @brief Trims empty ranges. Modifies overlapping ranges to be disjoint,
-///        possibly removing ranges completely covered by another range. Then
-///        reserves the ranges in @a rsrv.
-/// @param[in] config    The memory configuration.
-/// @param[in] rsrv      The ranges to reserve.
-/// @param[in] page_size The page size to use for alignment.
-fn finalize_ranges(config: &mut MemoryConfig, rsrv: &[(usize, usize)], page_size: usize) {
-  // Trim the memory configuration before doing reservation operations.
-  trim_ranges(config);
-
-  for r in rsrv {
-    let rng = MemoryRange {
-      base: r.0,
-      size: r.1,
-      reserved: true,
-    };
-
-    exclude_range(config, &rng, page_size);
-    insert_range(config, rng);
-  }
-
-  // Re-trim to get any empty ranges left over after reserving ranges.
-  trim_ranges(config);
-}
-
-/// @fn fn trim_ranges
-/// @brief Removes overlapping or null ranges from the configured ranges.
-/// @pre   The configured ranges must be sorted by base address.
-/// @param[in] config The current memory configuration.
-fn trim_ranges(config: &mut MemoryConfig) {
-  trim_empty_ranges(config);
-  trim_overlapping_ranges(config);
-}
-
-/// @fn fn trim_empty_ranges
-/// @brief Removes empty ranges from the configured ranges.
-/// @pre   The configured ranges must be sorted by base address.
-/// @param[in] config The current memory configuration.
-fn trim_empty_ranges(config: &mut MemoryConfig) {
-  let mut i = 0usize;
-
-  while i < config.range_count {
-    if config.ranges[i].size > 0 {
-      i += 1;
-      continue;
-    }
-
-    config.ranges.copy_within((i + 1)..config.range_count, i);
-    config.range_count -= 1;
-  }
-}
-
-/// @fn fn trim_overlapping_ranges
-/// @brief Removes overlapping ranges from the configured ranges.
-/// @pre   The configured ranges must be sorted by base address.
-/// @param[in] config The current memory configuration.
-fn trim_overlapping_ranges(config: &mut MemoryConfig) {
-  if config.range_count < 2 {
-    return;
-  }
-
-  let mut i = 0usize;
-
-  while i < config.range_count - 1 {
-    let a = &config.ranges[i];
-    let b = &config.ranges[i + 1];
-    let a_end = a.base + a.size;
-    let b_end = b.base + b.size;
-
-    if a.base <= b.base && a_end >= b_end {
-      // This range encompasses the next range, remove the next range.
-      config
-        .ranges
-        .copy_within((i + 2)..config.range_count, i + 1);
-    } else if b.base < a.base && b_end > a_end {
-      // The next range encompasses this range, remove this range.
-      config.ranges.copy_within((i + 1)..config.range_count, i);
-    } else if a.base <= b.base && a_end > b.base {
-      // This range overlaps the next, union the ranges.
-      config.ranges[i].size = b_end - a.base;
-      config
-        .ranges
-        .copy_within((i + 2)..config.range_count, i + 1);
-    } else {
-      i += 1;
-    }
-  }
-}
-
-/// @fn exclude_range
-/// @brief Excludes a memory range from the configured ranges.
-/// @pre   The configured ranges must be sorted by base address and empty ranges
-///        have been trimmed.
-/// @param[in] config    The current memory configuration.
-/// @param[in] excl      The exclusion range. Does not need to be page aligned.
-/// @param[in] page_size The memory page size for alignment.
-fn exclude_range(config: &mut MemoryConfig, excl: &MemoryRange, page_size: usize) {
-  if excl.size == 0 {
-    return;
-  }
-
-  let mut i = 0usize;
-
-  while i < config.range_count {
-    let split = split_range(&config.ranges[i], excl, page_size);
-    let mut a_none = false;
-    let mut b_none = false;
-
-    // If the first element is valid, the current range can simply be replaced.
-    if let Some(a) = split.0 {
-      config.ranges[i] = a;
-    } else {
-      a_none = true;
-    }
-
-    // If the second element is valid, but the first is not, simply replace the
-    // current range. Otherwise, insert the new range after the current range.
-    // If inserting, increment the index an extra time.
-    if let Some(b) = split.1 {
-      if a_none {
-        config.ranges[i] = b;
-      } else if config.range_count < MEM_RANGES {
-        config.ranges.copy_within(i..config.range_count, i + 1);
-        config.range_count += 1;
-        config.ranges[i + 1] = b;
-        i += 1;
-      } else {
-        // TODO: Either we hit a bug or we're not accounting for configurations
-        // that create a bunch of memory ranges. Either way, there is probably a
-        // more graceful way to handle this.
-        panic!("Unable to exclude memory range.");
-      }
-    } else {
-      b_none = true;
-    }
-
-    // If neither element is valid, remove the current range. Do not increment
-    // the index yet.
-    if a_none && b_none {
-      config.ranges.copy_within((i + 1)..config.range_count, i);
-      config.range_count -= 1;
-      continue;
-    }
-
-    i += 1;
-  }
-}
-
-/// @fn split_range
-/// @brief   Splits a range using an exclusion range.
-/// @returns Handles the following cases:
-///
-///          * If the ranges are mutually exclusive, returns the original range
-///            as the first element in the tuple and None for the second.
-///
-///          * If the exclusion range fully encompasses the range, returns None
-///            for both elements of the tuple.
-///
-///          * If the down page-aligned base, EE, of the exclusion range is
-///            greater than the range base, returns a new range in the first
-///            element of the tuple with the original base and a new size
-///            calculated using EE as the end. Otherwise, returns None in the
-///            first element of the tuple.
-///
-///            If the up page-aligned end, EB, of the exclusion range is less
-///            than the range end, returns a new range in the second element of
-///            the tuple with EB as the base a new size calculated using the
-///            original end. Otherwise, returns None in the second element of
-///            the tuple.
-///
-///          The last case handles the exclusion range being fully encompassed
-///          by the range as well as the exclusion range overlapping either end
-///          of the range and handles returning None if the overlap results in
-///          empty ranges.
-fn split_range(
-  range: &MemoryRange,
-  excl: &MemoryRange,
-  page_size: usize,
-) -> (Option<MemoryRange>, Option<MemoryRange>) {
-  let range_end = range.base + range.size;
-  let excl_end = excl.base + excl.size;
-
-  if excl_end < range.base || range_end < excl.base {
-    return (Some(*range), None);
-  }
-
-  if excl.base <= range.base && excl_end >= range_end {
-    return (None, None);
-  }
-
-  let end = bits::align_down(excl.base, page_size);
-  let base = bits::align_up(excl_end, page_size);
-
-  let a = if end > range.base {
-    Some(MemoryRange {
-      base: range.base,
-      size: end - range.base,
-      reserved: range.reserved,
-    })
-  } else {
-    None
-  };
-
-  let b = if base < range_end {
-    Some(MemoryRange {
-      base,
-      size: range_end - base,
-      reserved: range.reserved,
-    })
-  } else {
-    None
-  };
-
-  (a, b)
 }

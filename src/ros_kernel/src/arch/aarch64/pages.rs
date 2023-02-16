@@ -13,6 +13,4 @@ use crate::peripherals::memory;
 ///
 ///          We need to expand this table out to include a PTE table that uses
 ///          @a page_size entries.
-pub fn init_page_table(pages_start: usize, page_size: usize) {
-  let config = memory::get_memory_config();
-}
+pub fn init_page_table(pages_start: usize, page_size: usize) {}

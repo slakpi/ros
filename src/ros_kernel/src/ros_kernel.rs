@@ -55,7 +55,7 @@ fn panic(info: &PanicInfo) -> ! {
 extern "C" fn ros_kernel(init: KernelConfig) -> ! {
   init_exceptions();
   init_peripherals(&init);
-  
+
   dbg_print!("=== ROS ===\n");
 
   init_memory(&init);
@@ -73,27 +73,7 @@ fn init_peripherals(init: &KernelConfig) {
   mini_uart::init_uart();
 }
 
-fn init_memory(init: &KernelConfig) {
-  let blob = init.blob + init.virtual_base;
-  let kernel_pages_start = init.kernel_pages_start + init.virtual_base;
-
-  let mut rsrv = [
-    (0, init.kernel_base + init.kernel_size),
-    (init.peripheral_base, init.peripheral_block_size),
-    (0, 0),
-  ];
-
-  if let Ok(total_size) = dtb::check_dtb(blob) {
-    rsrv[2].0 = init.blob;
-    rsrv[2].1 = bits::align_up(total_size as usize, init.page_size);
-  }
-
-  if !memory::init_memory(blob, init.page_size, &rsrv) {
-    panic!();
-  }
-  
-  pages::init_page_table(kernel_pages_start, init.page_size);
-}
+fn init_memory(init: &KernelConfig) {}
 
 /// @fn init_drivers
 /// @brief Initialize drivers.
