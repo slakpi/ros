@@ -1,0 +1,27 @@
+#define DTB_MAGIC 0xd00dfeed
+
+///-------------------------------------------------------------------------------------------------
+/// @fn dtb_quick_check
+/// @brief   Performs a quick check to see if the blob is a DTB.
+/// @param[in] x0 The blob address.
+/// @returns The total size of the DTB or 0 if the blob is not a DTB.
+.global dtb_quick_check
+dtb_quick_check:
+  // no fn_entry required.
+
+  mov     x9, x0
+  mov     x0, #0
+
+  ldr     w10, [x9]
+  rev     w10, w10
+
+  ldr     w11, =DTB_MAGIC
+  cmp     w10, w11
+  b.ne    quick_dtb_check_exit
+
+  ldr     w0, [x9, #4]
+  rev     w0, w0
+
+quick_dtb_check_exit:
+  // no fn_exit required.
+  ret

@@ -4,43 +4,37 @@
 #include "mmu.h"
 #include "peripherals.h"
 
-#define DTB_MAGIC 0xd00dfeed
-
-#define SCTLR_RESERVED          ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
-#define SCTLR_EE_LITTLE_ENDIAN  (1 << 25) /* EL1 endianness */
-#define SCTLR_E0E_LITTLE_ENDIAN (1 << 24) /* EL0 endianness */
-#define SCTLR_I_CACHE_DISABLED  (1 << 12) /* Instruction cache disabled */
-#define SCTLR_D_CACHE_DISABLED  (1 <<  2) /* Data cache disabled */
-#define SCTLR_MMU_ENABLED       (1 <<  0) /* MMU enabled */
+/*------------------------------------------------------------------------------
+EL3 secure configuration default. Levels lower than EL3 are not secure and EL2
+uses AArch64.
+------------------------------------------------------------------------------*/
+#define SCR_EL3_NS      (1 <<  0)
+#define SCR_EL3_RW      (1 << 10)
+#define SCR_EL3_DEFAULT (SCR_EL3_RW | SCR_EL3_NS)
 
 /*------------------------------------------------------------------------------
-Default configuration for EL1. BIG ENDIAN for EL0 and EL1, instruction and data
-caches are ENABLED, MMU is DISABLED.
+Saved program status register defaults. Mask all interrupts. Use the EL2 stack
+pointer for EL3 and the EL1 stack pointer for EL2.
 ------------------------------------------------------------------------------*/
-#define SCTLR_DEFAULT_MMU_DISABLED (SCTLR_RESERVED)
-
-#define HCR_RW (1 << 31) /* EL1 is AArch64 */
-
-/*------------------------------------------------------------------------------
-Hypervisor configuration. EL1 runs in AArch64, EL0 runs in either AArch64 or
-AArch32 depending on PSTATE.
-------------------------------------------------------------------------------*/
-#define HCR_DEFAULT (HCR_RW)
-
-#define SCR_RESERVED (3 <<  4)
-#define SCR_RW       (1 << 10)
-#define SCR_NS       (1 <<  0)
-
-/*------------------------------------------------------------------------------
-Secure configuration default. EL2 is AArch64, EL1 controlled by EL2. Levels
-lower than EL3 are not secure.
-------------------------------------------------------------------------------*/
-#define SCR_DEFAULT (SCR_RESERVED | SCR_RW | SCR_NS)
-
 #define SPSR_MASK_ALL_INTERRUPTS (7 << 6)
-#define SPSR_EL1h                (5 << 0) /* EL1 interrupt handler mode */
+#define SPSR_EL3_SP              (9 << 0)
+#define SPSR_EL2_SP              (5 << 0)
+#define SPSR_EL3_DEFAULT         (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL3_SP)
+#define SPSR_EL2_DEFAULT         (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL2_SP)
 
-#define SPSR_DEFAULT (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL1h)
+/*------------------------------------------------------------------------------
+EL2 hypervisor configuration default. EL1 uses AArch64.
+------------------------------------------------------------------------------*/
+#define HCR_EL2_RW      (1 << 31)
+#define HCR_EL2_DEFAULT (HCR_EL2_RW)
+
+/*------------------------------------------------------------------------------
+EL1 system control register default. Set the required reserved bits to 1 per
+D17.2.118. Leave EL1 and EL0 in little endian and leave the MMU disabled.
+------------------------------------------------------------------------------*/
+#define SCTLR_EL1_RESERVED   ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
+#define SCTLR_EL1_MMU_ENABLE (1 << 0)
+#define SCTLR_EL1_DEFAULT    (SCTLR_EL1_RESERVED)
 
 
 // The linker script forces this section to reside at the kernel base address.
@@ -121,10 +115,10 @@ strap kernel pages.
   ldr     x9, =0xffffffff
   and     x19, x19, x9
   mov     x0, x19
-  bl      quick_dtb_check
+  bl      dtb_quick_check
 
-  mov     x1, x0
-  mov     x0, x19
+  mov     x1, x0            // dtb_quick_check return value to x1
+  mov     x0, x19           // blobl address to x0
   bl      create_kernel_pages
 
 /*------------------------------------------------------------------------------
@@ -137,19 +131,18 @@ next instruction after we switch on the MMU.
   adrp    x9, __kernel_pages_start
   msr     ttbr1_el1, x9
 
-  ldr     x9, =(TCR_VALUE)
+  ldr     x9, =TCR_EL1_VALUE
   msr     tcr_el1, x9
 
-  ldr     x9, =(MAIR_VALUE)
+  ldr     x9, =MAIR_EL1_VALUE
   msr     mair_el1, x0
 
   ldr     x20, =begin_virt_addressing
   ldr     x21, =ros_kernel
 
   isb
-
   mrs     x9, sctlr_el1
-  orr     x9, x9, #SCTLR_MMU_ENABLED
+  orr     x9, x9, #SCTLR_EL1_MMU_ENABLE
   msr     sctlr_el1, x9
   isb
 
@@ -219,53 +212,27 @@ _init_kernel_el:
   beq     in_el2            // Skip EL3 initialization if already in EL2
 
 in_el3:
-  ldr     x9, =SCR_DEFAULT
+  ldr     x9, =SCR_EL3_DEFAULT
   msr     scr_el3, x9
 
-  ldr     x9, =SPSR_DEFAULT
+  ldr     x9, =SPSR_EL3_DEFAULT
   msr     spsr_el3, x9
 
   adr     x9, _el2_entry
   msr     elr_el3, x9
 
 in_el2:
-  ldr     x9, =HCR_DEFAULT
+  ldr     x9, =HCR_EL2_DEFAULT
   msr     hcr_el2, x9
 
-  ldr     x9, =SPSR_DEFAULT
+  ldr     x9, =SPSR_EL2_DEFAULT
   msr     spsr_el2, x9
 
   adr     x9, _el1_entry
   msr     elr_el2, x9
 
 in_el1:
-  ldr     x9, =SCTLR_DEFAULT_MMU_DISABLED
+  ldr     x9, =SCTLR_EL1_DEFAULT
   msr     sctlr_el1, x9
 
-  ret
-
-
-///-------------------------------------------------------------------------------------------------
-/// @fn quick_dtb_check
-/// @brief   Performs a quick check to see if the blob is a DTB.
-/// @param[in] x0 The blob address.
-/// @returns The total size of the DTB or 0 if the blob is not a DTB.
-quick_dtb_check:
-  // no fn_entry required.
-
-  mov     x9, x0
-  mov     x0, #0
-
-  ldr     w10, [x9]
-  rev     w10, w10
-
-  ldr     w11, =DTB_MAGIC
-  cmp     w10, w11
-  b.ne    quick_dtb_check_exit
-
-  ldr     w0, [x9, #4]
-  rev     w0, w0
-
-quick_dtb_check_exit:
-  // no fn_exit required.
   ret

@@ -69,14 +69,14 @@ Create the first- and second-level page tables.
   mov     x23, x0
 
 /*------------------------------------------------------------------------------
-Map the kernel area.
+Map the kernel area as RW normal memory.
 ------------------------------------------------------------------------------*/
   mov     x0, x22
   mov     x1, #0
   ldr     x2, =__virtual_start
   add     x3, x2, x21
   sub     x3, x3, #1
-  mov     x4, #MMU_FLAGS
+  mov     x4, #MMU_NORMAL_RW_FLAGS
   bl      map_block
 
   mov     x0, x23
@@ -84,15 +84,16 @@ Map the kernel area.
   mov     x2, #0
   add     x3, x2, x21
   sub     x3, x3, #1
-  mov     x4, #MMU_FLAGS
+  mov     x4, #MMU_NORMAL_RW_FLAGS
   bl      map_block
 
 /*------------------------------------------------------------------------------
-Map the DTB area. Skip this if the DTB size is zero. Do not need to create an
-identity map. The kernel will switch to virtual addresses before the DTB is
-needed.
+Map the DTB area as RO normal memory. Skip this if the DTB size is zero. Do not
+need to create an identity map. The kernel will switch to virtual addresses
+before the DTB is needed.
 ------------------------------------------------------------------------------*/
   cbz     x20, skip_dtb_mapping
+
   mov     x0, x22
   mov     x1, #0
   add     x1, x1, x19
@@ -100,13 +101,15 @@ needed.
   add     x2, x2, x19
   add     x3, x2, x20
   sub     x3, x3, #1
-  mov     x4, #MMU_FLAGS
+  mov     x4, #MMU_NORMAL_RO_FLAGS
   bl      map_block
+
 skip_dtb_mapping:
 
 /*------------------------------------------------------------------------------
-Map the peripheral area. Do not need to create an identity map. The kernel will
-switch to virtual addresses before the peripherals are needed.
+Map the peripheral area as RW device memory. Do not need to create an identity
+map. The kernel will switch to virtual addresses before the peripherals are
+needed.
 ------------------------------------------------------------------------------*/
   mov     x0, x22
   ldr     x1, =PERIPHERAL_BASE
@@ -115,7 +118,7 @@ switch to virtual addresses before the peripherals are needed.
   ldr     x3, =PERIPHERAL_BLOCK_SIZE
   add     x3, x3, x2
   sub     x3, x3, #1
-  mov     x4, #MMU_FLAGS
+  mov     x4, #MMU_DEVICE_RW_FLAGS
   bl      map_block
 
   ldp     x23, x24, [sp], #16
@@ -190,11 +193,11 @@ create_table_entry:
 /// @fn map_block
 /// @brief Map a block of addresses within the first 1 GiB of the physical
 ///        address space into the virtual address space.
-/// @param[in] tbl   The base address of the L2 table.
-/// @param[in] phys  The base physical address.
-/// @param[in] start The base virtual address.
-/// @param[in] end   The last virtual address.
-/// @param[in] flags The entry flags.
+/// @param[in] x0 The base address of the L2 table.
+/// @param[in] x1 The base physical address.
+/// @param[in] x2 The base virtual address.
+/// @param[in] x3 The last virtual address.
+/// @param[in] x4 The entry flags.
 map_block:
   // no fn_entry required.
 

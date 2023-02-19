@@ -23,6 +23,7 @@ add_custom_target(boot_script DEPENDS ${ld_out})
 #-------------------------------------------------------------------------------
 add_executable(
   kernel ${CMAKE_SYSTEM_PROCESSOR}/boot.S
+         ${CMAKE_SYSTEM_PROCESSOR}/dtb.S
          ${CMAKE_SYSTEM_PROCESSOR}/exceptions.S
          ${CMAKE_SYSTEM_PROCESSOR}/pages.S)
 add_dependencies(kernel boot_script)

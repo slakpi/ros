@@ -67,7 +67,7 @@
 /// @brief   Exception vector table.
 /// @details Aligned to 0x800 (0x80 * 16).
 .align 11
-.globl vectors 
+.global vectors 
 vectors:
   ventry  _trap_exception   // EL1t Synchronous
   ventry  _trap_exception   // EL1t IRQ
