@@ -64,7 +64,7 @@ SECTIONS
   __kernel_size = __kernel_stack_start - __kernel_start;
 
   /* Reserve three pages for the kernel's bootstrap virtual page table. */
-  .data.pgd :
+  .data.pages :
   {
     __kernel_pages_start = .;
     . += (3 * __page_size);
@@ -81,7 +81,7 @@ SECTIONS
    * after __kernel_pages_end so that the kernel can reuse it as it extends the
    * virtual page table.
    */
-  .data.idpgd :
+  .data.id_pages :
   {
     __kernel_id_pages_start = .;
     . += (3 * __page_size);

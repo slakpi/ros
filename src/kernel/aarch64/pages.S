@@ -8,9 +8,9 @@
 #define SECTION_SIZE    (1 << SECTION_SHIFT)	
 #define TABLE_ENTRY_CNT (1 << TABLE_SHIFT)
 
-#define PGD_SHIFT (PAGE_SHIFT + (3 * TABLE_SHIFT))
-#define PUD_SHIFT (PAGE_SHIFT + (2 * TABLE_SHIFT))
-#define PMD_SHIFT (PAGE_SHIFT + TABLE_SHIFT)
+#define L4_SHIFT (PAGE_SHIFT + (3 * TABLE_SHIFT))
+#define L3_SHIFT (PAGE_SHIFT + (2 * TABLE_SHIFT))
+#define L2_SHIFT (PAGE_SHIFT + TABLE_SHIFT)
 
 
 ///-------------------------------------------------------------------------------------------------
@@ -148,16 +148,16 @@ section_align_size:
 /// @fn init_tables
 /// @brief   Create first- and second-level page tables for the first 1 GiB of
 ///          the virtual address space.
-/// @param[in] x0 The base address of the PGD table.
+/// @param[in] x0 The base address of the L4 table.
 /// @param[in] x1 The base address of the virtual address space.
 /// @returns Returns the base address of the third-level page table.
 init_tables:
   fn_entry
 
-  mov     x2, #PGD_SHIFT
+  mov     x2, #L4_SHIFT
   bl      create_table_entry
 
-  mov     x2, #PUD_SHIFT
+  mov     x2, #L3_SHIFT
   bl      create_table_entry
 
   fn_exit
@@ -167,9 +167,9 @@ init_tables:
 ///-------------------------------------------------------------------------------------------------
 /// @fn create_table_entry
 /// @brief Helper for @a init_tables. Do not call directly.
-/// @param[in] x0 The base address of the PGD table.
+/// @param[in] x0 The base address of the L4 table.
 /// @param[in] x1 The base address of the virtual address space.
-/// @param[in] x2 The shift specifying the PGD or PUD table.
+/// @param[in] x2 The shift specifying the L4 or L3 table.
 create_table_entry:
   // no fn_entry required.
 
@@ -190,7 +190,7 @@ create_table_entry:
 /// @fn map_block
 /// @brief Map a block of addresses within the first 1 GiB of the physical
 ///        address space into the virtual address space.
-/// @param[in] tbl   The base address of the PMD table.
+/// @param[in] tbl   The base address of the L2 table.
 /// @param[in] phys  The base physical address.
 /// @param[in] start The base virtual address.
 /// @param[in] end   The last virtual address.

@@ -1,16 +1,13 @@
 use super::drivers::video::framebuffer;
 use super::exceptions;
 use super::mm::pages;
-use super::peripherals::{base, memory, mini_uart};
-use super::support::{bits, dtb};
+use super::peripherals::{base, mini_uart};
 use crate::dbg_print;
 use core::panic::PanicInfo;
 
 /// @struct KernelConfig
 /// @brief Basic kernel configuration provided by the bootstrap code. All
-///        address are physical. The initial virtual addressing scheme setup by
-///        the bootstrap code uses the physical addresses as offsets from the
-///        virtual base.
+///        address are physical.
 #[repr(C)]
 pub struct KernelConfig {
   virtual_base: usize,
@@ -30,20 +27,7 @@ pub struct KernelConfig {
 /// @returns Does not return.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-  dbg_print!("Kernel panic ");
-
-  if let Some(location) = info.location() {
-    dbg_print!("{} at line {} ", location.file(), location.line());
-  } else {
-    dbg_print!("<unknown location> ");
-  }
-
-  if let Some(s) = info.payload().downcast_ref::<&str>() {
-    dbg_print!("{}\n", s);
-  } else {
-    dbg_print!("\n");
-  }
-
+  dbg_print!("Kernel Panic: {}", info);
   loop {}
 }
 
@@ -73,7 +57,15 @@ fn init_peripherals(init: &KernelConfig) {
   mini_uart::init_uart();
 }
 
-fn init_memory(init: &KernelConfig) {}
+fn init_memory(init: &KernelConfig) {
+  pages::init_page_tables(
+    init.virtual_base,
+    init.blob,
+    init.kernel_base,
+    init.kernel_size,
+    init.kernel_pages_start,
+  );
+}
 
 /// @fn init_drivers
 /// @brief Initialize drivers.

@@ -145,8 +145,13 @@ next instruction after we switch on the MMU.
 
   ldr     x20, =begin_virt_addressing
   ldr     x21, =ros_kernel
-  mov     x9, #SCTLR_MMU_ENABLED
+
+  isb
+
+  mrs     x9, sctlr_el1
+  orr     x9, x9, #SCTLR_MMU_ENABLED
   msr     sctlr_el1, x9
+  isb
 
 /*------------------------------------------------------------------------------
 Jump using our first virtual address to switch the program counter over to

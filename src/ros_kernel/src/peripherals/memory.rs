@@ -61,61 +61,9 @@ impl MemoryConfig {
     self.ranges[ins] = range;
   }
 
-  /// @fn MemoryConfig::exclude_range
-  /// @brief Excludes a memory range from the configured ranges.
-  /// @param[in] excl      The exclusion range. Does not need to be page aligned.
-  /// @param[in] page_size The memory page size for alignment.
-  pub fn exclude_range(&mut self, excl: &MemoryRange, page_size: usize) {
-    if excl.size == 0 {
-      return;
-    }
-
-    self.trim_ranges();
-
-    let mut i = 0usize;
-
-    while i < self.range_count {
-      let split = Self::split_range(&self.ranges[i], excl, page_size);
-
-      // If the first element is valid, the current range can simply be
-      // replaced.
-      if let Some(a) = split.0 {
-        self.ranges[i] = a;
-      }
-
-      if let Some(b) = split.1 {
-        if split.0.is_none() {
-          // Just replace the current range.
-          self.ranges[i] = b;
-        } else if self.range_count < MEM_RANGES {
-          // Insert the new range after the current range. Increment the index
-          // an extra time.
-          self.ranges.copy_within(i..self.range_count, i + 1);
-          self.range_count += 1;
-          self.ranges[i + 1] = b;
-          i += 1;
-        } else {
-          // TODO: Either we hit a bug or we're not accounting for
-          // configurations that create a bunch of memory ranges. Either way,
-          // there is probably a more graceful way to handle this.
-          panic!("Unable to exclude memory range.");
-        }
-      }
-
-      // If neither element is valid, remove the current range. Do not increment
-      // the index yet.
-      if split.0.is_none() && split.1.is_none() {
-        self.ranges.copy_within((i + 1)..self.range_count, i);
-        self.range_count -= 1;
-        continue;
-      }
-
-      i += 1;
-    }
-  }
-
   /// @fn MemoryConfig::trim_ranges
-  /// @brief Removes overlapping or null ranges from the configured ranges.
+  /// @brief Combines ranges as necessary to ensure ranges do not overlap and
+  ///        removes any empty ranges.
   /// @param[in] config The current memory configuration.
   pub fn trim_ranges(&mut self) {
     self.trim_empty_ranges();
@@ -167,73 +115,6 @@ impl MemoryConfig {
         i += 1;
       }
     }
-  }
-
-  /// @fn MemoryRange::split_range
-  /// @brief   Splits a range using an exclusion range.
-  /// @returns A tuple handling the following cases:
-  ///
-  ///          * If the ranges are mutually exclusive, returns the original
-  ///            range as the first element in the tuple and None for the
-  ///            second.
-  ///
-  ///          * If the exclusion range fully encompasses the range, returns
-  ///            None for both elements of the tuple.
-  ///
-  ///          * If the down page-aligned base, EE, of the exclusion range is
-  ///            greater than the range base, returns a new range in the first
-  ///            element of the tuple with the original base and a new size
-  ///            calculated using EE as the end. Otherwise, returns None in the
-  ///            first element of the tuple.
-  ///
-  ///            If the up page-aligned end, EB, of the exclusion range is less
-  ///            than the range end, returns a new range in the second element
-  ///            of the tuple with EB as the base a new size calculated using
-  ///            the original end. Otherwise, returns None in the second element
-  ///            of the tuple.
-  ///
-  ///          The last case handles the exclusion range being fully encompassed
-  ///          by the range as well as the exclusion range overlapping either
-  ///          end of the range and handles returning None if the overlap
-  ///          results in empty ranges.
-  fn split_range(
-    range: &MemoryRange,
-    excl: &MemoryRange,
-    page_size: usize,
-  ) -> (Option<MemoryRange>, Option<MemoryRange>) {
-    let range_end = range.base + range.size;
-    let excl_end = excl.base + excl.size;
-
-    if excl_end < range.base || range_end < excl.base {
-      return (Some(*range), None);
-    }
-
-    if excl.base <= range.base && excl_end >= range_end {
-      return (None, None);
-    }
-
-    let end = bits::align_down(excl.base, page_size);
-    let base = bits::align_up(excl_end, page_size);
-
-    let a = if end > range.base {
-      Some(MemoryRange {
-        base: range.base,
-        size: end - range.base,
-      })
-    } else {
-      None
-    };
-
-    let b = if base < range_end {
-      Some(MemoryRange {
-        base,
-        size: range_end - base,
-      })
-    } else {
-      None
-    };
-
-    (a, b)
   }
 }
 
