@@ -1,6 +1,5 @@
 use super::drivers::video::framebuffer;
 use super::exceptions;
-use super::mm::pages;
 use super::peripherals::{base, mini_uart};
 use crate::dbg_print;
 use core::panic::PanicInfo;
@@ -48,24 +47,21 @@ extern "C" fn ros_kernel(init: KernelConfig) -> ! {
   loop {}
 }
 
+/// @fn init_exceptions
+/// @brief Initialize architecture-dependent exception vectors.
 fn init_exceptions() {
   exceptions::init_exception_vectors();
 }
 
+/// @fn init_peripherals
+/// @brief Initialize peripheral devices. TODO: this will be replaced by
+///        drivers mapping the memory they need.
 fn init_peripherals(init: &KernelConfig) {
   base::set_peripheral_base_addr(init.peripheral_base + init.virtual_base);
   mini_uart::init_uart();
 }
 
-fn init_memory(init: &KernelConfig) {
-  pages::init_page_tables(
-    init.virtual_base,
-    init.blob,
-    init.kernel_base,
-    init.kernel_size,
-    init.kernel_pages_start,
-  );
-}
+fn init_memory(init: &KernelConfig) {}
 
 /// @fn init_drivers
 /// @brief Initialize drivers.

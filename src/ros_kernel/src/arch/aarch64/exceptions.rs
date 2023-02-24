@@ -5,7 +5,11 @@ use core::arch::asm;
 /// @brief AArch64 exception vector initializer.
 pub fn init_exception_vectors() {
   unsafe {
-    asm!("adr    x9, vectors", "msr    vbar_el1, x9",);
+    #[rustfmt::skip]
+    asm!(
+      "adr    x9, vectors",
+      "msr    vbar_el1, x9",
+    );
   }
 }
 
