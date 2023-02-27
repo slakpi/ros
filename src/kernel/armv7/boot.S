@@ -1,7 +1,7 @@
 // ARMv7
  
 #include "abi.h"
-#include "peripherals.h"
+#include "rpi_peripherals.h"
 
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"

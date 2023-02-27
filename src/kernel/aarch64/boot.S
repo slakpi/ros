@@ -2,7 +2,7 @@
 
 #include "abi.h"
 #include "mmu.h"
-#include "peripherals.h"
+#include "rpi_peripherals.h"
 
 /*------------------------------------------------------------------------------
 EL3 secure configuration default. Levels lower than EL3 are not secure and EL2
