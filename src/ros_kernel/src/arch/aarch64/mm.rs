@@ -1,7 +1,20 @@
 use crate::peripherals::memory;
 
-/// Initialize the AArch64 page tables for the kernel. The canonical 64-bit
-/// virtual address space layout for a process looks like:
+/// Initialize the AArch64 page tables for the kernel.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `mem_config` - 
+///
+/// # Details
+///
+///     TODO: For now, memory management will just assume 4 KiB pages. The
+///           bootstrap code will have already configured TCR_EL1 with 4 KiB
+///           granules.
+///
+/// The canonical 64-bit virtual address space layout for a process looks like:
 ///
 ///     +-----------------+ 0xffff_ffff_ffff_ffff
 ///     |                 |
@@ -40,16 +53,14 @@ use crate::peripherals::memory;
 ///
 /// Sticking with 4 KiB pages and skipping Level 4 translation, a 128 GiB
 /// address space would require 128 Level 3 tables, one Level 2 table, and the
-/// Level 1 table for a total of 520 KiB. That could be reduced to 8 KiB and
-/// eliminate a second level of translation by using one Level 2 table with 128
-/// 1 GiB entries and one Level 1 table.
+/// Level 1 table for a total of 520 KiB. That can be reduced to 8 KiB and
+/// eliminate Level 3 translation by using one Level 2 table with 128 1 GiB
+/// entries and one Level 1 table.
 ///
-/// The entire 128 TiB address space could be mapped using 256 Level 2 tables
-/// and one Level 1 table for a total of 1 MiB.
+/// A mixture will be used here since the memory layout provided may have blocks
+/// that are non-integer multiples of 1 GiB.
 ///
-/// This is separate from actually allocating physical pages to the kernel. It
-/// just means no page table operations need to be performed when allocating a
-/// page to the kernel.
+/// This mapping is separate from allocating pages to the kernel.
 pub fn init_memory(virtual_base: usize, pages_start: usize, mem_config: &memory::MemoryConfig) {
 
 }
