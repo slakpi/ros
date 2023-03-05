@@ -1,5 +1,5 @@
 use crate::dbg_print;
-use crate::support::{atags, bits, dtb};
+use crate::support::{atags, dtb};
 use core::cmp;
 
 const MEM_RANGES: usize = 64;

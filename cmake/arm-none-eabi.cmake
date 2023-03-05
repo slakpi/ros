@@ -1,6 +1,10 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR armv7) # 32-bit ARMv7
 
+if(NOT DEFINED RPI_VERSION)
+  set(RPI_VERSION "2")
+endif()
+
 set(cross_compiler ${TC_PATH}/bin/arm-none-eabi-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
