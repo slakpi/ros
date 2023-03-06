@@ -1,4 +1,7 @@
+//! AArch64 memory management.
+
 use crate::peripherals::memory;
+use core::cmp;
 
 const TABLE_SIZE: usize = 4096;
 const PAGE_SHIFT: usize = 12;
@@ -7,13 +10,26 @@ const PAGE_MASK: usize = PAGE_SIZE - 1;
 const INDEX_SHIFT: usize = 9;
 const INDEX_SIZE: usize = 1 << INDEX_SHIFT;
 const INDEX_MASK: usize = INDEX_SIZE - 1;
+const LEVEL_1_SHIFT: usize = PAGE_SHIFT + (3 * INDEX_SHIFT);
+const LEVEL_2_SHIFT: usize = PAGE_SHIFT + (2 * INDEX_SHIFT);
+const LEVEL_3_SHIFT: usize = PAGE_SHIFT + INDEX_SHIFT;
+const LEVEL_4_SHIFT: usize = PAGE_SHIFT;
 const ADDR_MASK: usize = ((1 << 48) - 1) & !PAGE_MASK;
-const LEVEL_1_ENTRY_SIZE: usize = 512 * 1024 * 1024 * 1024;
-const MM_ACCESS_FLAG: usize = 1 << 10;
-const MM_PAGE_TABLE_FLAG: usize = 3 << 0;
-const MM_BLOCK_FLAG: usize = 1 << 0;
-const MM_NORMAL_FLAG: usize = 1 << 2;
-const MM_DEVICE_FLAG: usize = 0 << 2;
+const MM_PAGE_TABLE_FLAG: usize = 0x3 << 0;
+const MM_BLOCK_FLAG: usize = 0x1 << 0;
+const MM_NORMAL_FLAG: usize = 0x1 << 2;
+const MM_DEVICE_FLAG: usize = 0x0 << 2;
+const _MM_RO_FLAG: usize = 0x10 << 6;
+const MM_ACCESS_FLAG: usize = 0x1 << 10;
+
+/// Translation table level.
+#[derive(Clone, Copy, PartialEq)]
+enum TableLevel {
+  Level1,
+  Level2,
+  Level3,
+  Level4,
+}
 
 /// Page table structure for 4 KiB pages.
 #[repr(C)]
@@ -27,7 +43,7 @@ struct PageTable {
 ///
 /// * `virtual_base` - The kernel segment base address.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
-/// * `mem_config` - 
+/// * `mem_config` - The memory layout.
 ///
 /// # Details
 ///
@@ -72,61 +88,106 @@ struct PageTable {
 /// TiB of physical memory, so it is feasible to directly map the entire
 /// physical address space into the kernel segment.
 ///
-/// Sticking with 4 KiB pages and skipping Level 4 translation, a 128 GiB
-/// address space would require 128 Level 3 tables, one Level 2 table, and the
-/// Level 1 table for a total of 520 KiB. That can be reduced to 8 KiB and
-/// eliminate Level 3 translation by using one Level 2 table with 128 1 GiB
-/// entries and one Level 1 table.
-///
-/// A mixture will be used here since the memory layout provided may have blocks
-/// that are non-integer multiples of 1 GiB.
-///
 /// This mapping is separate from allocating pages to the kernel.
 pub fn init_memory(virtual_base: usize, pages_start: usize, mem_config: &memory::MemoryConfig) {
   // The bootstrap code set up Level 1, 2, and 3 tables for the initial mapping.
-  // We'll likely still need those and start creating new ones after.
+  // We'll just reuse those and add new tables after.
   let mut pages_end = pages_start + (3 * PAGE_SIZE);
 
   for range in mem_config.get_ranges() {
     pages_end = fill_table(
       virtual_base,
-      LEVEL_1_ENTRY_SIZE,
-      PAGE_SHIFT + (3 * INDEX_SHIFT),
+      TableLevel::Level1,
       pages_start,
       pages_end,
-      range);
+      range,
+    );
   }
 }
 
-fn get_descriptor_index(virt_addr: usize, shift: usize) -> usize {
-  (virt_addr >> shift) & INDEX_MASK
+fn get_next_table(table_level: TableLevel) -> Option<TableLevel> {
+  match table_level {
+    TableLevel::Level1 => Some(TableLevel::Level2),
+    TableLevel::Level2 => Some(TableLevel::Level3),
+    TableLevel::Level3 => Some(TableLevel::Level4),
+    TableLevel::Level4 => None,
+  }
 }
 
+fn get_table_entry_size(table_level: TableLevel) -> usize {
+  match table_level {
+    TableLevel::Level1 => 1 << LEVEL_1_SHIFT,
+    TableLevel::Level2 => 1 << LEVEL_2_SHIFT,
+    TableLevel::Level3 => 1 << LEVEL_3_SHIFT,
+    TableLevel::Level4 => 1 << LEVEL_4_SHIFT,
+  }
+}
+
+/// Get the descriptor index for a virtual address in the specified table.
+fn get_descriptor_index(virt_addr: usize, table_level: TableLevel) -> usize {
+  match table_level {
+    TableLevel::Level1 => (virt_addr >> LEVEL_1_SHIFT) & INDEX_MASK,
+    TableLevel::Level2 => (virt_addr >> LEVEL_2_SHIFT) & INDEX_MASK,
+    TableLevel::Level3 => (virt_addr >> LEVEL_3_SHIFT) & INDEX_MASK,
+    TableLevel::Level4 => (virt_addr >> LEVEL_4_SHIFT) & INDEX_MASK,
+  }
+}
+
+/// Check if a descriptor is valid. Bit 0 is the validity marker.
 fn is_descriptor_valid(desc: usize) -> bool {
   (desc & 0x1) != 0
 }
 
+/// Get the physical address for either the next table or memory block from a
+/// descriptor.
 fn get_phys_addr_from_descriptor(desc: usize) -> usize {
   desc & ADDR_MASK
 }
 
+/// Make a normal memory block that is R/W for the kernel.
 fn make_normal_block_entry(phys_addr: usize) -> usize {
   (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_BLOCK_FLAG | MM_NORMAL_FLAG
 }
 
+/// Make a device memory block that is R/W for the kernel.
+fn make_device_block_entry(phys_addr: usize) -> usize {
+  (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_BLOCK_FLAG | MM_DEVICE_FLAG
+}
+
+fn make_normal_page_entry(phys_addr: usize) -> usize {
+  (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_NORMAL_FLAG;
+}
+
+fn make_device_page_entry(phys_addr: usize) -> usize {
+  (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_DEVICE_FLAG;
+}
+
+/// Make a pointer entry to a lower level page table.
 fn make_pointer_entry(phys_addr: usize) -> usize {
   (phys_addr & ADDR_MASK) | MM_PAGE_TABLE_FLAG
 }
 
-/// Fills a page table with entries for the specified range. There are two cases
-/// to consider here:
+/// Fills a page table with entries for the specified range.
+///
+/// # Details
+///
+/// There are two cases to consider here:
 ///
 /// 1. The range size is greater than or equal to the entry size at this
-///    translation level.
+///    translation level AND we are at a Level 2 or Level 3 table.
 ///
 ///    In this situation, we can create a block entry, then subtract the block
 ///    size from the total range size, loop around, and re-evaluate the
 ///    remaining size.
+///
+///    Sticking with 4 KiB pages and skipping Level 4 translation, a 128 GiB
+///    address space would require 128 Level 3 tables, one Level 2 table, and
+///    the Level 1 table for a total of 520 KiB. That can be reduced to 8 KiB
+///    and eliminate Level 3 translation by using one Level 2 table with 128 
+///    1 GiB entries and one Level 1 table.
+///
+///    In practice, the ranges may not be all multiples of 1 GiB, so there will
+///    be some mixture of Level 2 and Level 3 translation.
 ///
 /// 2. The range size is less than the entry size at this translation level.
 ///
@@ -154,58 +215,61 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 /// add blocks of 2 MiB to the Level 3 table until the remaining size is less
 /// than the entry size. If we needed to jump to a Level 4 table to handle the
 /// remainder with 4 KiB pages, we could.
-///
-/// If a recursive call ever ends up with an entry size less than PAGE_SIZE,
-/// that area of memory is not mapped. Right now, that fires off a debug assert
-/// since that condition should not occur.
 fn fill_table(
   virtual_base: usize,
-  entry_size: usize,
-  idx_shift: usize,
+  table_level: TableLevel,
   table_addr: usize,
   pages_end: usize,
-  range: &memory::MemoryRange
+  range: &memory::MemoryRange,
 ) -> usize {
-  if entry_size < PAGE_SIZE {
-    debug_assert!(false, "Invalid table entry size.");
-    return pages_end;
-  }
-
+  let entry_size = get_table_entry_size(table_level);
   let mut base = range.base;
   let mut size = range.size;
   let mut pages_end = pages_end;
   let table = unsafe { &mut *((virtual_base + table_addr) as *mut PageTable) };
 
   loop {
-    let idx = get_descriptor_index(virtual_base + base, idx_shift);
-    
-    if size >= entry_size {
-      table.entries[idx] = make_normal_block_entry(base);
+    let idx = get_descriptor_index(virtual_base + base, table_level);
+
+    if size >= entry_size
+      && (table_level == TableLevel::Level2 || table_level == TableLevel::Level3)
+    {
+      // If possible, create a block entry. We cannot create block entries at
+      // Level 1 or Level 4.
+      if range.device {
+        table.entries[idx] = make_device_block_entry(base);
+      } else {
+        table.entries[idx] = make_normal_block_entry(base);
+      }
+
       base += entry_size;
       size -= entry_size;
-      continue;
+    } else if size > 0 {
+      // Move to the next table down.
+      let next_level = get_next_table(table_level).expect("Invalid table level.");
+      let desc = table.entries[idx];
+      let mut next_addr = get_phys_addr_from_descriptor(desc);
+
+      if !is_descriptor_valid(desc) {
+        next_addr = pages_end;
+        pages_end += TABLE_SIZE;
+        table.entries[idx] = make_pointer_entry(base);
+      }
+
+      let fill_size = cmp::min(size, entry_size);
+      let fill = memory::MemoryRange {
+        base,
+        size: fill_size,
+        device: range.device,
+      };
+
+      pages_end = fill_table(virtual_base, next_level, next_addr, pages_end, &fill);
+
     }
 
-    let desc = table.entries[idx];
-    let mut next_addr = get_phys_addr_from_descriptor(desc);
-
-    if !is_descriptor_valid(desc) {
-      next_addr = pages_end;
-      pages_end += TABLE_SIZE;
-      table.entries[idx] = make_pointer_entry(base);
+    if size < entry_size {
+      break;
     }
-
-    let fill = memory::MemoryRange { base, size };
-
-    pages_end = fill_table(
-      virtual_base,
-      entry_size >> INDEX_SHIFT,
-      idx_shift - INDEX_SHIFT,
-      next_addr,
-      pages_end,
-      &fill);
-
-    break;
   }
 
   // Return the updated `pages_end` pointer up the call stack to be used by

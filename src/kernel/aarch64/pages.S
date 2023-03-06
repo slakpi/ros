@@ -8,9 +8,8 @@
 #define SECTION_SIZE    (1 << SECTION_SHIFT)	
 #define TABLE_ENTRY_CNT (1 << TABLE_SHIFT)
 
-#define L4_SHIFT (PAGE_SHIFT + (3 * TABLE_SHIFT))
-#define L3_SHIFT (PAGE_SHIFT + (2 * TABLE_SHIFT))
-#define L2_SHIFT (PAGE_SHIFT + TABLE_SHIFT)
+#define L1_SHIFT (PAGE_SHIFT + (3 * TABLE_SHIFT))
+#define L2_SHIFT (PAGE_SHIFT + (2 * TABLE_SHIFT))
 
 
 ///-------------------------------------------------------------------------------------------------
@@ -105,25 +104,6 @@ before the DTB is needed.
   bl      map_block
 
 skip_dtb_mapping:
-
-/*------------------------------------------------------------------------------
-Map the peripheral area as RW device memory. Do not need to create an identity
-map. The kernel will switch to virtual addresses before the peripherals are
-needed.
-------------------------------------------------------------------------------*/
-  mov     x0, x22
-  ldr     x1, =PERIPHERAL_BASE
-  ldr     x2, =__virtual_start
-  add     x2, x2, x1
-  ldr     x3, =PERIPHERAL_BLOCK_SIZE
-  add     x3, x3, x2
-  sub     x3, x3, #1
-  mov     x4, #MMU_DEVICE_RW_FLAGS
-  bl      map_block
-
-  ldp     x23, x24, [sp], #16
-  ldp     x21, x22, [sp], #16
-  ldp     x19, x20, [sp], #16
   fn_exit
   ret
 
@@ -157,10 +137,10 @@ section_align_size:
 init_tables:
   fn_entry
 
-  mov     x2, #L4_SHIFT
+  mov     x2, #L1_SHIFT
   bl      create_table_entry
 
-  mov     x2, #L3_SHIFT
+  mov     x2, #L2_SHIFT
   bl      create_table_entry
 
   fn_exit
