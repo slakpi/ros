@@ -114,7 +114,7 @@ fn get_next_table(table_level: TableLevel) -> Option<TableLevel> {
     TableLevel::Level1 => Some(TableLevel::Level2),
     TableLevel::Level2 => Some(TableLevel::Level3),
     TableLevel::Level3 => Some(TableLevel::Level4),
-    TableLevel::Level4 => None,
+    _ => None,
   }
 }
 
@@ -192,11 +192,85 @@ fn get_phys_addr_from_descriptor(desc: usize) -> usize {
   desc & ADDR_MASK
 }
 
+/// Create a table descriptor appropriate to the specified table level.
+///
+/// # Parameters
+///
+/// * `table_level` - The table level of the new entry.
+/// * `phys_addr` - The physical address of the block or page.
+/// * `device` - Whether this block or page maps to device memory.
+///
+/// # Description
+///
+/// The table level must be 2, 3, or 4. The Level 1 table can only point to
+/// Level 2 tables.
+///
+/// # Returns
+///
+/// The new descriptor.
+fn make_descriptor(table_level: TableLevel, phys_addr: usize, device: bool) -> usize {
+  match table_level {
+    TableLevel::Level2 | TableLevel::Level3 => make_block_descriptor(phys_addr, device),
+    TableLevel::Level4 => make_page_descriptor(phys_addr, device),
+    _ => {
+      debug_assert!(false, "Invalid translation level.");
+      0
+    }
+  }
+}
+
+/// Allocates a new page table if the specified descriptor is invalid, then
+/// fills the table with entries for the specified range of memory.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `table_level` - The current table level.
+/// * `desc` - The current descriptor in the table.
+/// * `pages_end` - The current end of the table area.
+/// * `range` - The range of physical memory addresses to map.
+///
+/// # Description
+///
+/// If the specified descriptor in the current table is invalid, a new page
+/// is allocated at `pages_end` before a recursive call to `fill_table` is made.
+///
+/// The current table must be Level 1, 2, or 3. Level 4 tables can only point to
+/// pages.
+///
+/// # Returns
+///
+/// The new end of the table area.
+fn alloc_table_and_fill(
+  virtual_base: usize,
+  table_level: TableLevel,
+  desc: usize,
+  pages_end: usize,
+  range: &memory::MemoryRange,
+) -> (usize, usize) {
+  let next_level = get_next_table(table_level).unwrap();
+  let mut next_addr = get_phys_addr_from_descriptor(desc);
+  let mut desc = desc;
+  let mut pages_end = pages_end;
+
+  if !is_descriptor_valid(desc) {
+    next_addr = pages_end;
+    pages_end += TABLE_SIZE;
+    desc = make_pointer_entry(next_addr);
+  }
+
+  (
+    desc,
+    fill_table(virtual_base, next_level, next_addr, pages_end, range),
+  )
+}
+
 /// Map a block of physical memory.
 ///
 /// # Parameters
 ///
 /// * `phys_addr` - The physical address of the block.
+/// * `device` - Whether this block maps to device memory.
 ///
 /// # Returns
 ///
@@ -216,6 +290,7 @@ fn make_block_descriptor(phys_addr: usize, device: bool) -> usize {
 /// # Parameters
 ///
 /// * `phys_addr` - The physical address of the page.
+/// * `device` - Whether this block maps to device memory.
 ///
 /// # Returns
 ///
@@ -361,23 +436,9 @@ fn fill_table(
     let mut fill_size = entry_size;
 
     if size < entry_size || table_level == TableLevel::Level1 {
-      // Handle Case 2 for Level 1 tables and Case 3. We have already verified
-      // that size is not less than a page, so getting the next table should
-      // never fail; panic if it does.
-      let next_level = get_next_table(table_level).expect("Invalid table level.");
-      let desc = table.entries[idx];
-      let mut next_addr = get_phys_addr_from_descriptor(desc);
-
-      // If the descriptor is not valid, allocate a new table at the end of the
-      // table area.
-      if !is_descriptor_valid(desc) {
-        next_addr = pages_end;
-        pages_end += TABLE_SIZE;
-        table.entries[idx] = make_pointer_entry(base);
-      }
-
-      // The size can be larger than the entry size for Level 1, so use the
-      // minimum of the two.
+      // Case 2 with a Level 1 table and Case 3 are basically the same, we just
+      // need to make sure to take the minimum of the block size and the entry
+      // size since the block size can be greater at Level 1.
       fill_size = cmp::min(size, entry_size);
 
       let fill = memory::MemoryRange {
@@ -386,21 +447,16 @@ fn fill_table(
         device: range.device,
       };
 
-      pages_end = fill_table(virtual_base, next_level, next_addr, pages_end, &fill);
+      (table.entries[idx], pages_end) = alloc_table_and_fill(
+        virtual_base,
+        table_level,
+        table.entries[idx],
+        pages_end,
+        &fill,
+      );
     } else {
-      // If we get here, we know that that size >= entry_size and we are not at
-      // Level 1.
-      table.entries[idx] = match table_level {
-        // Case 1, map to a block.
-        TableLevel::Level2 | TableLevel::Level3 => make_block_descriptor(base, range.device),
-        // Case 2 for Level 4, map to a page entry.
-        TableLevel::Level4 => make_page_descriptor(base, range.device),
-        // Should never happen.
-        _ => {
-          debug_assert!(false, "Invalid translation level.");
-          0
-        }
-      }
+      // Handle Case 1 and Case 2 for Level 4 tables.
+      table.entries[idx] = make_descriptor(table_level, base, range.device);
     }
 
     base += fill_size;
