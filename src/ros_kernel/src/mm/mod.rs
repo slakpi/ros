@@ -8,6 +8,11 @@ use crate::arch::armv7 as arch;
 
 use crate::peripherals::memory;
 
-pub fn init_memory(virtual_base: usize, pages_start: usize, mem_config: &memory::MemoryConfig) {
-  arch::mm::init_memory(virtual_base, pages_start, mem_config);
+pub fn direct_map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_config: &memory::MemoryConfig
+) -> usize {
+  arch::mm::direct_map_memory(virtual_base, pages_start, pages_end, mem_config)
 }

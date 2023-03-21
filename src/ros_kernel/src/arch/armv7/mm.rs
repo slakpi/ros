@@ -13,4 +13,11 @@ use crate::peripherals::memory;
 ///   |                 |
 ///   +-----------------+ 0x0000_0000
 ///
-pub fn init_memory(virtual_base: usize, pages_start: usize, mem_config: &memory::MemoryConfig) {}
+pub fn direct_map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_config: &memory::MemoryConfig
+) -> usize {
+  pages_end
+}

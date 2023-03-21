@@ -286,14 +286,14 @@ pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
   };
 
   if !ok {
-    dbg_print!("Memory: Could not read a valid device tree or ATAG list.");
+    dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
     return None;
   }
 
   config.trim_ranges();
 
   if config.range_count == 0 {
-    dbg_print!("Memory: No valid memory ranges available.");
+    dbg_print!("Memory: No valid memory ranges available.\n");
     return None;
   }
 

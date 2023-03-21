@@ -55,7 +55,7 @@ Clear the page tables.
   bl      memset
 
 /*------------------------------------------------------------------------------
-Create the first- and second-level page tables.
+Create the L1 and L2 page tables.
 ------------------------------------------------------------------------------*/
   adrp    x0, __kernel_pages_start
   ldr     x1, =__virtual_start
@@ -129,11 +129,11 @@ section_align_size:
 
 ///-------------------------------------------------------------------------------------------------
 /// @fn init_tables
-/// @brief   Create first- and second-level page tables for the first 1 GiB of
-///          the virtual address space.
-/// @param[in] x0 The base address of the L4 table.
+/// @brief   Create L1 and L2 page tables for the first 1 GiB of the virtual
+///          address space.
+/// @param[in] x0 The base address of the L1 table.
 /// @param[in] x1 The base address of the virtual address space.
-/// @returns Returns the base address of the third-level page table.
+/// @returns Returns the base address of the L3 page table.
 init_tables:
   fn_entry
 
@@ -150,9 +150,9 @@ init_tables:
 ///-------------------------------------------------------------------------------------------------
 /// @fn create_table_entry
 /// @brief Helper for @a init_tables. Do not call directly.
-/// @param[in] x0 The base address of the L4 table.
+/// @param[in] x0 The base address of the L1 or L2 table.
 /// @param[in] x1 The base address of the virtual address space.
-/// @param[in] x2 The shift specifying the L4 or L3 table.
+/// @param[in] x2 The shift specifying the L1 or L2 table.
 create_table_entry:
   // no fn_entry required.
 

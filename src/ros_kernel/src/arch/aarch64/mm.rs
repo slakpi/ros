@@ -37,12 +37,13 @@ struct PageTable {
   entries: [usize; 512],
 }
 
-/// Initialize the AArch64 page tables for the kernel.
+/// Direct map a memory range into the kernel's virtual address space.
 ///
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
 /// * `mem_config` - The memory layout.
 ///
 /// # Details
@@ -89,14 +90,23 @@ struct PageTable {
 /// physical address space into the kernel segment.
 ///
 /// This mapping is separate from allocating pages to the kernel.
-pub fn init_memory(virtual_base: usize, pages_start: usize, mem_config: &memory::MemoryConfig) {
-  // The bootstrap code set up Level 1, 2, and 3 tables for the initial mapping.
-  // We'll just reuse those and add new tables after.
-  let mut pages_end = pages_start + (3 * PAGE_SIZE);
+///
+/// # Returns
+///
+/// The new end of the page table area.
+pub fn direct_map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_config: &memory::MemoryConfig
+) -> usize {
+  let mut pages_end = pages_end;
 
   for range in mem_config.get_ranges() {
     pages_end = map_range(virtual_base, pages_start, pages_end, range);
   }
+
+  pages_end
 }
 
 /// Given a table level, return the next table level down in the translation
