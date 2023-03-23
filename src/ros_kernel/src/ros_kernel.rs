@@ -52,10 +52,15 @@ extern "C" fn ros_kernel(init: KernelConfig) -> ! {
     pages_end,
   );
 
-  _ = init_memory(init.virtual_base, init.blob, init.kernel_pages_start, pages_end);
-  
+  _ = init_memory(
+    init.virtual_base,
+    init.blob,
+    init.kernel_pages_start,
+    pages_end,
+  );
+
   init_drivers();
-  
+
   loop {}
 }
 
@@ -93,7 +98,7 @@ fn init_peripherals(
   peripheral_base: usize,
   peripheral_block_size: usize,
   pages_start: usize,
-  pages_end: usize
+  pages_end: usize,
 ) -> usize {
   let mut mem_config = memory::MemoryConfig::new();
 
@@ -137,11 +142,7 @@ fn init_memory(virtual_base: usize, blob: usize, pages_start: usize, pages_end: 
   dbg_print!("Initialized physical memory at:\n");
 
   for range in mem_config.get_ranges() {
-    dbg_print!(
-      "  {:#x} - {:#x}\n",
-      range.base,
-      range.base + range.size - 1,
-    );
+    dbg_print!("  {:#x} - {:#x}\n", range.base, range.base + range.size - 1);
   }
 
   pages_end
