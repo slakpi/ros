@@ -44,11 +44,13 @@ impl DtbCursor {
   }
 }
 
+/// DTB property header.
 pub struct DtbPropertyHeader {
   pub size: usize,
   pub name_offset: usize,
 }
 
+/// DTB reader.
 pub struct DtbReader<'blob> {
   dtb: &'blob [u8],
   dt_struct_offset: usize,
