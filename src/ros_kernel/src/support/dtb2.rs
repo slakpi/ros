@@ -61,8 +61,6 @@ pub struct DtbReader<'blob> {
   _boot_cpuid_phys: u32,
   _dt_strings_size: usize,
   _dt_struct_size: usize,
-  addr_cells: u32,
-  size_cells: u32,
 }
 
 impl<'blob> DtbReader<'blob> {
@@ -105,8 +103,8 @@ impl<'blob> DtbReader<'blob> {
   /// # Returns
   ///
   /// A new DTB reader if the blob is a valid DTB, otherwise None.
-  pub fn new(blob: usize) -> Option<Self> {
-    let total_size = DtbReader::check_dtb(blob as usize).ok()?;
+  pub fn new(blob: usize) -> Result<Self, DtbError> {
+    let total_size = DtbReader::check_dtb(blob as usize)?;
     let base_ptr = blob as *const u8;
     let mut cursor = DtbCursor::new(FDT_WORD_BYTES * 2);
     let mut dtb = DtbReader {
@@ -119,44 +117,18 @@ impl<'blob> DtbReader<'blob> {
       _boot_cpuid_phys: 0,
       _dt_strings_size: 0,
       _dt_struct_size: 0,
-      addr_cells: 0,
-      size_cells: 0,
     };
 
-    dtb.dt_struct_offset = dtb.get_u32(&mut cursor)? as usize;
-    dtb.dt_strings_offset = dtb.get_u32(&mut cursor)? as usize;
-    dtb._mem_rsv_map_offset = dtb.get_u32(&mut cursor)? as usize;
-    dtb._version = dtb.get_u32(&mut cursor)?;
-    dtb._last_comp_version = dtb.get_u32(&mut cursor)?;
-    dtb._boot_cpuid_phys = dtb.get_u32(&mut cursor)?;
-    dtb._dt_strings_size = dtb.get_u32(&mut cursor)? as usize;
-    dtb._dt_struct_size = dtb.get_u32(&mut cursor)? as usize;
+    dtb.dt_struct_offset = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)? as usize;
+    dtb.dt_strings_offset = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)? as usize;
+    dtb._mem_rsv_map_offset = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)? as usize;
+    dtb._version = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)?;
+    dtb._last_comp_version = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)?;
+    dtb._boot_cpuid_phys = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)?;
+    dtb._dt_strings_size = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)? as usize;
+    dtb._dt_struct_size = dtb.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)? as usize;
 
-    let mut root = dtb.get_root_node()?;
-    _ = dtb.get_null_terminated_u8_slice(&mut root)?;
-    dtb.skip_and_align(&mut root, 1);
-
-    while let Some(header) = dtb.get_next_property(&mut root) {
-      let name = dtb.get_slice_from_string_table(header.name_offset).unwrap();
-
-      if "#address-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        dtb.addr_cells = dtb.get_u32(&mut root)?;
-      } else if "#size-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        dtb.size_cells = dtb.get_u32(&mut root)?;
-      } else {
-        dtb.skip_and_align(&mut root, header.size);
-      }
-    }
-
-    if dtb.addr_cells < 1 || dtb.addr_cells > FDT_MAX_CELL_COUNT {
-      return None;
-    }
-
-    if dtb.size_cells < 1 || dtb.size_cells > FDT_MAX_CELL_COUNT {
-      return None;
-    }
-
-    Some(dtb)
+    Ok(dtb)
   }
 
   /// Get a new cursor positioned at the start of the root node.
@@ -371,14 +343,19 @@ impl<'blob> DtbReader<'blob> {
     }
   }
 
-  /// Get the size of a reg property value. The total size of a reg value
-  /// depends on the platform and the cell count configuration.
+  /// Calculate the size of a reg property value given a number of address and
+  /// size cells.
+  ///
+  /// # Parameters
+  ///
+  /// `addr_cells` - Address cell count.
+  /// `size_cells` - Size cell count.
   ///
   /// # Returns
   ///
-  /// The total size of a reg property value.
-  pub fn get_reg_size(&self) -> usize {
-    (FDT_WORD_BYTES * self.addr_cells as usize) + (FDT_WORD_BYTES * self.size_cells as usize)
+  /// The total size of a reg property value in bytes.
+  pub fn get_reg_size(addr_cells: u32, size_cells: u32) -> usize {
+    FDT_WORD_BYTES * (addr_cells as usize + size_cells as usize)
   }
 
   /// Read a reg value from the DTB as the position pointed to by the cursor.
@@ -395,8 +372,13 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// A tuple with the address and size values or None if a reg value could not
   /// be read.
-  pub fn get_reg(&self, cursor: &mut DtbCursor) -> Option<(usize, usize)> {
-    let count = self.get_reg_size();
+  pub fn get_reg(
+    &self,
+    cursor: &mut DtbCursor,
+    addr_cells: u32,
+    size_cells: u32,
+  ) -> Option<(usize, usize)> {
+    let count = DtbReader::get_reg_size(addr_cells, size_cells);
 
     if cursor.loc > self.dtb.len() - count {
       return None;
@@ -405,12 +387,12 @@ impl<'blob> DtbReader<'blob> {
     let mut addr = 0usize;
     let mut size = 0usize;
 
-    for _ in 0..self.addr_cells {
+    for _ in 0..addr_cells {
       addr <<= FDT_WORD_BYTES;
       addr |= self.get_u32_unchecked(cursor) as usize;
     }
 
-    for _ in 0..self.size_cells {
+    for _ in 0..size_cells {
       size <<= FDT_WORD_BYTES;
       size |= self.get_u32_unchecked(cursor) as usize;
     }
@@ -418,14 +400,20 @@ impl<'blob> DtbReader<'blob> {
     Some((addr, size))
   }
 
-  /// Get the size of a range property value. The total size of a reg value
-  /// depends on the platform and the cell count configuration.
+  /// Calculate the size of a range property value given a number of address and
+  /// size cells.
+  ///
+  /// # Parameters
+  ///
+  /// `child_addr_cells` - Child bus address cell count.
+  /// `parent_addr_cells` - Parent bus address cell count.
+  /// `size_cells` - Size cell count.
   ///
   /// # Returns
   ///
-  /// The total size of a reg property value.
-  pub fn get_range_size(&self) -> usize {
-    (FDT_WORD_BYTES * self.addr_cells as usize * 2) + (FDT_WORD_BYTES * self.size_cells as usize)
+  /// The total size of a reg property value in bytes.
+  pub fn get_range_size(child_addr_cells: u32, parent_addr_cells: u32, size_cells: u32) -> usize {
+    FDT_WORD_BYTES * (child_addr_cells as usize + parent_addr_cells as usize + size_cells as usize)
   }
 
   /// Read a range value from the DTB as the position pointed to by the cursor.
@@ -442,8 +430,14 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// A tuple with the child address, parent address, and size values or None if
   /// a range value could not be read.
-  pub fn get_range(&self, cursor: &mut DtbCursor) -> Option<(usize, usize, usize)> {
-    let count = self.get_range_size();
+  pub fn get_range(
+    &self,
+    cursor: &mut DtbCursor,
+    child_addr_cells: u32,
+    parent_addr_cells: u32,
+    size_cells: u32
+  ) -> Option<(usize, usize, usize)> {
+    let count = DtbReader::get_range_size(child_addr_cells, parent_addr_cells, size_cells);
 
     if cursor.loc > self.dtb.len() - count {
       return None;
@@ -453,17 +447,17 @@ impl<'blob> DtbReader<'blob> {
     let mut parent_addr = 0usize;
     let mut size = 0usize;
 
-    for _ in 0..self.addr_cells {
+    for _ in 0..child_addr_cells {
       child_addr <<= FDT_WORD_BYTES;
       child_addr |= self.get_u32_unchecked(cursor) as usize;
     }
 
-    for _ in 0..self.addr_cells {
+    for _ in 0..parent_addr_cells {
       parent_addr <<= FDT_WORD_BYTES;
       parent_addr |= self.get_u32_unchecked(cursor) as usize;
     }
 
-    for _ in 0..self.size_cells {
+    for _ in 0..size_cells {
       size <<= FDT_WORD_BYTES;
       size |= self.get_u32_unchecked(cursor) as usize;
     }
