@@ -1,8 +1,8 @@
-//! DTB / ATAG physical memory scanning.
+//! DTB physical memory scanning.
 
 use crate::dbg_print;
-use crate::support::{atags, dtb};
-use core::cmp;
+use crate::support::dtb;
+use core::{cmp, str};
 
 const MEM_RANGES: usize = 64;
 
@@ -121,82 +121,132 @@ impl MemoryConfig {
   }
 }
 
-/// Scans for DTB memory nodes. See @a dtb::DtbScanner.
+/// Scans for DTB memory nodes.
 struct DtbMemoryScanner<'mem> {
   config: &'mem mut MemoryConfig,
+  addr_cells: u32,
+  size_cells: u32,
 }
 
 impl<'mem> DtbMemoryScanner<'mem> {
-  /// Wrapper for @a check_device_type_internal.
-  fn check_device_type(
-    loc: u32,
-    size: u32,
-    cursor: &mut dtb::DtbCursor,
-  ) -> Result<bool, dtb::DtbError> {
-    let old_loc = cursor.get_loc();
-
-    cursor.set_loc(loc);
-    let ret = DtbMemoryScanner::check_device_type_internal(size, cursor);
-    cursor.set_loc(old_loc);
-
-    ret
-  }
-
-  /// Check if this node describes a memory device. The cursor must be
-  /// positioned at the property.
-  fn check_device_type_internal(
-    size: u32,
-    cursor: &mut dtb::DtbCursor,
-  ) -> Result<bool, dtb::DtbError> {
-    if size == 0 {
-      return Err(dtb::DtbError::InvalidDtb);
+  pub fn new(config: &'mem mut MemoryConfig) -> Self {
+    DtbMemoryScanner {
+      config,
+      addr_cells: 0,
+      size_cells: 0,
     }
-
-    let dev_type = cursor
-      .get_u8_slice(size - 1)
-      .ok_or(dtb::DtbError::InvalidDtb)?;
-
-    Ok("memory".as_bytes().cmp(dev_type) == cmp::Ordering::Equal)
   }
 
-  /// Wrapper for @a read_reg_internal.
-  fn read_reg(
+  fn scan_root_node(
     &mut self,
-    loc: u32,
-    size: u32,
-    root: &dtb::DtbRoot,
-    cursor: &mut dtb::DtbCursor,
+    reader: &dtb::DtbReader,
+    cursor: &dtb::DtbCursor,
   ) -> Result<(), dtb::DtbError> {
-    let old_loc = cursor.get_loc();
+    let mut tmp_cursor = *cursor;
 
-    cursor.set_loc(loc);
-    let ret = self.read_reg_internal(size, root, cursor);
-    cursor.set_loc(old_loc);
-
-    ret
-  }
-
-  /// Read a reg property. The cursor must be positioned at the property.
-  fn read_reg_internal(
-    &mut self,
-    size: u32,
-    root: &dtb::DtbRoot,
-    cursor: &mut dtb::DtbCursor,
-  ) -> Result<(), dtb::DtbError> {
-    let reg_size = dtb::get_reg_pair_size(root).ok_or(dtb::DtbError::InvalidDtb)?;
-
-    // Check that the size non-zero and a multiple of the size specified by the
-    // root node.
-    if reg_size == 0 || size % reg_size != 0 {
-      return Err(dtb::DtbError::InvalidDtb);
-    }
-
-    let reg_count = cmp::min((size / reg_size) as usize, MEM_RANGES);
-
-    for _ in 0..reg_count {
-      let (base, size) = cursor
-        .get_reg(root.addr_cells, root.size_cells)
+    while let Some(header) = reader.get_next_property(&mut tmp_cursor) {
+      let name = reader
+        .get_slice_from_string_table(header.name_offset)
         .ok_or(dtb::DtbError::InvalidDtb)?;
+
+      if "#address-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        self.addr_cells = reader
+          .get_u32(&mut tmp_cursor)
+          .ok_or(dtb::DtbError::InvalidDtb)?;
+      } else if "#size-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        self.size_cells = reader
+          .get_u32(&mut tmp_cursor)
+          .ok_or(dtb::DtbError::InvalidDtb)?;
+      } else {
+        reader.skip_and_align(header.size, &mut tmp_cursor);
+      }
+    }
+
+    Ok(())
+  }
+
+  fn scan_device_node(
+    &mut self,
+    reader: &dtb::DtbReader,
+    cursor: &dtb::DtbCursor,
+  ) -> Result<bool, dtb::DtbError> {
+    let mut tmp_cursor = *cursor;
+    let mut dev_type = (tmp_cursor, 0usize, false);
+    let mut reg = (tmp_cursor, 0usize, false);
+    let mut addr_cells = self.addr_cells;
+    let mut size_cells = self.size_cells;
+
+    while let Some(header) = reader.get_next_property(&mut tmp_cursor) {
+      let name = reader
+        .get_slice_from_string_table(header.name_offset)
+        .ok_or(dtb::DtbError::InvalidDtb)?;
+
+      if "device_type".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        dev_type = (tmp_cursor, header.size, true);
+      } else if "reg".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        reg = (tmp_cursor, header.size, true);
+      } else if "#address-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        addr_cells = reader
+          .get_u32(&mut tmp_cursor)
+          .ok_or(dtb::DtbError::InvalidDtb)?;
+        continue;
+      } else if "#size-cells".as_bytes().cmp(name) == cmp::Ordering::Equal {
+        size_cells = reader
+          .get_u32(&mut tmp_cursor)
+          .ok_or(dtb::DtbError::InvalidDtb)?;
+        continue;
+      }
+
+      reader.skip_and_align(header.size, &mut tmp_cursor);
+    }
+
+    if !dev_type.2 || !self.check_device_type(dev_type.1, reader, &dev_type.0) {
+      return Ok(true);
+    }
+
+    if !reg.2 {
+      return Ok(true);
+    }
+
+    self.read_memory_reg(reg.1, addr_cells, size_cells, reader, &reg.0)
+  }
+
+  fn check_device_type(
+    &self,
+    prop_size: usize,
+    reader: &dtb::DtbReader,
+    cursor: &dtb::DtbCursor,
+  ) -> bool {
+    let mut tmp_cursor = *cursor;
+
+    if let Some(name) = reader.get_null_terminated_u8_slice(&mut tmp_cursor) {
+      return "memory".as_bytes().cmp(name) == cmp::Ordering::Equal;
+    }
+
+    false
+  }
+
+  fn read_memory_reg(
+    &mut self,
+    prop_size: usize,
+    addr_cells: u32,
+    size_cells: u32,
+    reader: &dtb::DtbReader,
+    cursor: &dtb::DtbCursor,
+  ) -> Result<bool, dtb::DtbError> {
+    let reg_size = dtb::DtbReader::get_reg_size(addr_cells, size_cells);
+    let mut tmp_cursor = *cursor;
+
+    if (reg_size == 0) || (prop_size == 0) || (prop_size < reg_size) || (prop_size % reg_size != 0)
+    {
+      return Err(dtb::DtbError::InvalidDtb);
+    }
+
+    for _ in 0..(prop_size / reg_size) {
+      let (base, size) = reader
+        .get_reg(addr_cells, size_cells, &mut tmp_cursor)
+        .ok_or(dtb::DtbError::InvalidDtb)?;
+
       self.config.insert_range(MemoryRange {
         base,
         size,
@@ -204,91 +254,33 @@ impl<'mem> DtbMemoryScanner<'mem> {
       });
     }
 
-    Ok(())
+    Ok(true)
   }
 }
 
 impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
-  /// See @a dtb::DtbScanner.
   fn scan_node(
     &mut self,
-    hdr: &dtb::DtbHeader,
-    root: &dtb::DtbRoot,
-    _node_name: &[u8],
-    cursor: &mut dtb::DtbCursor,
+    reader: &dtb::DtbReader,
+    name: &[u8],
+    cursor: &dtb::DtbCursor,
   ) -> Result<bool, dtb::DtbError> {
-    let mut dev_type = (0u32, 0, false);
-    let mut reg = (0u32, 0, false);
-
-    while let Some(prop_hdr) = dtb::move_to_next_property(cursor) {
-      let prop_name = dtb::get_string_from_table(hdr, prop_hdr.name_offset, cursor)
-        .ok_or(dtb::DtbError::InvalidDtb)?;
-
-      if "device_type".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
-        dev_type = (cursor.get_loc(), prop_hdr.prop_size, true);
-      } else if "reg".as_bytes().cmp(prop_name) == cmp::Ordering::Equal {
-        reg = (cursor.get_loc(), prop_hdr.prop_size, true);
-      }
-
-      cursor.skip_and_align(prop_hdr.prop_size);
-    }
-
-    // If the node did not contain device_type or reg, keep scanning.
-    if !dev_type.2 || !reg.2 {
+    if name.len() == 0 {
+      _ = self.scan_root_node(reader, cursor)?;
       return Ok(true);
     }
 
-    // If the node is not a memory device, keep scanning.
-    if !DtbMemoryScanner::check_device_type(dev_type.0, dev_type.1, cursor)? {
-      return Ok(true);
-    }
-
-    self.read_reg(reg.0, reg.1, root, cursor)?;
-
-    // Keep scanning if we have not filled the memory ranges yet.
-    Ok(self.config.range_count < MEM_RANGES)
-  }
-}
-
-/// Scans for MEM tags. See @a atags::AtagScanner.
-struct AtagMemoryScanner<'mem> {
-  config: &'mem mut MemoryConfig,
-}
-
-impl<'mem> atags::AtagScanner for AtagMemoryScanner<'mem> {
-  /// See @a atags::AtagScanner.
-  fn scan_mem_tag(&mut self, mem: &atags::AtagMem) -> Result<bool, atags::AtagError> {
-    self.config.insert_range(MemoryRange {
-      base: mem.base as usize,
-      size: mem.size as usize,
-      device: false,
-    });
-
-    if self.config.range_count == MEM_RANGES {
-      return Ok(false);
-    }
-
-    Ok(true)
+    self.scan_device_node(reader, cursor)
   }
 }
 
 /// Get the system memory layout.
 pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
   let mut config = MemoryConfig::new();
+  let mut scanner = DtbMemoryScanner::new(&mut config);
+  let reader = dtb::DtbReader::new(blob).ok()?;
 
-  let ok = match get_memory_layout_from_dtb(blob, &mut config) {
-    // Successfully read the DTB memory configuration.
-    Ok(_) => true,
-    // The blob does not contain a DTB, try ATAGs.
-    Err(dtb::DtbError::NotADtb) => get_memory_layout_from_atags(blob, &mut config).is_ok(),
-    // The DTB was invalid, fail out.
-    Err(_) => false,
-  };
-
-  if !ok {
-    dbg_print!("Memory: Could not read a valid device tree or ATAG list.\n");
-    return None;
-  }
+  _ = reader.scan(&mut scanner).ok()?;
 
   config.trim_ranges();
 
@@ -298,22 +290,4 @@ pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
   }
 
   Some(config)
-}
-
-/// Get the system memory layout from a DTB.
-fn get_memory_layout_from_dtb(
-  blob: usize,
-  config: &mut MemoryConfig,
-) -> Result<u32, dtb::DtbError> {
-  let mut scanner = DtbMemoryScanner { config };
-  dtb::scan_dtb(blob, &mut scanner)
-}
-
-/// Get the system memory layout from ATAGs.
-fn get_memory_layout_from_atags(
-  blob: usize,
-  config: &mut MemoryConfig,
-) -> Result<(), atags::AtagError> {
-  let mut scanner = AtagMemoryScanner { config };
-  atags::scan_atags(blob, &mut scanner)
 }
