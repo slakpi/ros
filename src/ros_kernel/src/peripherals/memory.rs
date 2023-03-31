@@ -2,7 +2,7 @@
 
 use crate::dbg_print;
 use crate::support::dtb;
-use core::{cmp, str};
+use core::cmp;
 
 const MEM_RANGES: usize = 64;
 
@@ -213,7 +213,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
 
   fn check_device_type(
     &self,
-    prop_size: usize,
+    _prop_size: usize,
     reader: &dtb::DtbReader,
     cursor: &dtb::DtbCursor,
   ) -> bool {

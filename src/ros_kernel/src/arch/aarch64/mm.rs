@@ -1,6 +1,5 @@
 //! AArch64 memory management.
 
-use crate::peripherals::memory;
 use core::cmp;
 
 const TABLE_SIZE: usize = 4096;
@@ -98,15 +97,19 @@ pub fn direct_map_memory(
   virtual_base: usize,
   pages_start: usize,
   pages_end: usize,
-  mem_config: &memory::MemoryConfig,
+  base: usize,
+  size: usize,
+  device: bool,
 ) -> usize {
-  let mut pages_end = pages_end;
-
-  for range in mem_config.get_ranges() {
-    pages_end = map_range(virtual_base, pages_start, pages_end, range);
-  }
-
-  pages_end
+  fill_table(
+    virtual_base,
+    TableLevel::Level1,
+    pages_start,
+    pages_end,
+    base,
+    size,
+    device,
+  )
 }
 
 /// Given a table level, return the next table level down in the translation
@@ -256,7 +259,9 @@ fn alloc_table_and_fill(
   table_level: TableLevel,
   desc: usize,
   pages_end: usize,
-  range: &memory::MemoryRange,
+  base: usize,
+  size: usize,
+  device: bool,
 ) -> (usize, usize) {
   let next_level = get_next_table(table_level).unwrap();
   let mut next_addr = get_phys_addr_from_descriptor(desc);
@@ -271,7 +276,7 @@ fn alloc_table_and_fill(
 
   (
     desc,
-    fill_table(virtual_base, next_level, next_addr, pages_end, range),
+    fill_table(virtual_base, next_level, next_addr, pages_end, base, size, device),
   )
 }
 
@@ -326,34 +331,6 @@ fn make_page_descriptor(phys_addr: usize, device: bool) -> usize {
 /// The new pointer entry.
 fn make_pointer_entry(phys_addr: usize) -> usize {
   (phys_addr & ADDR_MASK) | MM_PAGE_TABLE_FLAG
-}
-
-/// Directly maps the specified memory range into the kernel's virtual address
-/// space.
-///
-/// # Parameters
-///
-/// * `virtual_base` - The kernel segment base address.
-/// * `pages_start` - The address of the Level 1 table.
-/// * `pages_end` - The current end of the table area.
-/// * `range` - The range of physical memory addresses to map.
-///
-/// # Returns
-///
-/// Returns the new end of the table area.
-fn map_range(
-  virtual_base: usize,
-  pages_start: usize,
-  pages_end: usize,
-  range: &memory::MemoryRange,
-) -> usize {
-  fill_table(
-    virtual_base,
-    TableLevel::Level1,
-    pages_start,
-    pages_end,
-    range,
-  )
 }
 
 /// Fills a page table with entries for the specified range.
@@ -429,11 +406,13 @@ fn fill_table(
   table_level: TableLevel,
   table_addr: usize,
   pages_end: usize,
-  range: &memory::MemoryRange,
+  base: usize,
+  size: usize,
+  device: bool,
 ) -> usize {
   let entry_size = get_table_entry_size(table_level);
-  let mut base = range.base;
-  let mut size = range.size;
+  let mut base = base;
+  let mut size = size;
   let mut pages_end = pages_end;
   let table = unsafe { &mut *((virtual_base + table_addr) as *mut PageTable) };
 
@@ -451,22 +430,18 @@ fn fill_table(
       // size since the block size can be greater at Level 1.
       fill_size = cmp::min(size, entry_size);
 
-      let fill = memory::MemoryRange {
-        base,
-        size: fill_size,
-        device: range.device,
-      };
-
       (table.entries[idx], pages_end) = alloc_table_and_fill(
         virtual_base,
         table_level,
         table.entries[idx],
         pages_end,
-        &fill,
+        base,
+        fill_size,
+        device,
       );
     } else {
       // Handle Case 1 and Case 2 for Level 4 tables.
-      table.entries[idx] = make_descriptor(table_level, base, range.device);
+      table.entries[idx] = make_descriptor(table_level, base, device);
     }
 
     base += fill_size;

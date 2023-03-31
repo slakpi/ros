@@ -100,15 +100,14 @@ fn init_peripherals(
   pages_start: usize,
   pages_end: usize,
 ) -> usize {
-  let mut mem_config = memory::MemoryConfig::new();
-
-  mem_config.insert_range(memory::MemoryRange {
-    base: peripheral_base,
-    size: peripheral_block_size,
-    device: true,
-  });
-
-  let pages_end = mm::direct_map_memory(virtual_base, pages_start, pages_end, &mem_config);
+  let pages_end = mm::direct_map_memory(
+    virtual_base,
+    pages_start,
+    pages_end,
+    peripheral_base,
+    peripheral_block_size,
+    true,
+  );
 
   base::set_peripheral_base_addr(peripheral_base + virtual_base);
   mini_uart::init_uart();
@@ -137,11 +136,20 @@ fn init_peripherals(
 /// architecture.
 fn init_memory(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
   let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
-  let pages_end = mm::direct_map_memory(virtual_base, pages_start, pages_end, &mem_config);
+  let mut pages_end = pages_end;
 
   dbg_print!("Initialized physical memory at:\n");
 
   for range in mem_config.get_ranges() {
+    pages_end = mm::direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      range.base,
+      range.size,
+      range.device,
+    );
+    
     dbg_print!("  {:#x} - {:#x}\n", range.base, range.base + range.size - 1);
   }
 

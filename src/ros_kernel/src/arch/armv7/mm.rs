@@ -1,5 +1,3 @@
-use crate::peripherals::memory;
-
 /// Initialize the ARMv7 page tables for the kernel. The canonical 32-bit 3:1
 /// virtual address space layout for a process looks like:
 ///
@@ -17,7 +15,9 @@ pub fn direct_map_memory(
   virtual_base: usize,
   pages_start: usize,
   pages_end: usize,
-  mem_config: &memory::MemoryConfig,
+  base: usize,
+  size: usize,
+  device: bool,
 ) -> usize {
   pages_end
 }
