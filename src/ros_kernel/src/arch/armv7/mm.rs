@@ -15,12 +15,7 @@
 /// layout on to the memory manager. The memory manager directly maps the
 /// physical memory into the virtual address space as appropriate for the
 /// architecture.
-pub fn init(
-  virtual_base: usize,
-  blob: usize,
-  pages_start: usize,
-  pages_end: usize
-) -> usize {
+pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
   pages_end
 }
 

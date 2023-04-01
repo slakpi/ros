@@ -50,12 +50,7 @@ struct PageTable {
 ///
 /// Attempts to retrieve the memory layout from ATAGs or a DTB, then directly
 /// map the range into the kernel's virtual address space.
-pub fn init(
-  virtual_base: usize,
-  blob: usize,
-  pages_start: usize,
-  pages_end: usize
-) -> usize {
+pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
   let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
   let mut pages_end = pages_end;
 
@@ -357,7 +352,16 @@ fn alloc_table_and_fill(
 
   (
     desc,
-    fill_table(virtual_base, next_level, next_addr, pages_end, virt, base, size, device),
+    fill_table(
+      virtual_base,
+      next_level,
+      next_addr,
+      pages_end,
+      virt,
+      base,
+      size,
+      device,
+    ),
   )
 }
 

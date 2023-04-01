@@ -20,7 +20,7 @@ macro_rules! check_cell_count {
     if $arg < 1 || $arg > FDT_MAX_CELL_COUNT {
       return None;
     }
-  }
+  };
 }
 
 /// Error value for DTB operations.

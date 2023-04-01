@@ -33,12 +33,7 @@ use crate::peripherals::{base, soc};
 /// # Returns
 ///
 /// The new end of the page table area.
-pub fn init(
-  virtual_base: usize,
-  blob: usize,
-  pages_start: usize,
-  pages_end: usize
-) -> usize {
+pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
   let soc_config = soc::get_soc_mappings(virtual_base + blob).unwrap();
   let mut pages_end = pages_end;
 

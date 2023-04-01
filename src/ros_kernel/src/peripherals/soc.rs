@@ -51,12 +51,8 @@ pub fn get_soc_mappings(blob: usize) -> Option<SocConfig> {
   let (cpu_addr_cells, cpu_size_cells) = get_cell_config(&reader, &root_node, 0, 0).ok()?;
 
   let soc_node = reader.find_child_node(&root_node, "soc")?;
-  let (soc_addr_cells, soc_size_cells) = get_cell_config(
-    &reader,
-    &soc_node,
-    cpu_addr_cells,
-    cpu_size_cells
-  ).ok()?;
+  let (soc_addr_cells, soc_size_cells) =
+    get_cell_config(&reader, &soc_node, cpu_addr_cells, cpu_size_cells).ok()?;
 
   _ = read_soc_mappings(
     &reader,
@@ -64,8 +60,9 @@ pub fn get_soc_mappings(blob: usize) -> Option<SocConfig> {
     soc_addr_cells,
     cpu_addr_cells,
     soc_size_cells,
-    &mut config
-  ).ok()?;
+    &mut config,
+  )
+  .ok()?;
 
   Some(config)
 }
@@ -153,12 +150,9 @@ fn read_ranges(
   let mut tmp_cursor = *cursor;
 
   while remaining > 0 {
-    let (soc_base, cpu_base, size) = reader.get_range(
-      soc_addr_cells,
-      cpu_addr_cells,
-      size_cells,
-      &mut tmp_cursor
-    ).ok_or(dtb::DtbError::InvalidDtb)?;
+    let (soc_base, cpu_base, size) = reader
+      .get_range(soc_addr_cells, cpu_addr_cells, size_cells, &mut tmp_cursor)
+      .ok_or(dtb::DtbError::InvalidDtb)?;
 
     config.add_mapping(SocMapping {
       soc_base,

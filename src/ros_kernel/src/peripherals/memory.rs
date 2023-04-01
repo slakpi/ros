@@ -27,10 +27,7 @@ impl MemoryConfig {
   /// An empty MemoryConfig.
   pub fn new() -> Self {
     MemoryConfig {
-      ranges: [MemoryRange {
-        base: 0,
-        size: 0,
-      }; MEM_RANGES],
+      ranges: [MemoryRange { base: 0, size: 0 }; MEM_RANGES],
       range_count: 0,
     }
   }
@@ -278,10 +275,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
         .get_reg(addr_cells, size_cells, &mut tmp_cursor)
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
-      self.config.insert_range(MemoryRange {
-        base,
-        size,
-      });
+      self.config.insert_range(MemoryRange { base, size });
     }
 
     Ok(true)
