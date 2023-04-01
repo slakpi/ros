@@ -24,7 +24,7 @@ const AUX_MU_BAUD_REG: usize = 0x00215068;
 ///
 ///          The system frequency is 250 MHz. The baud register value of 270
 ///          translates to a baud rate of 250 MHz / (8 * (270 + 1)) ~ 115200.
-pub fn init_uart() {
+pub fn init() {
   base::peripheral_reg_put(0, gpio::GPPUD);
   base::peripheral_delay(gpio::GPIO_DELAY);
   base::peripheral_reg_put(3 << 14, gpio::GPPUDCLK0);
@@ -47,7 +47,7 @@ pub fn init_uart() {
 /// @fn uart_recv
 /// @brief   Receive a byte from UART1. Blocks until the a arrives.
 /// @returns The received byte.
-pub fn _uart_recv() -> u8 {
+pub fn _recv() -> u8 {
   loop {
     let c = base::peripheral_reg_get(AUX_MU_LSR_REG);
     if c & 0x1 != 0 {
@@ -61,7 +61,7 @@ pub fn _uart_recv() -> u8 {
 /// @fn uart_send
 /// @brief Send a byte to UART1. Blocks until the UART is ready.
 /// @param[in] c The byte to send.
-pub fn uart_send(c: u8) {
+pub fn send(c: u8) {
   loop {
     let c = base::peripheral_reg_get(AUX_MU_LSR_REG);
     if c & 0x20 != 0 {
@@ -75,15 +75,15 @@ pub fn uart_send(c: u8) {
 /// @fn uart_send_bytes
 /// @brief Send an array of bytes to the mini UART.
 /// @param[in] s The byte array to send.
-pub fn uart_send_bytes(s: &[u8]) {
+pub fn send_bytes(s: &[u8]) {
   for c in s {
-    uart_send(*c);
+    send(*c);
   }
 }
 
 /// @fn uart_send_string
 /// @brief Convenience function to send UTF-8 bytes to the mini UART.
 /// @param[in] s The string to send.
-pub fn uart_send_string(s: &str) {
-  uart_send_bytes(s.as_bytes());
+pub fn send_string(s: &str) {
+  send_bytes(s.as_bytes());
 }

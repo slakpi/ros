@@ -1,6 +1,5 @@
 //! DTB physical memory scanning.
 
-use crate::dbg_print;
 use crate::support::dtb;
 use core::cmp;
 
@@ -11,7 +10,6 @@ const MEM_RANGES: usize = 64;
 pub struct MemoryRange {
   pub base: usize,
   pub size: usize,
-  pub device: bool,
 }
 
 /// Stores the ranges of memory available to the system.
@@ -23,23 +21,34 @@ pub struct MemoryConfig {
 
 impl MemoryConfig {
   /// Construct a new MemoryConfig.
+  ///
+  /// # Returns
+  ///
+  /// An empty MemoryConfig.
   pub fn new() -> Self {
     MemoryConfig {
       ranges: [MemoryRange {
         base: 0,
         size: 0,
-        device: false,
       }; MEM_RANGES],
       range_count: 0,
     }
   }
 
   /// Access the configured memory ranges.
+  ///
+  /// # Returns
+  ///
+  /// A slice with the valid memory ranges stored in the configuration.
   pub fn get_ranges(&self) -> &[MemoryRange] {
     &self.ranges[0..self.range_count]
   }
 
   /// Insert a new memory range in order sorted by base.
+  ///
+  /// # Parameters
+  ///
+  /// * `range` - The new block of memory to add to the configuration.
   pub fn insert_range(&mut self, range: MemoryRange) {
     if self.range_count >= MEM_RANGES {
       return;
@@ -102,18 +111,10 @@ impl MemoryConfig {
         // The next range encompasses this range, remove this range.
         self.ranges.copy_within((i + 1)..self.range_count, i);
       } else if a.base <= b.base && a_end > b.base {
-        // This range overlaps the next. If they are the same type of memory,
-        // union the ranges and remove the extraneous range. If they are
-        // different types of memory, keep the device memory the same size and
-        // trim the normal memory.
-        if a.device == b.device {
-          self.ranges[i].size = b_end - a.base;
-          self.ranges.copy_within((i + 2)..self.range_count, i + 1);
-        } else if a.device {
-          self.ranges[i + 1].base = a.base + a.size;
-        } else {
-          self.ranges[i].size = b.base - a.base;
-        }
+        // This range overlaps the next. Union the ranges and remove the
+        // extraneous range.
+        self.ranges[i].size = b_end - a.base;
+        self.ranges.copy_within((i + 2)..self.range_count, i + 1);
       } else {
         i += 1;
       }
@@ -129,6 +130,15 @@ struct DtbMemoryScanner<'mem> {
 }
 
 impl<'mem> DtbMemoryScanner<'mem> {
+  /// Construct a new DTB memory scanner.
+  ///
+  /// # Parameters
+  ///
+  /// * `config` - The MemoryConfig that will store the ranges found in the DTB.
+  ///
+  /// # Returns
+  ///
+  /// A new DtbMemoryScanner.
   pub fn new(config: &'mem mut MemoryConfig) -> Self {
     DtbMemoryScanner {
       config,
@@ -250,7 +260,6 @@ impl<'mem> DtbMemoryScanner<'mem> {
       self.config.insert_range(MemoryRange {
         base,
         size,
-        device: false,
       });
     }
 
@@ -285,7 +294,6 @@ pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
   config.trim_ranges();
 
   if config.range_count == 0 {
-    dbg_print!("Memory: No valid memory ranges available.\n");
     return None;
   }
 

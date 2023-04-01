@@ -1,5 +1,6 @@
 //! AArch64 memory management.
 
+use crate::peripherals::memory;
 use core::cmp;
 
 const TABLE_SIZE: usize = 4096;
@@ -43,7 +44,9 @@ struct PageTable {
 /// * `virtual_base` - The kernel segment base address.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
 /// * `pages_end` - The start of available memory for new pages.
-/// * `mem_config` - The memory layout.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
 ///
 /// # Details
 ///
@@ -449,5 +452,43 @@ fn fill_table(
   }
 
   // Return the updated `pages_end` pointer to be used by subsequent mappings.
+  pages_end
+}
+
+/// Initialize memory.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `blob` - ATAG or DTB blob.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
+///
+/// # Description
+///
+/// Attempts to retrieve the memory layout from ATAGs or a DTB, and passes the
+/// layout on to the memory manager. The memory manager directly maps the
+/// physical memory into the virtual address space as appropriate for the
+/// architecture.
+pub fn init(
+  virtual_base: usize,
+  blob: usize,
+  pages_start: usize,
+  pages_end: usize
+) -> usize {
+  let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
+  let mut pages_end = pages_end;
+
+  for range in mem_config.get_ranges() {
+    pages_end = direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      range.base,
+      range.size,
+      false,
+    );
+  }
+
   pages_end
 }

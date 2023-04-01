@@ -27,7 +27,7 @@ static mut FRAMEBUFFER: Framebuffer = Framebuffer {
 
 /// @fn fb_init
 /// @brief Initialize the default framebuffer.
-pub fn fb_init() {
+pub fn init() {
   // Setup the framebuffer properties and send them to the VideoCore.
   configure_properties();
 

@@ -21,3 +21,27 @@ pub fn direct_map_memory(
 ) -> usize {
   pages_end
 }
+
+/// Initialize memory.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `blob` - ATAG or DTB blob.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
+///
+/// # Description
+///
+/// Attempts to retrieve the memory layout from ATAGs or a DTB, and passes the
+/// layout on to the memory manager. The memory manager directly maps the
+/// physical memory into the virtual address space as appropriate for the
+/// architecture.
+pub fn init(
+  virtual_base: usize,
+  blob: usize,
+  pages_start: usize,
+  pages_end: usize
+) -> usize {
+  pages_end
+}

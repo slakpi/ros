@@ -8,8 +8,8 @@ use core::fmt::{self, Write};
 pub fn dbg_print(args: fmt::Arguments<'_>) {
   let mut stream = print::new_string_format_buffer();
   match stream.write_fmt(args) {
-    Ok(_) => mini_uart::uart_send_bytes(stream.as_bytes()),
-    _ => mini_uart::uart_send_string("Error: dbg_print Failed to format string.\n"),
+    Ok(_) => mini_uart::send_bytes(stream.as_bytes()),
+    _ => mini_uart::send_string("Error: dbg_print Failed to format string.\n"),
   }
 }
 

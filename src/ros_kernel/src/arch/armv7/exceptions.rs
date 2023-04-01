@@ -1,4 +1,4 @@
-use crate::dbg_print;
-use core::arch::asm;
+//! ARMv7a exception handling.
 
-pub fn init_exception_vectors() {}
+/// ARMv7a exception vector initialization.
+pub fn init() {}
