@@ -25,5 +25,7 @@ fn panic(info: &PanicInfo) -> ! {
 #[no_mangle]
 extern "C" fn ros_kernel(config: *const c_void) -> ! {
   arch::init(config);
+  mini_uart::init();
+  dbg_print!("=== ROS ===\n");
   loop {}
 }

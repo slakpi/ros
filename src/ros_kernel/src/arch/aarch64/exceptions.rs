@@ -18,8 +18,8 @@ pub fn init() {
 ///
 /// # Parameters
 ///
-/// `esr_el1` - Exception Syndrome Register value.
-/// `far_el1` - Fault Address Register value.
+/// * `esr_el1` - Exception Syndrome Register value.
+/// * `far_el1` - Fault Address Register value.
 #[no_mangle]
 extern "C" fn trap_exception(esr_el1: usize, far_el1: usize) {
   dbg_print!(

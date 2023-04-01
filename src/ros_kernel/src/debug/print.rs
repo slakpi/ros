@@ -2,9 +2,11 @@ use crate::peripherals::mini_uart;
 use crate::support::print;
 use core::fmt::{self, Write};
 
-/// @fn dbg_print
-/// @brief Formats the arguments to a string and writes it to the mini UART.
-/// @param[in] args The formatting arguments built by format_args!.
+/// Formats the arguments to a string and writes it to the mini UART.
+///
+/// # Parameters
+///
+/// * `args` - The formatting arguments built by format_args!.
 pub fn dbg_print(args: fmt::Arguments<'_>) {
   let mut stream = print::new_string_format_buffer();
   match stream.write_fmt(args) {
@@ -13,9 +15,8 @@ pub fn dbg_print(args: fmt::Arguments<'_>) {
   }
 }
 
-/// @def dbg_print!
-/// @brief Macro form that takes a format string and arguments to print to the
-///        mini UART.
+/// Formats a string with provided arguments and writes the formatted string to
+/// the mini UART.
 #[macro_export]
 macro_rules! dbg_print {
   () => {};

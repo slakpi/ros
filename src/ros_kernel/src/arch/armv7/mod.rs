@@ -1,5 +1,8 @@
+//! ARMv7a
+
 pub mod exceptions;
 pub mod mm;
+pub mod peripherals;
 
 use core::ffi::c_void;
 use core::ptr;
@@ -11,8 +14,6 @@ struct KernelConfig {
   virtual_base: usize,
   page_size: usize,
   blob: usize,
-  peripheral_base: usize,
-  peripheral_block_size: usize,
   kernel_base: usize,
   kernel_size: usize,
   kernel_pages_start: usize,

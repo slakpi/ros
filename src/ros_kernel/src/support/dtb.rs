@@ -15,6 +15,14 @@ const FDT_WORD_BYTES: usize = (u32::BITS / 8) as usize;
 const FDT_HEADER_SIZE: usize = FDT_WORD_BYTES * 8;
 const FDT_MAX_CELL_COUNT: u32 = (usize::BITS / 8) as u32;
 
+macro_rules! check_cell_count {
+  ($arg:expr) => {
+    if $arg < 1 || $arg > FDT_MAX_CELL_COUNT {
+      return None;
+    }
+  }
+}
+
 /// Error value for DTB operations.
 pub enum DtbError {
   NotADtb,
@@ -144,8 +152,7 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// # Returns
   ///
-  /// A new cursor positioned after the FDT_BEGIN_NODE marker of the root node,
-  /// or None if the root node is not found.
+  /// A new cursor positioned after the null-terminator of the node's name.
   pub fn get_root_node(&self) -> Option<DtbCursor> {
     let mut cursor = DtbCursor::new(self.dt_struct_offset);
     let marker = self.get_u32(&mut cursor)?;
@@ -153,6 +160,9 @@ impl<'blob> DtbReader<'blob> {
     if marker != FDT_BEGIN_NODE {
       return None;
     }
+
+    _ = self.get_null_terminated_u8_slice(&mut cursor)?;
+    self.skip_and_align(1, &mut cursor);
 
     Some(cursor)
   }
@@ -168,8 +178,8 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// # Assumptions
   ///
-  /// The cursor is assumed to be positioned just after the FDT_BEGIN_NODE
-  /// marker.
+  /// The cursor is assumed to be positioned just after the null-terminator of
+  /// the node's name.
   ///
   /// # Returns
   ///
@@ -180,16 +190,6 @@ impl<'blob> DtbReader<'blob> {
     let mut depth = 0;
 
     loop {
-      let name = self.get_null_terminated_u8_slice(&mut tmp_cursor)?;
-      self.skip_and_align(1, &mut tmp_cursor);
-
-      // If we are at a depth of 1 (immediate child of the node pointed to by
-      // cursor), compare the name. If we found the node, update the cursor and
-      // return Ok.
-      if depth == 1 && child_name_bytes.cmp(name) == cmp::Ordering::Equal {
-        return Some(tmp_cursor);
-      }
-
       _ = self.skip_node_properties(&mut tmp_cursor).ok()?;
 
       loop {
@@ -210,6 +210,16 @@ impl<'blob> DtbReader<'blob> {
           FDT_NOOP => {}
           _ => return None,
         }
+      }
+
+      let name = self.get_null_terminated_u8_slice(&mut tmp_cursor)?;
+      self.skip_and_align(1, &mut tmp_cursor);
+
+      // If we are at a depth of 1 (immediate child of the node pointed to by
+      // cursor), compare the name. If we found the node, update the cursor and
+      // return Ok.
+      if depth == 1 && child_name_bytes.cmp(name) == cmp::Ordering::Equal {
+        return Some(tmp_cursor);
       }
     }
   }
@@ -382,6 +392,9 @@ impl<'blob> DtbReader<'blob> {
     size_cells: u32,
     cursor: &mut DtbCursor,
   ) -> Option<(usize, usize)> {
+    check_cell_count!(addr_cells);
+    check_cell_count!(size_cells);
+
     let count = DtbReader::get_reg_size(addr_cells, size_cells);
 
     if cursor.loc > self.dtb.len() - count {
@@ -409,9 +422,9 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// # Parameters
   ///
-  /// `child_addr_cells` - Child bus address cell count.
-  /// `parent_addr_cells` - Parent bus address cell count.
-  /// `size_cells` - Size cell count.
+  /// * `child_addr_cells` - Child bus address cell count.
+  /// * `parent_addr_cells` - Parent bus address cell count.
+  /// * `size_cells` - Child bus size cell count.
   ///
   /// # Returns
   ///
@@ -428,6 +441,9 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// # Parameters
   ///
+  /// * `child_addr_cells` - Child bus address cell count.
+  /// * `parent_addr_cells` - Parent bus address cell count.
+  /// * `size_cells` - Child bus size cell count.
   /// * `cursor` - Cursor pointing to the location to read.
   ///
   /// # Returns
@@ -441,6 +457,10 @@ impl<'blob> DtbReader<'blob> {
     size_cells: u32,
     cursor: &mut DtbCursor,
   ) -> Option<(usize, usize, usize)> {
+    check_cell_count!(child_addr_cells);
+    check_cell_count!(parent_addr_cells);
+    check_cell_count!(size_cells);
+
     let count = DtbReader::get_range_size(child_addr_cells, parent_addr_cells, size_cells);
 
     if cursor.loc > self.dtb.len() - count {
@@ -545,7 +565,12 @@ impl<'blob> DtbReader<'blob> {
   }
 
   pub fn scan(&self, scanner: &mut impl DtbScanner) -> Result<(), DtbError> {
-    let mut cursor = self.get_root_node().ok_or(DtbError::InvalidDtb)?;
+    let mut cursor = DtbCursor::new(self.dt_struct_offset);
+    let marker = self.get_u32(&mut cursor).ok_or(DtbError::InvalidDtb)?;
+
+    if marker != FDT_BEGIN_NODE {
+      return Err(DtbError::InvalidDtb);
+    }
 
     loop {
       let name = self

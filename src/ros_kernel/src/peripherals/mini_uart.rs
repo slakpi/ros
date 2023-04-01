@@ -1,4 +1,3 @@
-/// TODO: Move this out of kernel space as soon as video is available.
 use super::base;
 use super::gpio;
 use core::str;

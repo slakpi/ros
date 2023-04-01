@@ -1,7 +1,6 @@
 // ARMv7
  
 #include "abi.h"
-#include "rpi_peripherals.h"
 
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
@@ -49,13 +48,10 @@ Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
 Write kernel configuration struct.
 ------------------------------------------------------------------------------*/
   ldr     r2, =__virtual_start
-  str     r2, [fp, #-32]
-  add     r1, r6, r2
-  str     r1, [fp, #-28]
-  ldr     r1, =PERIPHERAL_BASE
-  add     r1, r1, r2
-  str     r1, [fp, #-24]
+  str     r2, [fp, #-28]
   ldr     r1, =__page_size
+  str     r1, [fp, #-24]
+  add     r1, r6, r2
   str     r1, [fp, #-20]
   ldr     r1, =__kernel_start
   str     r1, [fp, #-16]
@@ -70,7 +66,7 @@ Write kernel configuration struct.
 Restore the entry arguments and transfer control to the kernel stub. The stub
 should not return. If it does, we will end up halting below.
 ------------------------------------------------------------------------------*/
-  sub     r0, fp, #32
+  sub     r0, fp, #28
   bl      ros_kernel
 
 halt:

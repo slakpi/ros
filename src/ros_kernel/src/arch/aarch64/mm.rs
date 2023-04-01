@@ -37,6 +37,42 @@ struct PageTable {
   entries: [usize; 512],
 }
 
+/// Initialize memory.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `blob` - ATAG or DTB blob.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
+///
+/// # Description
+///
+/// Attempts to retrieve the memory layout from ATAGs or a DTB, then directly
+/// map the range into the kernel's virtual address space.
+pub fn init(
+  virtual_base: usize,
+  blob: usize,
+  pages_start: usize,
+  pages_end: usize
+) -> usize {
+  let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
+  let mut pages_end = pages_end;
+
+  for range in mem_config.get_ranges() {
+    pages_end = direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      range.base,
+      range.size,
+      false,
+    );
+  }
+
+  pages_end
+}
+
 /// Direct map a memory range into the kernel's virtual address space.
 ///
 /// # Parameters
@@ -89,7 +125,8 @@ struct PageTable {
 ///
 /// Currently, a single kernel is not expected to deal with anywhere near 128
 /// TiB of physical memory, so it is feasible to directly map the entire
-/// physical address space into the kernel segment.
+/// physical address space into the kernel segment. A physical address P maps to
+/// the virtual address V = virtual base + P.
 ///
 /// This mapping is separate from allocating pages to the kernel.
 ///
@@ -109,6 +146,43 @@ pub fn direct_map_memory(
     TableLevel::Level1,
     pages_start,
     pages_end,
+    base,
+    base,
+    size,
+    device,
+  )
+}
+
+/// Map a range of physical addresses to the kernel's virtual address space.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
+///
+/// # Returns
+///
+/// The new end of the page table area.
+pub fn map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  virt: usize,
+  base: usize,
+  size: usize,
+  device: bool,
+) -> usize {
+  fill_table(
+    virtual_base,
+    TableLevel::Level1,
+    pages_start,
+    pages_end,
+    virt,
     base,
     size,
     device,
@@ -244,7 +318,10 @@ fn make_descriptor(table_level: TableLevel, phys_addr: usize, device: bool) -> u
 /// * `table_level` - The current table level.
 /// * `desc` - The current descriptor in the table.
 /// * `pages_end` - The current end of the table area.
-/// * `range` - The range of physical memory addresses to map.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
 ///
 /// # Description
 ///
@@ -262,6 +339,7 @@ fn alloc_table_and_fill(
   table_level: TableLevel,
   desc: usize,
   pages_end: usize,
+  virt: usize,
   base: usize,
   size: usize,
   device: bool,
@@ -279,7 +357,7 @@ fn alloc_table_and_fill(
 
   (
     desc,
-    fill_table(virtual_base, next_level, next_addr, pages_end, base, size, device),
+    fill_table(virtual_base, next_level, next_addr, pages_end, virt, base, size, device),
   )
 }
 
@@ -343,8 +421,11 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 /// * `virtual_base` - The kernel segment base address.
 /// * `table_level` - The current table level.
 /// * `table_addr` - The address of the current page table.
-/// * `pages_end` - The current end of the table area.
-/// * `range` - The range of physical memory addresses to map.
+/// * `pages_end` - The start of available memory for new pages.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
 ///
 /// # Details
 ///
@@ -409,11 +490,13 @@ fn fill_table(
   table_level: TableLevel,
   table_addr: usize,
   pages_end: usize,
+  virt: usize,
   base: usize,
   size: usize,
   device: bool,
 ) -> usize {
   let entry_size = get_table_entry_size(table_level);
+  let mut virt = virt;
   let mut base = base;
   let mut size = size;
   let mut pages_end = pages_end;
@@ -424,7 +507,7 @@ fn fill_table(
       break;
     }
 
-    let idx = get_descriptor_index(virtual_base + base, table_level);
+    let idx = get_descriptor_index(virtual_base + virt, table_level);
     let mut fill_size = entry_size;
 
     if size < entry_size || table_level == TableLevel::Level1 {
@@ -438,6 +521,7 @@ fn fill_table(
         table_level,
         table.entries[idx],
         pages_end,
+        virt,
         base,
         fill_size,
         device,
@@ -447,48 +531,11 @@ fn fill_table(
       table.entries[idx] = make_descriptor(table_level, base, device);
     }
 
+    virt += fill_size;
     base += fill_size;
     size -= fill_size;
   }
 
   // Return the updated `pages_end` pointer to be used by subsequent mappings.
-  pages_end
-}
-
-/// Initialize memory.
-///
-/// # Parameters
-///
-/// * `virtual_base` - The kernel segment base address.
-/// * `blob` - ATAG or DTB blob.
-/// * `pages_start` - The address of the kernel's Level 1 page table.
-/// * `pages_end` - The start of available memory for new pages.
-///
-/// # Description
-///
-/// Attempts to retrieve the memory layout from ATAGs or a DTB, and passes the
-/// layout on to the memory manager. The memory manager directly maps the
-/// physical memory into the virtual address space as appropriate for the
-/// architecture.
-pub fn init(
-  virtual_base: usize,
-  blob: usize,
-  pages_start: usize,
-  pages_end: usize
-) -> usize {
-  let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
-  let mut pages_end = pages_end;
-
-  for range in mem_config.get_ranges() {
-    pages_end = direct_map_memory(
-      virtual_base,
-      pages_start,
-      pages_end,
-      range.base,
-      range.size,
-      false,
-    );
-  }
-
   pages_end
 }

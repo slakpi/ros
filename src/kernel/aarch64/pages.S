@@ -1,6 +1,5 @@
 #include "abi.h"
 #include "mmu.h"
-#include "rpi_peripherals.h"
 
 #define PAGE_SHIFT      12
 #define TABLE_SHIFT     9

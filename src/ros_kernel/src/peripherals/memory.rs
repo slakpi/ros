@@ -3,6 +3,7 @@
 use crate::support::dtb;
 use core::cmp;
 
+/// Maximum number of memory ranges that can be stored in a configuration.
 const MEM_RANGES: usize = 64;
 
 /// Represents a range of memory available to the system.
@@ -13,7 +14,6 @@ pub struct MemoryRange {
 }
 
 /// Stores the ranges of memory available to the system.
-#[derive(Copy, Clone)]
 pub struct MemoryConfig {
   ranges: [MemoryRange; MEM_RANGES],
   range_count: usize,
@@ -147,6 +147,16 @@ impl<'mem> DtbMemoryScanner<'mem> {
     }
   }
 
+  /// Reads the root cell configuration.
+  ///
+  /// # Parameters
+  ///
+  /// `reader` - The DTB reader.
+  /// `cursor` - The cursor pointing to the root node.
+  ///
+  /// # Returns
+  ///
+  /// Returns Ok if able to read the cell configuration, otherwise a DTB error.
   fn scan_root_node(
     &mut self,
     reader: &dtb::DtbReader,
@@ -175,6 +185,17 @@ impl<'mem> DtbMemoryScanner<'mem> {
     Ok(())
   }
 
+  /// Scans a device node. If the device is a memory device, the function adds
+  /// the memory ranges to the memory layout.
+  ///
+  /// # Parameters
+  ///
+  /// `reader` - The DTB reader.
+  /// `cursor` - The cursor pointing to the root node.
+  ///
+  /// # Returns
+  ///
+  /// Returns Ok if able to read the device node, otherwise a DTB error.
   fn scan_device_node(
     &mut self,
     reader: &dtb::DtbReader,

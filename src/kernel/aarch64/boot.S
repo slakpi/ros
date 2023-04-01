@@ -2,7 +2,6 @@
 
 #include "abi.h"
 #include "mmu.h"
-#include "rpi_peripherals.h"
 
 /*------------------------------------------------------------------------------
 EL3 secure configuration default. Levels lower than EL3 are not secure and EL2
@@ -169,13 +168,9 @@ Write kernel configuration struct. Provide all addresses as physical.
 ------------------------------------------------------------------------------*/
   ldr     x11, =__virtual_start
   ldr     x10, =__page_size
-  stp     x11, x10, [x29, #-80]
+  stp     x11, x10, [x29, #-64]
 
   mov     x9, x19
-  ldr     x10, =PERIPHERAL_BASE
-  stp     x9, x10, [x29, #-64]
-
-  ldr     x9, =PERIPHERAL_BLOCK_SIZE
   ldr     x10, =__kernel_start
   sub     x10, x10, x11
   stp     x9, x10, [x29, #-48]
@@ -192,7 +187,7 @@ Write kernel configuration struct. Provide all addresses as physical.
 Transfer control to the kernel stub. The stub should not return. If it does, we
 will end up halting below.
 ------------------------------------------------------------------------------*/
-  sub     x0, x29, #80
+  sub     x0, x29, #64
   br      x21
 
 el1_cpu_halt:

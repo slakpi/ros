@@ -1,8 +1,0 @@
-#if !defined RPI_COMMON_H
-#define RPI_COMMON_H
-
-#define RPI_PERIPHERAL_BASE   0x3f000000
-#define RPI4_PERIPHERAL_BASE  0xfe000000
-#define PERIPHERAL_BLOCK_SIZE 0x1000000
-
-#endif

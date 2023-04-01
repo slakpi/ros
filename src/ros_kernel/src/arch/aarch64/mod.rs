@@ -1,5 +1,8 @@
+//! AArch64
+
 pub mod exceptions;
 pub mod mm;
+pub mod peripherals;
 
 use core::ffi::c_void;
 use core::ptr;
@@ -11,8 +14,6 @@ struct KernelConfig {
   virtual_base: usize,
   page_size: usize,
   blob: usize,
-  peripheral_base: usize,
-  peripheral_block_size: usize,
   kernel_base: usize,
   kernel_size: usize,
   kernel_pages_start: usize,
@@ -33,6 +34,13 @@ pub fn init(config: *const c_void) {
   exceptions::init();
 
   pages_end = mm::init(
+    config.virtual_base,
+    config.blob,
+    config.kernel_pages_start,
+    pages_end,
+  );
+
+  _ = peripherals::init(
     config.virtual_base,
     config.blob,
     config.kernel_pages_start,

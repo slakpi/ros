@@ -1,26 +1,4 @@
-/// Initialize the ARMv7 page tables for the kernel. The canonical 32-bit 3:1
-/// virtual address space layout for a process looks like:
-///
-///   +-----------------+ 0xffff_ffff
-///   |                 |
-///   | Kernel Segment  | 1 GiB
-///   |                 |
-///   +-----------------+ 0xc000_0000
-///   |                 |
-///   | User Segment    | 3 GiB
-///   |                 |
-///   +-----------------+ 0x0000_0000
-///
-pub fn direct_map_memory(
-  virtual_base: usize,
-  pages_start: usize,
-  pages_end: usize,
-  base: usize,
-  size: usize,
-  device: bool,
-) -> usize {
-  pages_end
-}
+//! ARMv7a memory management.
 
 /// Initialize memory.
 ///
@@ -42,6 +20,30 @@ pub fn init(
   blob: usize,
   pages_start: usize,
   pages_end: usize
+) -> usize {
+  pages_end
+}
+
+/// Initialize the ARMv7 page tables for the kernel. The canonical 32-bit 3:1
+/// virtual address space layout for a process looks like:
+///
+///   +-----------------+ 0xffff_ffff
+///   |                 |
+///   | Kernel Segment  | 1 GiB
+///   |                 |
+///   +-----------------+ 0xc000_0000
+///   |                 |
+///   | User Segment    | 3 GiB
+///   |                 |
+///   +-----------------+ 0x0000_0000
+///
+pub fn direct_map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  base: usize,
+  size: usize,
+  device: bool,
 ) -> usize {
   pages_end
 }
