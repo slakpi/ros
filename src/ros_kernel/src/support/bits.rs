@@ -17,7 +17,7 @@ use core::{cmp, ops};
 /// # Returns
 ///
 /// The aligned address.
-pub fn _align_down<T>(addr: T, boundary: T) -> T
+pub fn align_down<T>(addr: T, boundary: T) -> T
 where
   T: ops::BitAnd<Output = T> + ops::Not<Output = T> + ops::Sub<Output = T> + From<u8> + Copy,
 {

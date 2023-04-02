@@ -1,123 +1,12 @@
 //! DTB physical memory scanning.
 
-use crate::support::dtb;
+use crate::support::{dtb, range_set, range};
 use core::cmp;
 
 /// Maximum number of memory ranges that can be stored in a configuration.
 const MEM_RANGES: usize = 64;
 
-/// Represents a range of memory available to the system.
-#[derive(Copy, Clone)]
-pub struct MemoryRange {
-  pub base: usize,
-  pub size: usize,
-}
-
-/// Stores the ranges of memory available to the system.
-pub struct MemoryConfig {
-  ranges: [MemoryRange; MEM_RANGES],
-  range_count: usize,
-}
-
-impl MemoryConfig {
-  /// Construct a new MemoryConfig.
-  ///
-  /// # Returns
-  ///
-  /// An empty MemoryConfig.
-  pub fn new() -> Self {
-    MemoryConfig {
-      ranges: [MemoryRange { base: 0, size: 0 }; MEM_RANGES],
-      range_count: 0,
-    }
-  }
-
-  /// Access the configured memory ranges.
-  ///
-  /// # Returns
-  ///
-  /// A slice with the valid memory ranges stored in the configuration.
-  pub fn get_ranges(&self) -> &[MemoryRange] {
-    &self.ranges[0..self.range_count]
-  }
-
-  /// Insert a new memory range in order sorted by base.
-  ///
-  /// # Parameters
-  ///
-  /// * `range` - The new block of memory to add to the configuration.
-  pub fn insert_range(&mut self, range: MemoryRange) {
-    if self.range_count >= MEM_RANGES {
-      return;
-    }
-
-    let mut ins = self.range_count;
-
-    for i in 0..self.range_count {
-      if range.base <= self.ranges[i].base {
-        ins = i;
-        break;
-      }
-    }
-
-    self.ranges.copy_within(ins..self.range_count, ins + 1);
-    self.range_count += 1;
-    self.ranges[ins] = range;
-  }
-
-  /// Combines ranges as necessary to ensure ranges do not overlap and removes
-  /// any empty ranges.
-  pub fn trim_ranges(&mut self) {
-    self.trim_overlapping_ranges();
-    self.trim_empty_ranges();
-  }
-
-  /// Removes empty ranges from the configured ranges.
-  fn trim_empty_ranges(&mut self) {
-    let mut i = 0usize;
-
-    while i < self.range_count {
-      if self.ranges[i].size > 0 {
-        i += 1;
-        continue;
-      }
-
-      self.ranges.copy_within((i + 1)..self.range_count, i);
-      self.range_count -= 1;
-    }
-  }
-
-  /// Removes overlapping ranges from the configured ranges.
-  fn trim_overlapping_ranges(&mut self) {
-    if self.range_count < 2 {
-      return;
-    }
-
-    let mut i = 0usize;
-
-    while i < self.range_count - 1 {
-      let a = &self.ranges[i];
-      let b = &self.ranges[i + 1];
-      let a_end = a.base + a.size;
-      let b_end = b.base + b.size;
-
-      if a.base <= b.base && a_end >= b_end {
-        // This range encompasses the next range, remove the next range.
-        self.ranges.copy_within((i + 2)..self.range_count, i + 1);
-      } else if b.base < a.base && b_end > a_end {
-        // The next range encompasses this range, remove this range.
-        self.ranges.copy_within((i + 1)..self.range_count, i);
-      } else if a.base <= b.base && a_end > b.base {
-        // This range overlaps the next. Union the ranges and remove the
-        // extraneous range.
-        self.ranges[i].size = b_end - a.base;
-        self.ranges.copy_within((i + 2)..self.range_count, i + 1);
-      } else {
-        i += 1;
-      }
-    }
-  }
-}
+pub type MemoryConfig = range_set::RangeSet<MEM_RANGES>;
 
 /// Scans for DTB memory nodes.
 struct DtbMemoryScanner<'mem> {
@@ -275,7 +164,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
         .get_reg(addr_cells, size_cells, &mut tmp_cursor)
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
-      self.config.insert_range(MemoryRange { base, size });
+      self.config.insert_range(range::Range { base, size });
     }
 
     Ok(true)
@@ -308,7 +197,7 @@ pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
 
   config.trim_ranges();
 
-  if config.range_count == 0 {
+  if config.is_empty() {
     return None;
   }
 
