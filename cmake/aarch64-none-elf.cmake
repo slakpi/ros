@@ -1,7 +1,13 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64) # 64-bit AArch64
 
+# Hardware floating-point and SIMD are enabled by default with AArch64. If the
+# kernel uses those registers, however, they will need to be saved when software
+# exceptions trap into the kernel. This wastes time and memory, so just disable
+# both for the kernel.
+
 if(NOT DEFINED RPI_VERSION)
+  message(WARNING "Raspberry Pi board version not specified, defaulting to 3.")
   set(RPI_VERSION "3")
 endif()
 
@@ -18,8 +24,7 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles")
 
-# Turn off hardware floating-point and SIMD. The kernel does not allow floating-
-# point or vector instructions.
+# Turn off hardware floating-point and SIMD.
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=+nofp+nosimd")
 
 # Set the CPU models for the Raspberry Pi model. AArch64 is only supported the
@@ -27,16 +32,17 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=+nofp+nosimd")
 # the 3, the SoC just has less RAM.
 if("${RPI_VERSION}" STREQUAL "4")
   set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a72")
-else()
+elseif("${RPI_VERSION}" STREQUAL "3")
   set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a53")
+else()
+  message(FATAL_ERROR "Unsupported Raspberry Pi board version.")
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
 
-# Set the Rust target. Use the software floating-point variant. The kernel does
-# not allow floating-point or vector instructions.
+# Set the Rust target. Use the software floating-point variant.
 set(Rust_CARGO_TARGET aarch64-unknown-none-softfloat)
 
 # The Raspberry Pi bootloader expects 64-bit kernels to be named `kernel8.img`

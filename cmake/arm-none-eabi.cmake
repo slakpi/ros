@@ -1,7 +1,11 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR armv7) # 32-bit ARMv7
 
+# Unlike the AArch64 toolchain, the ARM toolchain only supports software
+# floating-point and does not enable SIMD by default.
+
 if(NOT DEFINED RPI_VERSION)
+  message(WARNING "Raspberry Pi board version not specified, defaulting to 2.")
   set(RPI_VERSION "2")
 endif()
 
@@ -18,9 +22,6 @@ set(CMAKE_OBJDUMP ${cross_compiler}objdump
 
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles")
 
-# It is not necessary to turn off hardware floating-point. This toolchain only
-# supports software floating-point.
-
 # Set the CPU models for the Raspberry Pi model. NOTE: The Zero 2W model uses
 # the same processor as the 3, the SoC just has less RAM.
 if("${RPI_VERSION}" STREQUAL "4")
@@ -29,6 +30,8 @@ elseif("${RPI_VERSION}" STREQUAL "3")
   set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a53")
 elseif("${RPI_VERSION}" STREQUAL "2")
   set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a7")
+else()
+  message(FATAL_ERROR "Unsupported Raspberry Pi board version.")
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}")
