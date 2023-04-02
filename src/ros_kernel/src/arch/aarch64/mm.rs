@@ -120,8 +120,8 @@ pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usi
 ///
 /// Currently, a single kernel is not expected to deal with anywhere near 128
 /// TiB of physical memory, so it is feasible to directly map the entire
-/// physical address space into the kernel segment. A physical address P maps to
-/// the virtual address V = virtual base + P.
+/// physical address space into the kernel segment. A physical address Ap maps
+/// to the virtual address Av = virtual base + Ap.
 ///
 /// This mapping is separate from allocating pages to the kernel.
 ///
@@ -149,6 +149,9 @@ pub fn direct_map_memory(
 }
 
 /// Map a range of physical addresses to the kernel's virtual address space.
+/// This is a generalized version of `direct_map_memory` where `virt` != `base`.
+/// A physical address Ap maps the the virtual address
+/// Av = virtual base + (Ap - base + virt).
 ///
 /// # Parameters
 ///
@@ -443,16 +446,19 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 ///    remaining size.
 ///
 ///    Sticking with 4 KiB pages and skipping Level 4 translation, a 128 GiB
-///    address space would require 128 Level 3 tables, one Level 2 table, and
-///    the Level 1 table for a total of 520 KiB. That can be reduced even more
-///    to 8 KiB and eliminate Level 3 translation by using one Level 2 table
-///    with 128 1 GiB entries and one Level 1 table.
+///    address space would require 128 Level 3 tables, each with 512 2 MiB
+///    entries, one Level 2 table, and the Level 1 table for a total of 520 KiB.
+///    That can be reduced even more to 8 KiB and eliminate Level 3 translation
+///    by using one Level 2 table with 128 1 GiB entries and one Level 1 table.
 ///
 ///    In practice, the ranges may not be all multiples of 1 GiB, so there will
 ///    be some mixture of Level 2, Level 3, and possibly Level 4 translation.
 ///
-/// 2. The range size is greater than or equal to the entry size and this
-///    translation level is Level 1 or Level 4.
+///    The goal is to keep the kernel page tables as compact as possible with as
+///    few translation steps as necessary.
+///
+/// 2. The range size is greater than or equal to the entry size at this
+///    translation level AND we are at the Level 1 or a Level 4 table.
 ///
 ///    In the Level 1 case, multiple Level 2 tables must be created but the
 ///    mechanics are otherwise the same.

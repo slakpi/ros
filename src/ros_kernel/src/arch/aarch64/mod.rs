@@ -4,9 +4,6 @@ pub mod exceptions;
 pub mod mm;
 pub mod peripherals;
 
-use core::ffi::c_void;
-use core::ptr;
-
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
 #[repr(C)]
@@ -24,9 +21,10 @@ struct KernelConfig {
 ///
 /// # Parameters
 ///
-/// `config` - The kernel configuration provided by the bootstrap code.
-pub fn init(config: *const c_void) {
-  debug_assert!(config != ptr::null());
+/// * `config` - The kernel configuration address provided by the bootstrap
+///   code.
+pub fn init(config: usize) {
+  debug_assert!(config != 0);
 
   let config = unsafe { &*(config as *const KernelConfig) };
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;

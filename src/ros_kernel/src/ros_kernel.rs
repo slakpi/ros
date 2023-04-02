@@ -3,7 +3,6 @@
 use super::arch;
 use super::peripherals::mini_uart;
 use crate::dbg_print;
-use core::ffi::c_void;
 use core::panic::PanicInfo;
 
 /// Panic handler. Prints out diagnostic information and halts.
@@ -17,13 +16,14 @@ fn panic(info: &PanicInfo) -> ! {
 ///
 /// # Parameters
 ///
-/// * `config` - The kernel configuration provided by the bootstrap code.
+/// * `config` - The kernel configuration address provided by the bootstrap
+///   code.
 ///
 /// # Returns
 ///
 /// Does not return.
 #[no_mangle]
-extern "C" fn ros_kernel(config: *const c_void) -> ! {
+extern "C" fn ros_kernel(config: usize) -> ! {
   arch::init(config);
   mini_uart::init();
   dbg_print!("=== ROS ===\n");
