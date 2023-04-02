@@ -3,12 +3,12 @@
 use super::range::{Range, RangeOrder};
 
 /// Fixed-size, ordered set of Ranges.
-pub struct RangeSet<const SetSize: usize> {
-  ranges: [Range; SetSize],
+pub struct RangeSet<const SET_SIZE: usize> {
+  ranges: [Range; SET_SIZE],
   count: usize,
 }
 
-impl<const SetSize: usize> RangeSet<SetSize> {
+impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   /// Construct a new RangeSet.
   ///
   /// # Returns
@@ -16,7 +16,7 @@ impl<const SetSize: usize> RangeSet<SetSize> {
   /// An empty RangeSet.
   pub fn new() -> Self {
     RangeSet {
-      ranges: [Range { base: 0, size: 0 }; SetSize],
+      ranges: [Range { base: 0, size: 0 }; SET_SIZE],
       count: 0,
     }
   }
@@ -55,7 +55,7 @@ impl<const SetSize: usize> RangeSet<SetSize> {
   ///
   /// * `range` - The new range to add to the set.
   pub fn insert_range(&mut self, range: Range) {
-    if self.count >= SetSize {
+    if self.count >= SET_SIZE {
       return;
     }
 
@@ -105,7 +105,7 @@ impl<const SetSize: usize> RangeSet<SetSize> {
       if let Some(b) = split.1 {
         if a_none {
           self.ranges[i] = b;
-        } else if self.count < SetSize {
+        } else if self.count < SET_SIZE {
           self.ranges.copy_within(i..self.count, i + 1);
           self.ranges[i + 1] = b;
           self.count += 1;

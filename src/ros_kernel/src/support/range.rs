@@ -13,7 +13,6 @@ use super::bits;
 /// * `Equal` - The two ranges are exactly equal.
 /// * `Contains` - The LHS range fully contains the RHS range.
 /// * `ContainedBy` - The LHS range is fully contained by the RHS range.
-#[derive(PartialEq)]
 pub enum RangeOrder {
   MutuallyExclusiveLess,
   MutuallyExclusiveGreater,
