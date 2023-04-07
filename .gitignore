@@ -1,3 +1,5 @@
-.vscode
+.vscode/*
+!.vscode/README.md
+!.vscode/cmake-kits.json
 build
 **/.DS_Store

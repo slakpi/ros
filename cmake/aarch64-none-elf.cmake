@@ -11,7 +11,7 @@ if(NOT DEFINED RPI_VERSION)
   set(RPI_VERSION "3")
 endif()
 
-set(cross_compiler ${TC_PATH}/bin/aarch64-none-elf-)
+set(cross_compiler ${TC_PATH}/gnu-aarch64-none-elf/bin/aarch64-none-elf-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 set(CMAKE_C_COMPILER ${cross_compiler}gcc)

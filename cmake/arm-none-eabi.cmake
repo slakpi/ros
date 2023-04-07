@@ -9,7 +9,7 @@ if(NOT DEFINED RPI_VERSION)
   set(RPI_VERSION "2")
 endif()
 
-set(cross_compiler ${TC_PATH}/bin/arm-none-eabi-)
+set(cross_compiler ${TC_PATH}/gnu-arm-none-eabi/bin/arm-none-eabi-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 set(CMAKE_C_COMPILER ${cross_compiler}gcc)

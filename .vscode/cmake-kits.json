@@ -1,0 +1,10 @@
+[
+  {
+    "name": "arm-none-eabi",
+    "toolchainFile": "${workspaceFolder}/cmake/arm-none-eabi.cmake"
+  },
+  {
+    "name": "aarch64-none-elf",
+    "toolchainFile": "${workspaceFolder}/cmake/aarch64-none-elf.cmake"
+  }
+]
