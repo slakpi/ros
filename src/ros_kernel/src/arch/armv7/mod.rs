@@ -17,6 +17,8 @@ struct KernelConfig {
   kernel_pages_size: usize,
 }
 
+static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
+
 /// ARMv7a platform configuration.
 ///
 /// # Parameters
@@ -29,11 +31,8 @@ pub fn init(config: usize) {
   let config = &*(config as *const KernelConfig);
 
   exceptions::init();
+}
 
-  _ = mm::init(
-    config.virtual_base,
-    config.blob,
-    config.kernel_pages_start,
-    config.kernel_pages_end,
-  );
+pub fn _get_memory_layout() -> &'static memory::MemoryConfig {
+  unsafe { &MEM_LAYOUT }
 }

@@ -14,7 +14,7 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   /// # Returns
   ///
   /// An empty RangeSet.
-  pub fn new() -> Self {
+  pub const fn new() -> Self {
     RangeSet {
       ranges: [Range { base: 0, size: 0 }; SET_SIZE],
       count: 0,
@@ -35,7 +35,7 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   /// # Returns
   ///
   /// The number of ranges in the set.
-  pub fn len(&self) -> usize {
+  pub fn _len(&self) -> usize {
     self.count
   }
 

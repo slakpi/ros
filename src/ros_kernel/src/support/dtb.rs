@@ -501,7 +501,7 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// A slice containing at most the specified number of bytes. If the slice
   /// contains fewer bytes, the cursor will be positioned at the end of the DTB.
-  pub fn get_u8_slice(&self, size: usize, cursor: &mut DtbCursor) -> Option<&'blob [u8]> {
+  pub fn _get_u8_slice(&self, size: usize, cursor: &mut DtbCursor) -> Option<&'blob [u8]> {
     let len = self.dtb.len();
     let end = cursor.loc + cmp::min(len - cursor.loc, size);
     let ret = &self.dtb[cursor.loc..end];

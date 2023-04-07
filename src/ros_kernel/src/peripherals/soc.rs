@@ -43,7 +43,7 @@ impl SocConfig {
   }
 }
 
-pub fn get_soc_mappings(blob: usize) -> Option<SocConfig> {
+pub fn get_soc_memory_layout(blob: usize) -> Option<SocConfig> {
   let mut config = SocConfig::new();
   let reader = dtb::DtbReader::new(blob).ok()?;
 

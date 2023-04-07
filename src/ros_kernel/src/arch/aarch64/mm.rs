@@ -42,19 +42,27 @@ struct PageTable {
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
-/// * `blob` - ATAG or DTB blob.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
 /// * `pages_end` - The start of available memory for new pages.
+/// * `mem_layout` - The physical memory layout.
 ///
 /// # Description
 ///
-/// Attempts to retrieve the memory layout from ATAGs or a DTB, then directly
-/// map the range into the kernel's virtual address space.
-pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
-  let mem_config = memory::get_memory_layout(virtual_base + blob).unwrap();
+/// Directly maps physical memory ranges into the kernel's virtual address
+/// space.
+///
+/// # Returns
+///
+/// The new end of the page table area.
+pub fn init(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_layout: &memory::MemoryConfig,
+) -> usize {
   let mut pages_end = pages_end;
 
-  for range in mem_config.get_ranges() {
+  for range in mem_layout.get_ranges() {
     pages_end = direct_map_memory(
       virtual_base,
       pages_start,

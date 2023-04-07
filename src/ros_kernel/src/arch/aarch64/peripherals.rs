@@ -8,9 +8,9 @@ use crate::peripherals::{base, soc};
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
-/// * `blob` - DTB blob.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
 /// * `pages_end` - The start of available memory for new pages.
+/// * `soc_layout` - The mapping of SoC memory to ARM CPU memory.
 ///
 /// # Details
 ///
@@ -21,7 +21,7 @@ use crate::peripherals::{base, soc};
 ///
 /// For example, the BCM2710 uses 0x7e000000 as the base address for
 /// peripherals. The Raspberry Pi 3 maps this address to the ARM CPU address
-/// 0x3c000000. The page tables will map 0xffff_8000_7e00_0000 => 0x3c000000.
+/// 0x3f000000. The page tables will map 0xffff_8000_7e00_0000 => 0x3f000000.
 ///
 ///     TODO: Eventually, this function should be completely unaware of the SoC
 ///           base address. Device addresses in the DTB should be used instead.
@@ -33,11 +33,15 @@ use crate::peripherals::{base, soc};
 /// # Returns
 ///
 /// The new end of the page table area.
-pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
-  let soc_config = soc::get_soc_mappings(virtual_base + blob).unwrap();
+pub fn init(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  soc_layout: &soc::SocConfig,
+) -> usize {
   let mut pages_end = pages_end;
 
-  for mapping in soc_config.get_mappings() {
+  for mapping in soc_layout.get_mappings() {
     pages_end = mm::map_memory(
       virtual_base,
       pages_start,

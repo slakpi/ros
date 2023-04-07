@@ -1,6 +1,6 @@
 //! DTB physical memory scanning.
 
-use crate::support::{dtb, range_set, range};
+use crate::support::{dtb, range, range_set};
 use core::cmp;
 
 /// Maximum number of memory ranges that can be stored in a configuration.

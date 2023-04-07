@@ -1,21 +1,30 @@
 //! ARMv7a memory management.
 
+use crate::peripherals::memory;
+
 /// Initialize memory.
 ///
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
-/// * `blob` - ATAG or DTB blob.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
 /// * `pages_end` - The start of available memory for new pages.
+/// * `mem_layout` - The physical memory layout.
 ///
 /// # Description
 ///
-/// Attempts to retrieve the memory layout from ATAGs or a DTB, and passes the
-/// layout on to the memory manager. The memory manager directly maps the
-/// physical memory into the virtual address space as appropriate for the
-/// architecture.
-pub fn init(virtual_base: usize, blob: usize, pages_start: usize, pages_end: usize) -> usize {
+/// Directly maps physical memory ranges into the kernel's virtual address
+/// space.
+///
+/// # Returns
+///
+/// The new end of the page table area.
+pub fn init(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_layout: &memory::MemoryConfig,
+) -> usize {
   pages_end
 }
 
@@ -36,6 +45,36 @@ pub fn direct_map_memory(
   virtual_base: usize,
   pages_start: usize,
   pages_end: usize,
+  base: usize,
+  size: usize,
+  device: bool,
+) -> usize {
+  pages_end
+}
+
+/// Map a range of physical addresses to the kernel's virtual address space.
+/// This is a generalized version of `direct_map_memory` where `virt` != `base`.
+/// A physical address Ap maps the the virtual address
+/// Av = virtual base + (Ap - base + virt).
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new pages.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
+///
+/// # Returns
+///
+/// The new end of the page table area.
+pub fn map_memory(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  virt: usize,
   base: usize,
   size: usize,
   device: bool,
