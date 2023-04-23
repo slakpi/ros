@@ -25,22 +25,36 @@ exception information before calling into Rustland.
 MMU
 ---
 
-The bootstrap code sets up the bare minimum page table structure to allow
-enabling the MMU before calling into Rustland. The minimal page table structure
-maps the kernel, DTB (if present), and peripheral addresses into the kernel's
-virtual address space using their physical offsets from the virtual address
-base. For example, the bootstrap setup for AArch64 on a Raspberry Pi 3 is:
-
-                 Physical Address         Virtual Address
-    -----------------------------------------------------------
-    Kernel       0x0000_0000_0000_0000    0xffff_8000_0000_0000
-    DTB          0x0000_0000_0800_0000    0xffff_8000_0800_0000
-    Peripherals  0x0000_0000_3f00_0000    0xffff_8000_3f00_0000
-
 The canonical way to map memory is to direct-map all (or most) of the physical
 memory into the virtual address space. Since the bootstrap code is not aware of
 the amount of physical memory, it takes a conservative approach by mapping only
-what is need to get the kernel going.
+what is need to get the kernel going. The Rustland code will parse the ATAGs /
+DTB, then map appropriately for the architecture.
 
-The Rustland code will parse the ATAGs / DTB, then map appropriately for the
-architecture.
+The minimal page table structure maps the kernel and DTB (if present) into the
+kernel's virtual address space using their physical offsets from the virtual
+address base.
+
+Additionally, the bootstrap code sets up a parallel identity mapping in the MMU
+for the kernel. Since the CPU's program counter will still be using physical
+addresses after enabling the MMU, this identity mapping allows the CPU to
+continue executing instructions. The bootstrap code using a jump to a virtual
+address to switch the program counter over, then clears the identity mapping.
+
+The bootstrap code aligns the size of the kernel area (`__kernel_id_pages_end`)
+and the size of the DTB (if present) on 2 MiB boundaries to skip Level 4
+address translation.
+
+For example, an AArch64 layout with a 2.5 MiB kernel and 16 KiB DTB on a
+Raspberry Pi 3 might look like:
+
+                 Physical Address         Virtual Address
+    -----------------------------------------------------------
+    Kernel       0x0000_0000_0000_0000-   0xffff_8000_0000_0000-
+    Virtual      0x0000_0000_0040_0000    0xffff_8000_0040_0000
+
+    Kernel       0x0000_0000_0000_0000-   0x0000_0000_0000_0000-
+    Identity     0x0000_0000_0040_0000    0x0000_0000_0040_0000
+
+    DTB          0x0000_0000_0800_0000-   0xffff_8000_0800_0000-
+                 0x0000_0000_0820_0000    0xffff_8000_0820_0000
