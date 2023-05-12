@@ -73,64 +73,6 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
     self.count += 1;
   }
 
-  /// Exclude a range from the set.
-  ///
-  /// # Parameters
-  ///
-  /// * `excl` - The range to exclude.
-  /// * `align` - The alignment to use for the exclusion.
-  pub fn exclude_range(&mut self, excl: &Range, align: usize) {
-    if excl.size == 0 {
-      return;
-    }
-
-    let mut i = 0usize;
-
-    while i < self.count {
-      let split = self.ranges[i].split_range(excl, align);
-      let mut a_none = false;
-      let mut b_none = false;
-
-      // If the first element is valid, the current range can simply be
-      // replaced.
-      if let Some(a) = split.0 {
-        self.ranges[i] = a;
-      } else {
-        a_none = true;
-      }
-
-      // If the second element is valid, but the first is not, simply replace
-      // the current range. Otherwise, insert the new range after the current
-      // range. If inserting, increment the index an extra time.
-      if let Some(b) = split.1 {
-        if a_none {
-          self.ranges[i] = b;
-        } else if self.count < SET_SIZE {
-          self.ranges.copy_within(i..self.count, i + 1);
-          self.ranges[i + 1] = b;
-          self.count += 1;
-          i += 1;
-        } else {
-          debug_assert!(false, "Could not split range; set is full.");
-        }
-      } else {
-        b_none = true;
-      }
-
-      // If neither element is valid, remove the current range. Do not increment
-      // the index yet.
-      if a_none && b_none {
-        self.ranges.copy_within((i + 1)..self.count, i);
-        self.count -= 1;
-        continue;
-      }
-
-      i += 1;
-    }
-
-    self.trim_empty_ranges();
-  }
-
   /// Combines ranges as necessary to ensure ranges do not overlap and removes
   /// any empty ranges.
   pub fn trim_ranges(&mut self) {

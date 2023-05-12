@@ -1,4 +1,4 @@
-//! ARMv7a
+//! ARMv7a Initialization
 
 pub mod exceptions;
 pub mod mm;
@@ -26,9 +26,11 @@ static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 /// * `config` - The kernel configuration address provided by the bootstrap
 ///   code.
 pub fn init(config: usize) {
-  debug_assert!(config != 0);
+  assert!(config != 0);
 
   let config = &*(config as *const KernelConfig);
+
+  assert!(page_size == 4096);
 
   exceptions::init();
 }

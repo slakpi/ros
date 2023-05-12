@@ -1,11 +1,11 @@
-//! AArch64
+//! AArch64 Initialization
 
 pub mod exceptions;
 pub mod mm;
 pub mod peripherals;
 
+use crate::mm::page_allocator::PageAllocator;
 use crate::peripherals::{memory, soc};
-use crate::support::{dtb, range};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -29,10 +29,14 @@ static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 /// * `config` - The kernel configuration address provided by the bootstrap
 ///   code.
 pub fn init(config: usize) {
-  debug_assert!(config != 0);
+  assert!(config != 0);
 
   let config = unsafe { &*(config as *const KernelConfig) };
-  let mut mem_layout = memory::get_memory_layout(config.virtual_base + config.blob).unwrap();
+
+  // TODO: 16 KiB and 64 KiB page support.
+  assert!(config.page_size == 4096);
+
+  let mem_layout = memory::get_memory_layout(config.virtual_base + config.blob).unwrap();
   let soc_layout = soc::get_soc_memory_layout(config.virtual_base + config.blob).unwrap();
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
@@ -45,23 +49,14 @@ pub fn init(config: usize) {
     &mem_layout,
   );
 
-  pages_end = peripherals::init(
+  _ = peripherals::init(
     config.virtual_base,
     config.kernel_pages_start,
     pages_end,
     &soc_layout,
   );
 
-  let excl = range::Range {
-    base: 0,
-    size: pages_end,
-  };
-  mem_layout.exclude_range(&excl, config.page_size);
-
-  if let Ok(size) = dtb::DtbReader::check_dtb(config.virtual_base + config.blob) {
-    let excl = range::Range { base: config.blob, size };
-    mem_layout.exclude_range(&excl, config.page_size);
-  }
+  let size = PageAllocator::calc_size(config.page_size, mem_layout.get_ranges()[0].size);
 
   unsafe { MEM_LAYOUT = mem_layout };
 }
