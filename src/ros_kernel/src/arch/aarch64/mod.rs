@@ -49,14 +49,21 @@ pub fn init(config: usize) {
     &mem_layout,
   );
 
-  _ = peripherals::init(
+  pages_end = peripherals::init(
     config.virtual_base,
     config.kernel_pages_start,
     pages_end,
     &soc_layout,
   );
 
-  let size = PageAllocator::calc_size(config.page_size, mem_layout.get_ranges()[0].size);
+  for r in mem_layout.get_ranges() {
+    _ = PageAllocator::new(
+      config.page_size,
+      r.base,
+      r.size,
+      (config.virtual_base + pages_end) as *mut u8,
+    );
+  }
 
   unsafe { MEM_LAYOUT = mem_layout };
 }

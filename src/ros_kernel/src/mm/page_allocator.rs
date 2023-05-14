@@ -59,13 +59,42 @@ impl<'memory> PageAllocator<'memory> {
       levels,
     };
 
+    let byte_bits = u8::BITS as usize;
+
     // Initialize the availability flags. Any blocks not covered by the level
     // above will be marked as available.
     let mut bits = block_size / page_size;
 
     allocator.flags.fill(0);
 
-    // TODO: Initialize uncovered blocks.
+    for i in 0..PAGE_LEVELS {
+      bits = bits >> 1;
+
+      // If `bits` is not a power of two, shifting it left again will give the
+      // bit index of the uncovered bits. For example, 15 >> 1 = 7, then
+      // 7 << 1 = 14. Starting from that bit index, mark pages as available up
+      // to the valid number of bits in the level.
+      //
+      // Shifting the bit index down by 3 gives the start byte index, and a
+      // modulo 7 gives the bit index within that byte. E.g. 14 >> 3 = 1, so we
+      // start with byte 1. 14 & 7 = 6, so start with bit 6.
+      let bit = bits << 1;
+      let mut idx = allocator.levels[i].offset + (bit >> 3);
+      let mut mask = bit & 0x7;
+
+      for _ in bit..(allocator.levels[i].valid) {
+        allocator.flags[idx] = allocator.flags[idx] | (mask as u8);
+
+        mask = mask << 1;
+
+        if mask == 0 {
+          idx = idx + 1;
+          mask = 1;
+        }
+      }
+    }
+
+    // TODO: Somehow the entire topmost level needs to be marked as available.
 
     allocator
   }
