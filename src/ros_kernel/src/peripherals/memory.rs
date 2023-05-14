@@ -37,8 +37,8 @@ impl<'mem> DtbMemoryScanner<'mem> {
   ///
   /// # Parameters
   ///
-  /// `reader` - The DTB reader.
-  /// `cursor` - The cursor pointing to the root node.
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The cursor pointing to the root node.
   ///
   /// # Returns
   ///
@@ -76,8 +76,8 @@ impl<'mem> DtbMemoryScanner<'mem> {
   ///
   /// # Parameters
   ///
-  /// `reader` - The DTB reader.
-  /// `cursor` - The cursor pointing to the root node.
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The cursor pointing to the root node.
   ///
   /// # Returns
   ///

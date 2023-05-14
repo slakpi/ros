@@ -362,8 +362,8 @@ impl<'blob> DtbReader<'blob> {
   ///
   /// # Parameters
   ///
-  /// `addr_cells` - Address cell count.
-  /// `size_cells` - Size cell count.
+  /// * `addr_cells` - Address cell count.
+  /// * `size_cells` - Size cell count.
   ///
   /// # Returns
   ///

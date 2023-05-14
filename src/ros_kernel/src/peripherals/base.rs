@@ -41,8 +41,8 @@ pub fn get_peripheral_register_addr(reg: usize) -> *mut u32 {
 ///
 /// # Parameters
 ///
-/// `val` - Value to write.
-/// `to` - Register to receive the value.
+/// * `val` - Value to write.
+/// * `to` - Register to receive the value.
 pub fn peripheral_reg_put(val: u32, to: usize) {
   let addr = get_peripheral_register_addr(to);
   unsafe {
@@ -54,7 +54,7 @@ pub fn peripheral_reg_put(val: u32, to: usize) {
 ///
 /// # Parameters
 ///
-/// `from` - Register to read.
+/// * `from` - Register to read.
 ///
 /// # Returns
 ///
@@ -68,7 +68,7 @@ pub fn peripheral_reg_get(from: usize) -> u32 {
 ///
 /// # Parameters
 ///
-/// `count` - Number of loop iterations.
+/// * `count` - Number of loop iterations.
 pub fn peripheral_delay(count: u64) {
   let mut c = count;
   while c > 0 {

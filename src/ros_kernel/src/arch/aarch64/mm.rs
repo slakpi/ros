@@ -210,7 +210,7 @@ fn get_next_table(table_level: TableLevel) -> Option<TableLevel> {
     TableLevel::Level1 => Some(TableLevel::Level2),
     TableLevel::Level2 => Some(TableLevel::Level3),
     TableLevel::Level3 => Some(TableLevel::Level4),
-    _ => None,
+    TableLevel::Level4 => None,
   }
 }
 

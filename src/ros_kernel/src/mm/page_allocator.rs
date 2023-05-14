@@ -1,3 +1,5 @@
+//! Buddy Page Allocator
+//! https://en.wikipedia.org/wiki/Buddy_memory_allocation
 use core::slice;
 
 const PAGE_LEVELS: usize = 11;
@@ -22,9 +24,8 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `page_size` - The page size in bytes.
-  ///
-  /// `block_size` - The size of the memory block served.
+  /// * `page_size` - The page size in bytes.
+  /// * `block_size` - The size of the memory block served.
   ///
   /// # Returns
   ///
@@ -38,13 +39,10 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `page_size` - The page size in bytes.
-  ///
-  /// `base_addr` - The base address of the contiguous memory block.
-  ///
-  /// `block_size` - The size of the memory block served.
-  ///
-  /// `mem` - The memory to use for the allocator struct.
+  /// * `page_size` - The page size in bytes.
+  /// * `base_addr` - The base address of the contiguous memory block.
+  /// * `block_size` - The size of the memory block served.
+  /// * `mem` - The memory to use for the allocator struct.
   ///
   /// # Returns
   ///
@@ -65,7 +63,7 @@ impl<'memory> PageAllocator<'memory> {
     allocator.flags.fill(0);
 
     for i in 0..PAGE_LEVELS {
-      bits = bits >> 1;
+      bits >>= 1;
 
       // If `bits` is not a power of two, shifting it left again will give the
       // bit index of the uncovered bits. For example, 15 >> 1 = 7, then
@@ -88,12 +86,12 @@ impl<'memory> PageAllocator<'memory> {
       }
 
       for _ in bit..allocator.levels[i].valid {
-        allocator.flags[idx] = allocator.flags[idx] | mask;
+        allocator.flags[idx] |= mask;
 
-        mask = mask << 1;
+        mask <<= 1;
 
         if mask == 0 {
-          idx = idx + 1;
+          idx += 1;
           mask = 1;
         }
       }
@@ -109,9 +107,8 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `page_size` - The page size in bytes.
-  ///
-  /// `block_size` - The size of the memory block served.
+  /// * `page_size` - The page size in bytes.
+  /// * `block_size` - The size of the memory block served.
   ///
   /// # Returns
   ///
@@ -189,7 +186,7 @@ impl<'memory> PageAllocator<'memory> {
         avail: 0,
       };
 
-      size = size + ((bits + 7) >> 3);
+      size += (bits + 7) >> 3;
     }
 
     (levels, size)
