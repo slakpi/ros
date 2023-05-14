@@ -1,7 +1,5 @@
 //! Range data structure.
 
-use super::bits;
-
 /// Range ordering.
 ///
 /// * `MutuallyExclusiveLess` - Two ranges are mutually exclusive and the LHS

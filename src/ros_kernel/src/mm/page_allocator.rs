@@ -1,4 +1,3 @@
-use crate::support::bits;
 use core::slice;
 
 const PAGE_LEVELS: usize = 11;
@@ -52,14 +51,12 @@ impl<'memory> PageAllocator<'memory> {
   /// The allocator structure.
   pub fn new(page_size: usize, base_addr: usize, block_size: usize, mem: *mut u8) -> Self {
     let (levels, size) = PageAllocator::make_levels(page_size, block_size);
-    let allocator = PageAllocator {
+    let mut allocator = PageAllocator {
       page_size,
       base_addr,
       flags: unsafe { slice::from_raw_parts_mut(mem, size) },
       levels,
     };
-
-    let byte_bits = u8::BITS as usize;
 
     // Initialize the availability flags. Any blocks not covered by the level
     // above will be marked as available.
@@ -78,12 +75,20 @@ impl<'memory> PageAllocator<'memory> {
       // Shifting the bit index down by 3 gives the start byte index, and a
       // modulo 7 gives the bit index within that byte. E.g. 14 >> 3 = 1, so we
       // start with byte 1. 14 & 7 = 6, so start with bit 6.
-      let bit = bits << 1;
+      let mut bit = bits << 1;
       let mut idx = allocator.levels[i].offset + (bit >> 3);
-      let mut mask = bit & 0x7;
+      let mut mask = (bit & 0x7) as u8;
 
-      for _ in bit..(allocator.levels[i].valid) {
-        allocator.flags[idx] = allocator.flags[idx] | (mask as u8);
+      // If this is the last possible page level or the next level has no valid
+      // blocks, set all blocks as available.
+      if (i == PAGE_LEVELS - 1) || (allocator.levels[i + 1].valid == 0) {
+        bit = 0;
+        idx = allocator.levels[i].offset;
+        mask = 1;
+      }
+
+      for _ in bit..allocator.levels[i].valid {
+        allocator.flags[idx] = allocator.flags[idx] | mask;
 
         mask = mask << 1;
 
@@ -92,9 +97,9 @@ impl<'memory> PageAllocator<'memory> {
           mask = 1;
         }
       }
-    }
 
-    // TODO: Somehow the entire topmost level needs to be marked as available.
+      allocator.levels[i].avail = allocator.levels[i].valid - bit;
+    }
 
     allocator
   }
@@ -114,13 +119,9 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Assumes
   ///
-  /// Assumes that the page size has already been validated for the architecture
-  /// and is a power of 2.
+  /// Assumes that the page size has already been validated for the
+  /// architecture.
   fn make_levels(page_size: usize, block_size: usize) -> ([PageLevel; PAGE_LEVELS], usize) {
-    debug_assert!(bits::is_power_of_2(page_size));
-
-    let byte_bits = u8::BITS as usize;
-
     let mut levels: [PageLevel; PAGE_LEVELS] = Default::default();
 
     // Calculate the number of pages in the block. We're rounding down, so any
@@ -139,7 +140,7 @@ impl<'memory> PageAllocator<'memory> {
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
     //   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   | / |  0
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-    let mut size = (bits + byte_bits - 1) / byte_bits;
+    let mut size = (bits + 7) >> 3;
     levels[0] = PageLevel {
       offset: 0,
       valid: bits,
@@ -188,7 +189,7 @@ impl<'memory> PageAllocator<'memory> {
         avail: 0,
       };
 
-      size = size + (bits + byte_bits - 1) / byte_bits;
+      size = size + ((bits + 7) >> 3);
     }
 
     (levels, size)
