@@ -1,4 +1,5 @@
 //! Kernel Debug Printing Utilities
+
 use crate::peripherals::mini_uart;
 use crate::support::print;
 use core::fmt::{self, Write};

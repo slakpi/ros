@@ -1,4 +1,5 @@
 //! Kernel Printing Utilities
+
 use core::{cmp, fmt};
 
 /// A thin wrapper around a buffer to track writes during string formatting.

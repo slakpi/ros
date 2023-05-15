@@ -1,9 +1,13 @@
 //! Buddy Page Allocator
 //! https://en.wikipedia.org/wiki/Buddy_memory_allocation
+
 use core::slice;
 
+/// Support blocks that are up to Page Size * 2^10 bytes. For example, with a
+/// 4 KiB page size, the largest block size is 4 MiB.
 const PAGE_LEVELS: usize = 11;
 
+/// Metadata for each level in the buddy allocator.
 #[derive(Default)]
 struct PageLevel {
   offset: usize,

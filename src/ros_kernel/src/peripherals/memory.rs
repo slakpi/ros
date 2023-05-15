@@ -187,6 +187,9 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
   }
 }
 
+/// Get the maximum number of memory ranges.
+pub const fn get_max_memory_ranges() -> usize { MEM_RANGES }
+
 /// Get the system memory layout.
 pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
   let mut config = MemoryConfig::new();
