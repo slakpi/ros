@@ -1,5 +1,7 @@
 //! ARMv7a peripherals management.
 
+use crate::peripherals::soc;
+
 /// Initialize peripheral mappings.
 ///
 /// # Parameters

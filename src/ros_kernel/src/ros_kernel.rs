@@ -1,6 +1,7 @@
 //! ROS Kernel entry point.
 
 use super::arch;
+use super::mm;
 use super::peripherals::mini_uart;
 use crate::dbg_print;
 use core::panic::PanicInfo;
@@ -26,6 +27,10 @@ fn panic(info: &PanicInfo) -> ! {
 extern "C" fn ros_kernel(config: usize) -> ! {
   arch::init(config);
   mini_uart::init();
+
   dbg_print!("=== ROS ===\n");
+
+  mm::init();
+
   loop {}
 }

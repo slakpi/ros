@@ -1,11 +1,12 @@
 //! AArch64 Initialization
 
-pub mod exceptions;
-pub mod mm;
-pub mod peripherals;
+mod exceptions;
+mod mm;
+mod peripherals;
 
-use crate::mm::page_allocator::PageAllocator;
 use crate::peripherals::{memory, soc};
+use crate::support::{bits, dtb, range};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -20,7 +21,21 @@ struct KernelConfig {
   kernel_pages_size: usize,
 }
 
+/// Re-initialization guard for debug.
+#[cfg(debug_assertions)]
+static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Layout of physical memory in the system.
 static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
+
+/// Layout of memory exclusions for the kernel area and DTB, if present.
+static mut EXCL_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
+
+/// Page size.
+static mut PAGE_SIZE: usize = 0;
+
+/// Kernel virtual address base.
+static mut VIRTUAL_BASE: usize = 0;
 
 /// AArch64 platform configuration.
 ///
@@ -28,7 +43,17 @@ static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 ///
 /// * `config` - The kernel configuration address provided by the bootstrap
 ///   code.
+///
+/// # Description
+///
+///   NOTE: Must only be called once.
+///
+/// Initializes the interrupt table, determines the physical memory layout,
+/// initializes the kernel page tables, and builds a list of exclusions to the
+/// physical memory layout.
 pub fn init(config: usize) {
+  initialization_guard();
+
   assert!(config != 0);
 
   let config = unsafe { &*(config as *const KernelConfig) };
@@ -36,38 +61,149 @@ pub fn init(config: usize) {
   // TODO: 16 KiB and 64 KiB page support.
   assert!(config.page_size == 4096);
 
-  let mem_layout = memory::get_memory_layout(config.virtual_base + config.blob).unwrap();
-  let soc_layout = soc::get_soc_memory_layout(config.virtual_base + config.blob).unwrap();
-  let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
+  unsafe {
+    PAGE_SIZE = config.page_size;
+    VIRTUAL_BASE = config.virtual_base;
+  }
+
+  // Calculate the blob address and its size. There is no need to do any real
+  // error checking on the size. If the blob is not valid,
+  // `init_memory_layout()` will panic. If the blob is an ATAG list, there is no
+  // need to include it in the exclusion list as it will be part of the kernel
+  // area exclusion.
+  let blob_addr = config.virtual_base + config.blob;
+  let blob_size = dtb::DtbReader::check_dtb(blob_addr)
+    .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
   exceptions::init();
 
-  pages_end = mm::init(
+  let pages_end = init_memory_layout(
     config.virtual_base,
     config.kernel_pages_start,
-    pages_end,
-    &mem_layout,
+    config.kernel_pages_start + config.kernel_pages_size,
+    blob_addr,
   );
 
-  pages_end = peripherals::init(
-    config.virtual_base,
-    config.kernel_pages_start,
-    pages_end,
-    &soc_layout,
-  );
-
-  for r in mem_layout.get_ranges() {
-    _ = PageAllocator::new(
-      config.page_size,
-      r.base,
-      r.size,
-      (config.virtual_base + pages_end) as *mut u8,
-    );
-  }
-
-  unsafe { MEM_LAYOUT = mem_layout };
+  init_exclusions(pages_end, blob_addr, blob_size);
 }
 
-pub fn _get_memory_layout() -> &'static memory::MemoryConfig {
+/// Get the physical memory layout.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+pub fn get_memory_layout() -> &'static memory::MemoryConfig {
   unsafe { &MEM_LAYOUT }
+}
+
+/// Get the physical memory exclusion list.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
+  unsafe { &EXCL_LAYOUT }
+}
+
+/// Get the page size.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+pub fn get_page_size() -> usize {
+  unsafe { PAGE_SIZE }
+}
+
+/// Get the kernel virtual base address.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+pub fn get_kernel_virtual_base() -> usize {
+  unsafe { VIRTUAL_BASE }
+}
+
+/// Verify that architecture initialization has not occurred.
+///
+/// # Description
+///
+///   NOTE: Debug only. The call should be compiled out with any optimization
+///         enabled.
+fn initialization_guard() {
+  #[cfg(debug_assertions)]
+  unsafe {
+    debug_assert_eq!(
+      INITIALIZED.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed),
+      Ok(false)
+    );
+  }
+}
+
+/// Initialize the physical memory layout and kernel page tables.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel's virtual memory base address.
+/// * `pages_start` - The start of the kernel's page tables.
+/// * `pages_end` - The end of the kernel's page tables.
+/// * `blob_addr` - The ATAGs or DTB blob address.
+///
+/// # Returns
+///
+/// The new end of the kernel page tables.
+fn init_memory_layout(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  blob_addr: usize,
+) -> usize {
+  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+  let soc_layout = soc::get_soc_memory_layout(blob_addr).unwrap();
+  let mut pages_end = mm::init(virtual_base, pages_start, pages_end, &mem_layout);
+  pages_end = peripherals::init(virtual_base, pages_start, pages_end, &soc_layout);
+
+  unsafe {
+    MEM_LAYOUT = mem_layout;
+  }
+
+  pages_end
+}
+
+/// Initialize the physical memory exclusion list.
+///
+/// # Parameters
+///
+/// * `kernel_size` - The size of the kernel area.
+/// * `blob_addr` - The ATAG or DTB blob address.
+/// * `blob_size` - The ATAG or DTB blob size.
+///
+/// # Description
+///
+/// The kernel area is assumed to start at address 0.
+fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
+  let mut excl_layout = memory::MemoryConfig::new();
+
+  excl_layout.insert_range(range::Range {
+    base: 0,
+    size: kernel_size,
+  });
+
+  excl_layout.insert_range(range::Range {
+    base: blob_addr,
+    size: blob_size,
+  });
+
+  excl_layout.trim_ranges();
+
+  unsafe {
+    EXCL_LAYOUT = excl_layout;
+  }
 }

@@ -67,8 +67,7 @@ struct _MailWrapper {
 }
 
 /// @var   MAIL
-/// @brief Mail data. The kernel is single-threaded, so directly accessing the
-///        value is safe.
+/// @brief Mail data.
 static mut MAIL: _MailWrapper = _MailWrapper {
   _alignment: [],
   mail: [0; MAIL_SIZE],

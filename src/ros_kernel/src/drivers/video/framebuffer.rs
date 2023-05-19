@@ -15,8 +15,7 @@ pub struct Framebuffer {
 }
 
 /// @var   FRAMEBUFFER
-/// @brief The default framebuffer. The kernel is single-threaded, so directly
-///        accessing the value is safe.
+/// @brief The default framebuffer.
 static mut FRAMEBUFFER: Framebuffer = Framebuffer {
   fb_ptr: ptr::null_mut(),
   width: 0,

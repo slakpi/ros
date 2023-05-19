@@ -1,6 +1,10 @@
 //! Buddy Page Allocator
 //! https://en.wikipedia.org/wiki/Buddy_memory_allocation
+//!
+//!   NOTE: The allocator is currently NOT thread-safe. The kernel needs to have
+//!         concurrency primitives before it can be thread-safe.
 
+use crate::support::bits;
 use core::slice;
 
 /// Support blocks that are up to Page Size * 2^10 bytes. For example, with a
@@ -17,7 +21,8 @@ struct PageLevel {
 
 pub struct PageAllocator<'memory> {
   page_size: usize,
-  base_addr: usize,
+  base: usize,
+  size: usize,
   flags: &'memory mut [u8],
   levels: [PageLevel; PAGE_LEVELS],
 }
@@ -44,25 +49,27 @@ impl<'memory> PageAllocator<'memory> {
   /// # Parameters
   ///
   /// * `page_size` - The page size in bytes.
-  /// * `base_addr` - The base address of the contiguous memory block.
-  /// * `block_size` - The size of the memory block served.
+  /// * `base` - The base address of the contiguous memory block.
+  /// * `size` - The size of the memory block served.
   /// * `mem` - The memory to use for the allocator struct.
   ///
   /// # Returns
   ///
   /// The allocator structure.
-  pub fn new(page_size: usize, base_addr: usize, block_size: usize, mem: *mut u8) -> Self {
-    let (levels, size) = PageAllocator::make_levels(page_size, block_size);
+  pub fn new(page_size: usize, base: usize, size: usize, mem: *mut u8) -> Self {
+    let (levels, alloc_size) = PageAllocator::make_levels(page_size, size);
+    let size = bits::align_down(size, page_size);
     let mut allocator = PageAllocator {
       page_size,
-      base_addr,
-      flags: unsafe { slice::from_raw_parts_mut(mem, size) },
+      base,
+      size,
+      flags: unsafe { slice::from_raw_parts_mut(mem, alloc_size) },
       levels,
     };
 
     // Initialize the availability flags. Any blocks not covered by the level
     // above will be marked as available.
-    let mut bits = block_size / page_size;
+    let mut bits = size / page_size;
 
     allocator.flags.fill(0);
 

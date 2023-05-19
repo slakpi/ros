@@ -1,7 +1,6 @@
 use core::ptr;
 
-/// Peripheral base virtual address. The kernel is single-threaded, so directly
-/// accessing the value is safe. However, it should only be initialized once.
+/// Peripheral base virtual address.
 ///
 ///     TODO: Remove once devices are configured using the DTB.
 static mut PERIPHERAL_BASE: usize = 0;

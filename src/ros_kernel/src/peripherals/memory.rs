@@ -4,9 +4,9 @@ use crate::support::{dtb, range, range_set};
 use core::cmp;
 
 /// Maximum number of memory ranges that can be stored in a configuration.
-const MEM_RANGES: usize = 64;
+pub const MAX_MEM_RANGES: usize = 64;
 
-pub type MemoryConfig = range_set::RangeSet<MEM_RANGES>;
+pub type MemoryConfig = range_set::RangeSet<MAX_MEM_RANGES>;
 
 /// Scans for DTB memory nodes.
 struct DtbMemoryScanner<'mem> {
@@ -186,9 +186,6 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
     self.scan_device_node(reader, cursor)
   }
 }
-
-/// Get the maximum number of memory ranges.
-pub const fn get_max_memory_ranges() -> usize { MEM_RANGES }
 
 /// Get the system memory layout.
 pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
