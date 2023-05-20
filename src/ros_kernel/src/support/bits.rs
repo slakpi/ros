@@ -4,6 +4,9 @@
 //! compiler optimizations will make these as fast as macro implementations. For
 //! example, 1,000,000,000 iterations of `is_power_of_2` is as fast as a simple
 //! macro implementation such as { ($n: expr) => { $n & ($n - 1) } }.
+//!
+//! http://aggregate.org/MAGIC/
+//! http://graphics.stanford.edu/~seander/bithacks.html
 
 use core::{cmp, ops};
 

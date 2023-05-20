@@ -1,5 +1,7 @@
 //! ARMv7a Initialization
 
+pub mod bits;
+
 mod exceptions;
 mod mm;
 mod peripherals;

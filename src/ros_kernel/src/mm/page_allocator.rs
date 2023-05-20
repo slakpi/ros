@@ -4,7 +4,7 @@
 //!   NOTE: The allocator is currently NOT thread-safe. The kernel needs to have
 //!         concurrency primitives before it can be thread-safe.
 
-use crate::support::bits;
+use crate::arch::bits;
 use core::slice;
 
 /// Support blocks that are up to Page Size * 2^10 bytes. For example, with a

@@ -1,7 +1,7 @@
 //! Device Tree Utilities
 //! https://devicetree-specification.readthedocs.io/en/stable/index.html
 
-use super::bits;
+use crate::arch::bits;
 use core::{cmp, slice, str};
 
 const FDT_BEGIN_NODE: u32 = 0x1;

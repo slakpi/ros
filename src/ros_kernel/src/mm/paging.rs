@@ -2,8 +2,9 @@
 
 use super::page_allocator::PageAllocator;
 use crate::arch;
+use crate::arch::bits;
+use crate::dbg_print;
 use crate::peripherals::memory;
-use crate::support::bits;
 
 /// We need to have at least as many allocators as we have memory ranges. The
 /// allocator only works on contiguous blocks of memory.
@@ -35,5 +36,7 @@ pub fn init() {
     unsafe {
       ALLOCATORS[i] = Some(PageAllocator::new(page_size, r.base, r.size, ptr));
     }
+
+    dbg_print!("Initialized allocator at {:#x} for {:#x} - {:#x}\n", (ptr as usize), r.base, r.size);
   }
 }

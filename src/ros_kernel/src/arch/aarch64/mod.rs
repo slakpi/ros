@@ -1,11 +1,13 @@
 //! AArch64 Initialization
 
+pub mod bits;
+
 mod exceptions;
 mod mm;
 mod peripherals;
 
 use crate::peripherals::{memory, soc};
-use crate::support::{bits, dtb, range};
+use crate::support::{dtb, range};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
