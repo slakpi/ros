@@ -1,4 +1,4 @@
-//! AArch64 bit manipulation utilities.
+//! AArch64 Bit Manipulation Utilities
 //!
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html
@@ -23,7 +23,7 @@ pub fn ones(n: u64) -> u64 {
   n += n >> 16;
   n += n >> 32;
 
-  n & 0xff
+  n & 0x7f
 }
 
 /// Fast 64-bit floor base-2 log.
@@ -58,7 +58,7 @@ pub fn floor_log2(n: u64) -> u64 {
 /// ceiling( log2( n ) ) when n > 0, 0 otherwise.
 pub fn ceil_log2(n: u64) -> u64 {
   let mut m = n & (n.wrapping_sub(1));
-  m |= 0u64.wrapping_sub(m);
+  m |= !m.wrapping_sub(1);
   m >>= 63;
 
   let mut n = n;

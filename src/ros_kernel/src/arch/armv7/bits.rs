@@ -1,4 +1,4 @@
-//! ARMv7a bit manipulation utilities.
+//! ARMv7a Bit Manipulation Utilities
 //!
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html
@@ -56,7 +56,7 @@ pub fn floor_log2(n: u32) -> u32 {
 /// ceiling( log2( n ) ) when n > 0, 0 otherwise.
 fn ceil_log2(n: u32) -> u32 {
   let mut m = n & (n.wrapping_sub(1));
-  m |= 0u32.wrapping_sub(m);
+  m |= !m.wrapping_sub(1);
   m >>= 31;
 
   let mut n = n;

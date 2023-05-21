@@ -1,4 +1,4 @@
-//! AArch64 memory management.
+//! AArch64 Memory Management
 
 use crate::peripherals::memory;
 use core::cmp;

@@ -1,4 +1,4 @@
-//! ARMv7a peripherals management.
+//! ARMv7a Peripherals Management
 
 use crate::peripherals::soc;
 

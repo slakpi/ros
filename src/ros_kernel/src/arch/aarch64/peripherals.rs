@@ -1,7 +1,7 @@
-//! AArch64 peripherals management.
+//! AArch64 Peripherals Management
 
 use super::mm;
-use crate::peripherals::{base, soc};
+use crate::peripherals::soc;
 
 /// Initialize peripheral mappings.
 ///
@@ -22,13 +22,6 @@ use crate::peripherals::{base, soc};
 /// For example, the BCM2710 uses 0x7e000000 as the base address for
 /// peripherals. The Raspberry Pi 3 maps this address to the ARM CPU address
 /// 0x3f000000. The page tables will map 0xffff_8000_7e00_0000 => 0x3f000000.
-///
-///     TODO: Eventually, this function should be completely unaware of the SoC
-///           base address. Device addresses in the DTB should be used instead.
-///           For now, it will just assume the BCM271x base address.
-///
-///           This does, however, make the kernel flexible enough to configure
-///           itself for Raspberry Pi 2/3 or Raspberry Pi 4 at runtime.
 ///
 /// # Returns
 ///
@@ -52,8 +45,6 @@ pub fn init(
       true,
     )
   }
-
-  base::set_peripheral_base_addr(virtual_base + 0x7e000000);
 
   pages_end
 }

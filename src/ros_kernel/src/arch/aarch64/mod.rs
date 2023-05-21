@@ -1,12 +1,14 @@
 //! AArch64 Initialization
 
 pub mod bits;
+pub mod debug;
 
 mod exceptions;
 mod mm;
 mod peripherals;
 
-use crate::peripherals::{memory, soc};
+use crate::debug_print;
+use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{dtb, range};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -30,7 +32,8 @@ static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Layout of physical memory in the system.
 static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 
-/// Layout of memory exclusions for the kernel area and DTB, if present.
+/// Layout of page allocation exclusions. The physical memory occupied by the
+/// kernel, for example, cannot be available for memory allocation.
 static mut EXCL_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 
 /// Page size.
@@ -77,15 +80,27 @@ pub fn init(config: usize) {
   let blob_size = dtb::DtbReader::check_dtb(blob_addr)
     .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
+  let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
+
+  // Initialize the exception vectors.
   exceptions::init();
 
-  let pages_end = init_memory_layout(
-    config.virtual_base,
-    config.kernel_pages_start,
-    config.kernel_pages_start + config.kernel_pages_size,
-    blob_addr,
-  );
+  // Initialize the real SoC memory layout.
+  pages_end = init_soc(config.kernel_pages_start, pages_end, blob_addr);
 
+  // Initialize the Mini UART.
+  //
+  //   TODO: Remove this once the Mini UART is able to configure itself using
+  //         the DTB.
+  base::set_peripheral_base_addr(config.virtual_base + 0x7e000000);
+  mini_uart::init();
+
+  debug_print!("=== ROS (AArch64) ===\n");
+
+  // Now initialize the physical memory layout.
+  pages_end = init_memory_layout(config.kernel_pages_start, pages_end, blob_addr);
+
+  // Initialize the page allocation exclusions.
   init_exclusions(pages_end, blob_addr, blob_size);
 }
 
@@ -100,7 +115,7 @@ pub fn get_memory_layout() -> &'static memory::MemoryConfig {
   unsafe { &MEM_LAYOUT }
 }
 
-/// Get the physical memory exclusion list.
+/// Get the page allocation exclusion list.
 ///
 /// # Description
 ///
@@ -149,11 +164,10 @@ fn initialization_guard() {
   }
 }
 
-/// Initialize the physical memory layout and kernel page tables.
+/// Initialize the SoC memory layout.
 ///
 /// # Parameters
 ///
-/// * `virtual_base` - The kernel's virtual memory base address.
 /// * `pages_start` - The start of the kernel's page tables.
 /// * `pages_end` - The end of the kernel's page tables.
 /// * `blob_addr` - The ATAGs or DTB blob address.
@@ -161,16 +175,35 @@ fn initialization_guard() {
 /// # Returns
 ///
 /// The new end of the kernel page tables.
-fn init_memory_layout(
-  virtual_base: usize,
-  pages_start: usize,
-  pages_end: usize,
-  blob_addr: usize,
-) -> usize {
-  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   let soc_layout = soc::get_soc_memory_layout(blob_addr).unwrap();
-  let mut pages_end = mm::init(virtual_base, pages_start, pages_end, &mem_layout);
-  pages_end = peripherals::init(virtual_base, pages_start, pages_end, &soc_layout);
+  peripherals::init(
+    get_kernel_virtual_base(),
+    pages_start,
+    pages_end,
+    &soc_layout,
+  )
+}
+
+/// Initialize the physical memory layout.
+///
+/// # Parameters
+///
+/// * `pages_start` - The start of the kernel's page tables.
+/// * `pages_end` - The end of the kernel's page tables.
+/// * `blob_addr` - The ATAGs or DTB blob address.
+///
+/// # Returns
+///
+/// The new end of the kernel page tables.
+fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+  let pages_end = mm::init(
+    get_kernel_virtual_base(),
+    pages_start,
+    pages_end,
+    &mem_layout,
+  );
 
   unsafe {
     MEM_LAYOUT = mem_layout;

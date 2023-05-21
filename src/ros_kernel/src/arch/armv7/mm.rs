@@ -1,4 +1,4 @@
-//! ARMv7a memory management.
+//! ARMv7a Memory Management
 
 use crate::peripherals::memory;
 

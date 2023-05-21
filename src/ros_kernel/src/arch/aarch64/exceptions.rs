@@ -1,6 +1,6 @@
-//! AArch64 exception handling.
+//! AArch64 Exception Management
 
-use crate::dbg_print;
+use crate::debug_print;
 use core::arch::asm;
 
 /// AArch64 exception vector initialization.
@@ -22,7 +22,7 @@ pub fn init() {
 /// * `far_el1` - Fault Address Register value.
 #[no_mangle]
 extern "C" fn trap_exception(esr_el1: usize, far_el1: usize) {
-  dbg_print!(
+  debug_print!(
     "Fell into a trap! esr_el1={:#x}, far_el1={:#x}\n",
     esr_el1,
     far_el1,

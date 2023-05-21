@@ -1,8 +1,7 @@
 //! Buddy Page Allocator
 //! https://en.wikipedia.org/wiki/Buddy_memory_allocation
 //!
-//!   NOTE: The allocator is currently NOT thread-safe. The kernel needs to have
-//!         concurrency primitives before it can be thread-safe.
+//!   NOTE: The allocator is NOT thread-safe.
 
 use crate::arch::bits;
 use core::slice;

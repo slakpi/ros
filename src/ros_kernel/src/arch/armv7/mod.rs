@@ -1,6 +1,7 @@
 //! ARMv7a Initialization
 
 pub mod bits;
+pub mod debug;
 
 mod exceptions;
 mod mm;

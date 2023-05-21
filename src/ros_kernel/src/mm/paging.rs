@@ -3,7 +3,7 @@
 use super::page_allocator::PageAllocator;
 use crate::arch;
 use crate::arch::bits;
-use crate::dbg_print;
+use crate::debug_print;
 use crate::peripherals::memory;
 
 /// We need to have at least as many allocators as we have memory ranges. The
@@ -26,7 +26,7 @@ pub fn init() {
   let page_size = arch::get_page_size();
   let virtual_base = arch::get_kernel_virtual_base();
   let mem_layout = arch::get_memory_layout();
- 
+
   for (i, r) in mem_layout.get_ranges().iter().enumerate() {
     let alloc_size = bits::align_up(PageAllocator::calc_size(page_size, r.size), page_size);
     assert!(alloc_size < r.size);
@@ -36,7 +36,5 @@ pub fn init() {
     unsafe {
       ALLOCATORS[i] = Some(PageAllocator::new(page_size, r.base, r.size, ptr));
     }
-
-    dbg_print!("Initialized allocator at {:#x} for {:#x} - {:#x}\n", (ptr as usize), r.base, r.size);
   }
 }
