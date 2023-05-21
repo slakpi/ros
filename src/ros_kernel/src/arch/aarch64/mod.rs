@@ -57,7 +57,7 @@ static mut VIRTUAL_BASE: usize = 0;
 /// initializes the kernel page tables, and builds a list of exclusions to the
 /// physical memory layout.
 pub fn init(config: usize) {
-  initialization_guard();
+  // initialization_guard();
 
   assert!(config != 0);
 

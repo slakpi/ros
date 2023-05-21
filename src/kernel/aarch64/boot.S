@@ -56,10 +56,10 @@ Save the entry arguments
   mov     w19, w0
 
 /*------------------------------------------------------------------------------
-Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
+Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
 ------------------------------------------------------------------------------*/
   mrs     x9, mpidr_el1
-  and     x9, x9, #3
+  and     x9, x9, #0xff
   cbnz    x9, start_cpu_halt
 
 /*------------------------------------------------------------------------------

@@ -9,7 +9,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 pub fn init() {
-  initialization_guard();
+  // initialization_guard();
   paging::init();
 }
 

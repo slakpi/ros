@@ -21,7 +21,7 @@ Save the entry arguments.
   mov     r6, r2
 
 /*------------------------------------------------------------------------------
-Check the CPU ID. Halt CPUs 1-3 and continue running on CPU 0.
+Check the CPU ID. Halt CPUs other than 0. MPIDR[1:0] is the CPU ID.
 ------------------------------------------------------------------------------*/
   mrc     p15, 0, r0, c0, c0, 5
   and     r0, r0, #3

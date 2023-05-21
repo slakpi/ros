@@ -3,8 +3,6 @@
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html
 
-use core::{cmp, ops};
-
 /// Aligns an address with the start of the boundary.
 ///
 /// # Parameters
