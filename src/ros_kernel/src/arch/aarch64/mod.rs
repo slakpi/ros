@@ -78,7 +78,7 @@ pub fn init(config: usize) {
   // area exclusion.
   let blob_addr = config.virtual_base + config.blob;
   let blob_size = dtb::DtbReader::check_dtb(blob_addr)
-    .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
+    .map_or_else(|_| 0, |size| bits::align_up_ptr(size, config.page_size));
 
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
