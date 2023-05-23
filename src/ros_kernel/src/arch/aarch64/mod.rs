@@ -10,7 +10,6 @@ mod peripherals;
 use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{dtb, range};
-use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -25,9 +24,8 @@ struct KernelConfig {
   kernel_pages_size: usize,
 }
 
-/// Re-initialization guard for debug.
-#[cfg(debug_assertions)]
-static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
+/// Re-initialization guard.
+static mut INITIALIZED: bool = false;
 
 /// Layout of physical memory in the system.
 static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
@@ -51,14 +49,17 @@ static mut VIRTUAL_BASE: usize = 0;
 ///
 /// # Description
 ///
-///   NOTE: Must only be called once.
+///   NOTE: Must only be called once while the kernel is single-threaded.
 ///
 /// Initializes the interrupt table, determines the physical memory layout,
 /// initializes the kernel page tables, and builds a list of exclusions to the
 /// physical memory layout.
 pub fn init(config: usize) {
-  // initialization_guard();
-
+  unsafe {
+    assert!(!INITIALIZED);
+    INITIALIZED = true;
+  }
+  
   assert!(config != 0);
 
   let config = unsafe { &*(config as *const KernelConfig) };
@@ -146,22 +147,6 @@ pub fn get_page_size() -> usize {
 ///         and sound.
 pub fn get_kernel_virtual_base() -> usize {
   unsafe { VIRTUAL_BASE }
-}
-
-/// Verify that architecture initialization has not occurred.
-///
-/// # Description
-///
-///   NOTE: Debug only. The call should be compiled out with any optimization
-///         enabled.
-fn initialization_guard() {
-  #[cfg(debug_assertions)]
-  unsafe {
-    debug_assert_eq!(
-      INITIALIZED.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed),
-      Ok(false)
-    );
-  }
 }
 
 /// Initialize the SoC memory layout.
