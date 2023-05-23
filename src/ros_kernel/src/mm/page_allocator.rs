@@ -57,7 +57,7 @@ impl<'memory> PageAllocator<'memory> {
   /// The allocator structure.
   pub fn new(page_size: usize, base: usize, size: usize, mem: *mut u8) -> Self {
     let (levels, alloc_size) = PageAllocator::make_levels(page_size, size);
-    let size = bits::align_down_ptr(size, page_size);
+    let size = bits::align_down(size, page_size);
     let mut allocator = PageAllocator {
       page_size,
       base,

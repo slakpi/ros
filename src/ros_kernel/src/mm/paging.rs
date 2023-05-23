@@ -28,7 +28,7 @@ pub fn init() {
   let mem_layout = arch::get_memory_layout();
 
   for (i, r) in mem_layout.get_ranges().iter().enumerate() {
-    let alloc_size = bits::align_up_ptr(PageAllocator::calc_size(page_size, r.size), page_size);
+    let alloc_size = bits::align_up(PageAllocator::calc_size(page_size, r.size), page_size);
     assert!(alloc_size < r.size);
 
     let ptr = (r.base + virtual_base + r.size - alloc_size) as *mut u8;

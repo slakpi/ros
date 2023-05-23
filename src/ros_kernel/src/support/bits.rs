@@ -18,7 +18,7 @@
 /// # Returns
 ///
 /// The aligned address.
-pub fn align_down_ptr(addr: usize, boundary: usize) -> usize {
+pub fn align_down(addr: usize, boundary: usize) -> usize {
   addr & !(boundary - 1)
 }
 
@@ -37,7 +37,7 @@ pub fn align_down_ptr(addr: usize, boundary: usize) -> usize {
 /// # Returns
 ///
 /// The aligned address.
-pub fn align_up_ptr(addr: usize, boundary: usize) -> usize {
+pub fn align_up(addr: usize, boundary: usize) -> usize {
   let b = boundary - 1;
   (addr + b) & !b
 }
@@ -53,6 +53,6 @@ pub fn align_up_ptr(addr: usize, boundary: usize) -> usize {
 /// True if the address is a power of 2, false otherwise. The check against 0
 /// ensures 0 is not reported as a power of 2 and prevents the subtraction from
 /// asserting.
-pub fn _is_power_of_2_ptr(n: usize) -> bool {
+pub fn _is_power_of_2(n: usize) -> bool {
   (n != 0) && ((n & (n - 1)) == 0)
 }

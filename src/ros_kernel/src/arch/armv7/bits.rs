@@ -5,17 +5,17 @@
 
 pub use crate::support::bits::*;
 
-/// Fast 32-bit population count.
+/// Fast 32-bit address population count.
 ///
 /// # Parameters
 ///
-/// * `n` - The number.
+/// * `addr` - The address.
 ///
 /// # Returns
 ///
-/// The number of bits set to 1 in `n`.
-fn ones(n: u32) -> u32 {
-  let mut n = n;
+/// The number of bits set to 1 in the address.
+fn ones(addr: usize) -> usize {
+  let mut n = addr;
   n -= (n >> 1) & 0x55555555;
   n = ((n >> 2) & 0x33333333) + (n & 0x33333333);
   n = ((n >> 4) + n) & 0x0f0f0f0f;
@@ -25,34 +25,17 @@ fn ones(n: u32) -> u32 {
   n & 0x3f
 }
 
-/// Fast pointer population count.
+/// Fast 32-bit floor base-2 log of an address.
 ///
 /// # Parameters
 ///
-/// * `n` - The number.
-///
-/// # Assumptions
-///
-/// Pointers are known to be 32-bit.
+/// * `addr` - The address
 ///
 /// # Returns
 ///
-/// The number of bits set to 1 in `n`.
-pub fn ones_ptr(n: usize) -> usize {
-  ones(n as u32) as usize
-}
-
-/// Fast 32-bit floor base-2 log.
-///
-/// # Parameters
-///
-/// * `n` - The number.
-///
-/// # Returns
-///
-/// floor( log2( n ) ) when n > 0, 0 otherwise.
-pub fn floor_log2(n: u32) -> u32 {
-  let mut n = n;
+/// floor( log2( addr ) ) when addr > 0, 0 otherwise.
+pub fn floor_log2(addr: usize) -> usize {
+  let mut n = addr;
   n |= n >> 1;
   n |= n >> 2;
   n |= n >> 4;
@@ -62,42 +45,25 @@ pub fn floor_log2(n: u32) -> u32 {
   ones(n >> 1)
 }
 
-/// Fast pointer floor base-2 log.
+/// Fast 32-bit ceiling base-2 log of an address.
 ///
 /// # Parameters
 ///
-/// * `n` - The number.
-///
-/// # Assumptions
-///
-/// Pointers are known to be 32-bit.
+/// * `addr` - The address.
 ///
 /// # Returns
 ///
-/// floor( log2( n ) ) when n > 0, 0 otherwise.
-pub fn floor_log2_ptr(n: usize) -> usize {
-  floor_log2(n as u32) as usize
-}
-
-/// Fast 32-bit ceiling base-2 log.
-///
-/// # Parameters
-///
-/// * `n` - The number.
-///
-/// # Returns
-///
-/// ceiling( log2( n ) ) when n > 0, 0 otherwise.
-fn ceil_log2(n: u32) -> u32 {
+/// ceiling( log2( addr ) ) when addr > 0, 0 otherwise.
+fn ceil_log2(n: usize) -> usize {
   // Essentially the same as the fast power of 2 check, except the wrapping
-  // subtractions allow for `n = 0`. If `n` is a power of 2, `m = 0` and
-  // `ceiling( log2( n ) ) = log2( n )`. Otherwise `m = ` and the result is
-  // `floor( log2( n ) ) + 1`.
-  let mut m = n & (n.wrapping_sub(1));
+  // subtractions allow for `addr = 0`. If `addr` is a power of 2, `m = 0` and
+  // `ceiling( log2( addr ) ) = log2( addr )`. Otherwise `m = ` and the result
+  // is `floor( log2( addr ) ) + 1`.
+  let mut m = addr & (addr.wrapping_sub(1));
   m |= !m.wrapping_sub(1);
   m >>= 31;
 
-  let mut n = n;
+  let mut n = addr;
   n |= n >> 1;
   n |= n >> 2;
   n |= n >> 4;
@@ -105,21 +71,4 @@ fn ceil_log2(n: u32) -> u32 {
   n |= n >> 16;
 
   ones(n >> 1) + m
-}
-
-/// Fast pointer ceiling base-2 log.
-///
-/// # Parameters
-///
-/// * `n` - The number.
-///
-/// # Assumptions
-///
-/// Pointers are known to be 32-bit.
-///
-/// # Returns
-///
-/// ceiling( log2( n ) ) when n > 0, 0 otherwise.
-pub fn ceil_log2_ptr(n: usize) -> usize {
-  ceil_log2(n as u32) as usize
 }

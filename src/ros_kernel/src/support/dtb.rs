@@ -280,7 +280,7 @@ impl<'blob> DtbReader<'blob> {
     cursor.loc = if cursor.loc + offset > len - FDT_WORD_BYTES {
       len
     } else {
-      bits::align_up_ptr(cursor.loc + offset, FDT_WORD_BYTES)
+      bits::align_up(cursor.loc + offset, FDT_WORD_BYTES)
     };
   }
 
