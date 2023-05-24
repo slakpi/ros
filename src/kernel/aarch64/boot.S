@@ -1,36 +1,28 @@
-/// ARMv8 AArch64
+//! AArch64 Bootstrap
 
 #include "abi.h"
 #include "mmu.h"
 
-/*------------------------------------------------------------------------------
-EL3 secure configuration default. Levels lower than EL3 are not secure and EL2
-uses AArch64.
-------------------------------------------------------------------------------*/
+// EL3 secure configuration default. Levels lower than EL3 are not secure and
+// EL2 uses AArch64.
 #define SCR_EL3_NS      (1 <<  0)
 #define SCR_EL3_RW      (1 << 10)
 #define SCR_EL3_DEFAULT (SCR_EL3_RW | SCR_EL3_NS)
 
-/*------------------------------------------------------------------------------
-Saved program status register defaults. Mask all interrupts. Use the EL2 stack
-pointer for EL3 and the EL1 stack pointer for EL2.
-------------------------------------------------------------------------------*/
+// Saved program status register defaults. Mask all interrupts. Use the EL2
+// stack pointer for EL3 and the EL1 stack pointer for EL2.
 #define SPSR_MASK_ALL_INTERRUPTS (7 << 6)
 #define SPSR_EL3_SP              (9 << 0)
 #define SPSR_EL2_SP              (5 << 0)
 #define SPSR_EL3_DEFAULT         (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL3_SP)
 #define SPSR_EL2_DEFAULT         (SPSR_MASK_ALL_INTERRUPTS | SPSR_EL2_SP)
 
-/*------------------------------------------------------------------------------
-EL2 hypervisor configuration default. EL1 uses AArch64.
-------------------------------------------------------------------------------*/
+// EL2 hypervisor configuration default. EL1 uses AArch64.
 #define HCR_EL2_RW      (1 << 31)
 #define HCR_EL2_DEFAULT (HCR_EL2_RW)
 
-/*------------------------------------------------------------------------------
-EL1 system control register default. Set the required reserved bits to 1 per
-D17.2.118. Leave EL1 and EL0 in little endian and leave the MMU disabled.
-------------------------------------------------------------------------------*/
+// EL1 system control register default. Set the required reserved bits to 1 per
+// D17.2.118. Leave EL1 and EL0 in little endian and leave the MMU disabled.
 #define SCTLR_EL1_RESERVED   ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
 #define SCTLR_EL1_MMU_ENABLE (1 << 0)
 #define SCTLR_EL1_DEFAULT    (SCTLR_EL1_RESERVED)
@@ -40,33 +32,33 @@ D17.2.118. Leave EL1 and EL0 in little endian and leave the MMU disabled.
 .section ".text.boot"
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn _start
-/// @brief Kernel entry point.
-/// @param[in] x0 32-bit pointer to the DTB (primary core)
-/// @param[in] x1 Zero
-/// @param[in] x2 Zero
-/// @param[in] x3 Zero
-/// @param[in] x4 Address of this entry point
+/*----------------------------------------------------------------------------*/
+/// Kernel entry point.
+///
+/// # Parameters
+///
+/// * x0 - 32-bit pointer to the DTB (primary core)
+/// * x1 - Zero
+/// * x2 - Zero
+/// * x3 - Zero
+/// * x4 - Address of this entry point
+///
+/// # Returns
+///
+/// Does not return.
 .global _start
 _start:
-/*------------------------------------------------------------------------------
-Save the entry arguments
-------------------------------------------------------------------------------*/
+// Save the entry arguments
   mov     w19, w0
 
-/*------------------------------------------------------------------------------
-Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
-------------------------------------------------------------------------------*/
+// Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
   mrs     x9, mpidr_el1
   and     x9, x9, #0xff
   cbnz    x9, start_cpu_halt
 
-/*------------------------------------------------------------------------------
-Configure the processor exception levels. The bootloader should have dropped us
-into EL2, so returning from this exception handler will jump to EL1 after
-configuration.
-------------------------------------------------------------------------------*/
+// Configure the processor exception levels. The bootloader should have dropped
+// us into EL2, so returning from this exception handler will jump to EL1 after
+// configuration.
   bl      _init_kernel_el
   eret 
 
@@ -77,40 +69,34 @@ start_cpu_halt:
 .section ".text"
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn _el2_entry
-/// @brief Dummy entry point for EL3 -> E2.
+/*----------------------------------------------------------------------------*/
+/// Dummy entry point for EL3 -> E2.
 _el2_entry:
   eret
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn _el1_entry
-/// @brief   Entry point for EL2 -> EL1.
-/// @details Runs once when the kernel drops from EL2 to EL1 during bootstrap.
-///          All subsequent exception level changes will be EL0 -> EL1 or
-///          EL1 -> EL0.
+/*----------------------------------------------------------------------------*/
+/// Entry point for EL2 -> EL1.
+///
+/// # Description
+///
+/// Runs once when the kernel drops from EL2 to EL1 during bootstrap. All
+/// subsequent exception level changes will be EL0 -> EL1 or EL1 -> EL0.
 _el1_entry:
-/*------------------------------------------------------------------------------
-Temporary stack setup before turning on the MMU.
-------------------------------------------------------------------------------*/
+// Temporary stack setup before turning on the MMU.
   adrp    x9, __kernel_stack_start
   mov     sp, x9
   mov     x29, sp
 
-/*------------------------------------------------------------------------------
-Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
-------------------------------------------------------------------------------*/
+// Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
   adrp    x0, __bss_start
   mov     x1, #0
   ldr     x2, =__bss_size
   bl      memset
 
-/*------------------------------------------------------------------------------
-Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
-kernel page tables. If the blob is a DTB, the DTB will be mapped into the boot-
-strap kernel pages.
-------------------------------------------------------------------------------*/
+// Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
+// kernel page tables. If the blob is a DTB, the DTB will be mapped into the
+// bootstrap kernel pages.
   ldr     x9, =0xffffffff
   and     x19, x19, x9
   mov     x0, x19
@@ -120,10 +106,8 @@ strap kernel pages.
   mov     x0, x19           // blobl address to x0
   bl      create_kernel_pages
 
-/*------------------------------------------------------------------------------
-Setup the MMU. The identity map in ttbr0_el1 is going to allow us to get to the
-next instruction after we switch on the MMU.
-------------------------------------------------------------------------------*/
+// Setup the MMU. The identity map in ttbr0_el1 is going to allow us to get to
+// the next instruction after we switch on the MMU.
   adrp    x9, __kernel_id_pages_start
   msr     ttbr0_el1, x9
 
@@ -145,27 +129,21 @@ next instruction after we switch on the MMU.
   msr     sctlr_el1, x9
   isb
 
-/*------------------------------------------------------------------------------
-Jump using our first virtual address to switch the program counter over to
-virtual addressing. Once the program counter is using virtual addresses, clear
-ttbr0_el1, we no longer need the temporary identity map.
-------------------------------------------------------------------------------*/
+// Jump using our first virtual address to switch the program counter over to
+// virtual addressing. Once the program counter is using virtual addresses,
+// clear ttbr0_el1, we no longer need the temporary identity map.
   br      x20
 begin_virt_addressing:
   mov     x9, #0
   msr     ttbr0_el1, x9
 
-/*------------------------------------------------------------------------------
-Real stack setup.
-------------------------------------------------------------------------------*/
+// Real stack setup.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
   mov     x29, sp
   sub     sp, sp, #(10 * 8)
 
-/*------------------------------------------------------------------------------
-Write kernel configuration struct. Provide all addresses as physical.
-------------------------------------------------------------------------------*/
+// Write kernel configuration struct. Provide all addresses as physical.
   ldr     x11, =__virtual_start
   ldr     x10, =__page_size
   stp     x11, x10, [x29, #-64]
@@ -183,10 +161,8 @@ Write kernel configuration struct. Provide all addresses as physical.
   ldr     x9, =__kernel_pages_size
   str     x9, [x29, #-16]
 
-/*------------------------------------------------------------------------------
-Transfer control to the kernel stub. The stub should not return. If it does, we
-will end up halting below.
-------------------------------------------------------------------------------*/
+// Transfer control to the kernel stub. The stub should not return. If it does,
+// we will end up halting below.
   sub     x0, x29, #64
   br      x21
 
@@ -194,9 +170,8 @@ el1_cpu_halt:
   b       el1_cpu_halt
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn _init_kernel_el
-/// @brief Initialize the kernel in the correct exception level.
+/*----------------------------------------------------------------------------*/
+/// Initialize the kernel in the correct exception level.
 _init_kernel_el:
   mrs     x9, CurrentEL
   lsr     x9, x9, #2

@@ -1,23 +1,30 @@
-/// @def EXCEPTION_FRAME_SIZE
-/// @brief Size of the exception handler stack frame.
+//! AArch64 Exception Handling
+
+// Size of the exception handler stack frame.
 #define EXCEPTION_FRAME_SIZE 256
 
 
-/// @def ventry(label)
-/// @brief   Adds @a label as a vector to the vector table.
-/// @details @a .align aligns the entries to offsets of 0x80. The GNU assembler
-///          interprets @a .align as a number of bits for ARM targets.
+/*----------------------------------------------------------------------------*/
+/// Adds `label` as a vector to the vector table.
+///
+/// # Description
+///
+/// The `.align` directive aligns the entries to offsets of 0x80. The GNU
+/// assembler interprets `.align` as a number of bits for ARM targets.
 .macro ventry label
 .align 7
   b       \label
 .endm
 
 
-/// @def kernel_entry()
-/// @brief   Exception handler prologue.
-/// @details NOTE: Only the integer general purpose registers are saved. EL1 is
-///          configured to trap floating-point and vector instructions to ensure
-///          they are not used.
+/*----------------------------------------------------------------------------*/
+/// Exception handler prologue.
+///
+/// # Description
+///
+///   NOTE: Only the integer general purpose registers are saved. EL1 is
+///         configured to trap floating-point and vector instructions to ensure
+///         they are not used.
 .macro kernel_entry
   sub     sp, sp, #EXCEPTION_FRAME_SIZE
   stp     x0, x1, [sp, #16 * 0]
@@ -39,8 +46,8 @@
 .endm
 
 
-/// @def kernel_exit()
-/// @brief Exception handler epilogue.
+/*----------------------------------------------------------------------------*/
+/// Exception handler epilogue.
 .macro kernel_exit
   ldp	    x0, x1, [sp, #16 * 0]
   ldp	    x2, x3, [sp, #16 * 1]
@@ -63,9 +70,12 @@
 .endm
 
 
-/// @def vectors
-/// @brief   Exception vector table.
-/// @details Aligned to 0x800 (0x80 * 16).
+/*----------------------------------------------------------------------------*/
+/// Exception vector table.
+///
+/// # Description
+///
+/// Aligned to 0x800 (0x80 * 16).
 .align 11
 .global vectors 
 vectors:
@@ -90,8 +100,8 @@ vectors:
   ventry  _trap_exception   // EL0 Error (32-bit)
 
 
-/// @fn _trap_exception
-/// @brief Default exception trap stub.
+/*----------------------------------------------------------------------------*/
+/// Default exception trap stub.
 _trap_exception:
   kernel_entry
   mrs     x0, esr_el1

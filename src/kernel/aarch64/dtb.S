@@ -1,10 +1,18 @@
+//! AArch64 DTB Utilities
+
+// DTB magic identifier.
 #define DTB_MAGIC 0xd00dfeed
 
-///-------------------------------------------------------------------------------------------------
-/// @fn dtb_quick_check
-/// @brief   Performs a quick check to see if the blob is a DTB.
-/// @param[in] x0 The blob address.
-/// @returns The total size of the DTB or 0 if the blob is not a DTB.
+/*----------------------------------------------------------------------------*/
+/// Performs a quick check to see if the blob is a DTB.
+///
+/// # Parameters
+///
+/// * x0 - The blob address.
+///
+/// # Returns
+///
+/// The total size of the DTB or 0 if the blob is not a DTB.
 .global dtb_quick_check
 dtb_quick_check:
   // no fn_entry required.

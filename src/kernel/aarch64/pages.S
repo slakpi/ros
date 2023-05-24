@@ -1,3 +1,5 @@
+//! AArch64 Page Table Bootstrap
+
 #include "abi.h"
 #include "mmu.h"
 
@@ -11,13 +13,18 @@
 #define L2_SHIFT (PAGE_SHIFT + (2 * TABLE_SHIFT))
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn create_kernel_pages
-/// @brief   Create the bootstrap kernel pages.
-/// @details Maps the kernel and, as necessary, the DTB into 2 MiB sections. The
-///          kernel will re-map the pages after determining the memory layout.
-/// @param[in] x0 The base of the blob.
-/// @param[in] x1 The size of the DTB or 0 if the blob is not a DTB.
+/*----------------------------------------------------------------------------*/
+/// Create the bootstrap kernel pages.
+///
+/// # Parameters
+///
+/// * x0 - The base of the blob.
+/// * x1 - The size of the DTB or 0 if the blob is not a DTB.
+///
+/// # Description
+///
+/// Maps the kernel and, as necessary, the DTB into 2 MiB sections. The kernel
+/// will re-map the pages after determining the memory layout.
 .global create_kernel_pages
 create_kernel_pages:
   fn_entry
@@ -25,24 +32,18 @@ create_kernel_pages:
   stp     x21, x22, [sp, #-16]!
   stp     x23, x24, [sp, #-16]!
 
-/*------------------------------------------------------------------------------
-Align the blob size on a section.
-------------------------------------------------------------------------------*/
+// Align the blob size on a section.
   mov     x19, x0
   mov     x0, x1
   bl      section_align_size
   mov     x20, x0
 
-/*------------------------------------------------------------------------------
-Align the size of the kernel area on a section.
-------------------------------------------------------------------------------*/
+// Align the size of the kernel area on a section.
   adrp    x0, __kernel_id_pages_end
   bl      section_align_size
   mov     x21, x0
 
-/*------------------------------------------------------------------------------
-Clear the page tables.
-------------------------------------------------------------------------------*/
+// Clear the page tables.
   adrp    x0, __kernel_pages_start
   mov     x1, #0
   ldr     x2, =__kernel_pages_size
@@ -53,9 +54,7 @@ Clear the page tables.
   ldr     x2, =__kernel_id_pages_size
   bl      memset
 
-/*------------------------------------------------------------------------------
-Create the L1 and L2 page tables.
-------------------------------------------------------------------------------*/
+// Create the L1 and L2 page tables.
   adrp    x0, __kernel_pages_start
   ldr     x1, =__virtual_start
   bl      init_tables
@@ -66,9 +65,7 @@ Create the L1 and L2 page tables.
   bl      init_tables
   mov     x23, x0
 
-/*------------------------------------------------------------------------------
-Map the kernel area as RW normal memory.
-------------------------------------------------------------------------------*/
+// Map the kernel area as RW normal memory.
   mov     x0, x22
   mov     x1, #0
   ldr     x2, =__virtual_start
@@ -85,11 +82,9 @@ Map the kernel area as RW normal memory.
   mov     x4, #MMU_NORMAL_RW_FLAGS
   bl      map_block
 
-/*------------------------------------------------------------------------------
-Map the DTB area as RO normal memory. Skip this if the DTB size is zero. Do not
-need to create an identity map. The kernel will switch to virtual addresses
-before the DTB is needed.
-------------------------------------------------------------------------------*/
+// Map the DTB area as RO normal memory. Skip this if the DTB size is zero.
+// Do not need to create an identity map. The kernel will switch to virtual
+// addresses before the DTB is needed.
   cbz     x20, skip_dtb_mapping
 
   mov     x0, x22
@@ -107,11 +102,16 @@ skip_dtb_mapping:
   ret
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn section_align_size
-/// @brief   Section-align the size with the next section higher.
-/// @param[in] x0 The size to align.
-/// @returns The section-aligned size.
+/*----------------------------------------------------------------------------*/
+/// Section-align the size with the next section higher.
+///
+/// # Parameters
+///
+/// * x0 - The size to align.
+///
+/// # Returns
+///
+/// The section-aligned size.
 section_align_size:
   // no fn_entry required.
 
@@ -126,13 +126,18 @@ section_align_size:
   ret
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn init_tables
-/// @brief   Create L1 and L2 page tables for the first 1 GiB of the virtual
-///          address space.
-/// @param[in] x0 The base address of the L1 table.
-/// @param[in] x1 The base address of the virtual address space.
-/// @returns Returns the base address of the L3 page table.
+/*----------------------------------------------------------------------------*/
+/// Create L1 and L2 page tables for the first 1 GiB of the virtual address
+/// space.
+///
+/// # Parameters
+///
+/// * x0 - The base address of the L1 table.
+/// * x1 - The base address of the virtual address space.
+///
+/// # Returns
+///
+/// Returns the base address of the L3 page table.
 init_tables:
   fn_entry
 
@@ -146,12 +151,14 @@ init_tables:
   ret
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn create_table_entry
-/// @brief Helper for @a init_tables. Do not call directly.
-/// @param[in] x0 The base address of the L1 or L2 table.
-/// @param[in] x1 The base address of the virtual address space.
-/// @param[in] x2 The shift specifying the L1 or L2 table.
+/*----------------------------------------------------------------------------*/
+/// Helper for `init_tables`. Do not call directly.
+///
+/// # Parameters
+///
+/// * x0 - The base address of the L1 or L2 table.
+/// * x1 - The base address of the virtual address space.
+/// * x2 - The shift specifying the L1 or L2 table.
 create_table_entry:
   // no fn_entry required.
 
@@ -168,15 +175,17 @@ create_table_entry:
   ret
 
 
-///-------------------------------------------------------------------------------------------------
-/// @fn map_block
-/// @brief Map a block of addresses within the first 1 GiB of the physical
-///        address space into the virtual address space.
-/// @param[in] x0 The base address of the L2 table.
-/// @param[in] x1 The base physical address.
-/// @param[in] x2 The base virtual address.
-/// @param[in] x3 The last virtual address.
-/// @param[in] x4 The entry flags.
+/*----------------------------------------------------------------------------*/
+/// Map a block of addresses within the first 1 GiB of the physical address
+/// space into the virtual address space.
+///
+/// # Parameters
+///
+/// * x0 - The base address of the L2 table.
+/// * x1 - The base physical address.
+/// * x2 - The base virtual address.
+/// * x3 - The last virtual address.
+/// * x4 - The entry flags.
 map_block:
   // no fn_entry required.
 

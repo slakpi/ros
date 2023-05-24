@@ -1,4 +1,6 @@
-// Use the standard 4 KiB page size.
+//! ARMv7a Linker Script
+
+// Use a 4 KiB page size.
 __page_size = (4 * 1024);
 __virtual_start = VIRT_BASE;
 __kernel_start = __virtual_start + KERNEL_BASE;
