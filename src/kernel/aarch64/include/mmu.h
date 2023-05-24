@@ -2,10 +2,18 @@
 #define MMU_H
 
 /*------------------------------------------------------------------------------
-EL1 translation control register. The top 16 bits will be used to separate
-kernel and user space. 0xffff_xxxx_xxxx_xxxx will translate through TTBR1_EL1
-and 0x0000_xxxx_xxxx_xxxx will translate through TTBR0_EL1. Both TTBR0_EL1 and
-TTBR1_EL1 use 4 KiB granules.
+EL1 translation control register.
+
+Configure the MMU to use 4 KiB granules for both the kernel and user address
+spaces.
+
+With a 4 KiB granule size, bits 47:39 of the address are the Level 1 translation
+index. So, just configure T0SZ and T1SZ to mask off the top 16 bits of the
+address.
+
+The kernel address space will span the 256 TiB from 0xffff_0000_0000_000 to
+0xffff_ffff_ffff_ffff while the user address space will span the 256 TiB from
+0x0000_0000_0000_0000 to 0x0000_ffff_ffff_ffff.
 ------------------------------------------------------------------------------*/
 #define TCR_EL1_T0SZ   16
 #define TCR_EL1_T1SZ   (TCR_EL1_T0SZ << 16)

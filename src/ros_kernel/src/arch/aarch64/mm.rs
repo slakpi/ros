@@ -97,15 +97,15 @@ pub fn init(
 ///
 ///     +-----------------+ 0xffff_ffff_ffff_ffff
 ///     |                 |
-///     | Kernel Segment  | 128 TiB
+///     | Kernel Segment  | 256 TiB
 ///     |                 |
-///     +-----------------+ 0xffff_8000_0000_0000
+///     +-----------------+ 0xffff_0000_0000_0000
 ///     | / / / / / / / / |
-///     | / / / / / / / / | 16,776,960 TiB of unused address space
+///     | / / / / / / / / | 16,776,704 TiB of unused address space
 ///     | / / / / / / / / |
-///     +-----------------+ 0x0000_8000_0000_0000
+///     +-----------------+ 0x0000_ffff_ffff_ffff
 ///     |                 |
-///     | User Segment    | 128 TiB
+///     | User Segment    | 256 TiB
 ///     |                 |
 ///     +-----------------+ 0x0000_0000_0000_0000
 ///
@@ -126,7 +126,7 @@ pub fn init(
 /// point to a Level 3 table OR a 1 GiB block of memory. Each Level 3 entry can
 /// point to a Level 4 table OR a 2 MiB block of memory.
 ///
-/// Currently, a single kernel is not expected to deal with anywhere near 128
+/// Currently, a single kernel is not expected to deal with anywhere near 256
 /// TiB of physical memory, so it is feasible to directly map the entire
 /// physical address space into the kernel segment. A physical address Ap maps
 /// to the virtual address Av = virtual base + Ap.

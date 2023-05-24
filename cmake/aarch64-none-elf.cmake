@@ -50,8 +50,8 @@ set(Rust_CARGO_TARGET aarch64-unknown-none-softfloat)
 set(ROS_KERNEL_IMAGE_FILE kernel8.img)
 set(ROS_KERNEL_BASE_ADDRESS 0x80000)
 
-# The canonical 64-bit kernel segment is the top 128 TiB
-set(ROS_VIRTUAL_BASE_ADDRESS 0xffff800000000000)
+# The canonical 64-bit kernel segment is the top 256 TiB
+set(ROS_VIRTUAL_BASE_ADDRESS 0xffff000000000000)
 
 # QEMU_BUILD is not used by AArch64. It has no effect, so go ahead and just
 # quiet the warning about it being unused.
