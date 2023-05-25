@@ -7,5 +7,6 @@ else()
 endif()
 
 corrosion_import_crate(MANIFEST_PATH Cargo.toml PROFILE ${cargo_profile})
+corrosion_add_target_local_rustflags(ros_kernel ${Rust_RUSTFLAGS})
 
 add_library(ROS::Kernel ALIAS ros_kernel)
