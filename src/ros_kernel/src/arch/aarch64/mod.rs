@@ -59,7 +59,7 @@ pub fn init(config: usize) {
     assert!(!INITIALIZED);
     INITIALIZED = true;
   }
-  
+
   assert!(config != 0);
 
   let config = unsafe { &*(config as *const KernelConfig) };
@@ -102,7 +102,7 @@ pub fn init(config: usize) {
   pages_end = init_memory_layout(config.kernel_pages_start, pages_end, blob_addr);
 
   // Initialize the page allocation exclusions.
-  init_exclusions(pages_end, blob_addr, blob_size);
+  init_exclusions(pages_end, config.blob, blob_size);
 }
 
 /// Get the physical memory layout.

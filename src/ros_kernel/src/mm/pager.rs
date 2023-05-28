@@ -25,6 +25,7 @@ pub fn init() {
   let page_size = arch::get_page_size();
   let virtual_base = arch::get_kernel_virtual_base();
   let mem_layout = arch::get_memory_layout();
+  let excl_layout = arch::get_exclusion_layout();
 
   for (i, r) in mem_layout.get_ranges().iter().enumerate() {
     let alloc_size = bits::align_up(PageAllocator::calc_size(page_size, r.size), page_size);
@@ -33,7 +34,13 @@ pub fn init() {
     let ptr = (r.base + virtual_base + r.size - alloc_size) as *mut u8;
 
     unsafe {
-      ALLOCATORS[i] = Some(PageAllocator::new(page_size, r.base, r.size, ptr));
+      ALLOCATORS[i] = Some(PageAllocator::new(
+        page_size,
+        r.base,
+        r.size,
+        ptr,
+        &excl_layout,
+      ));
     }
   }
 }
