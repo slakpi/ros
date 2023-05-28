@@ -5,7 +5,6 @@
 
 use crate::arch;
 use crate::arch::bits;
-use crate::debug_print;
 use crate::peripherals::memory;
 use core::slice;
 
@@ -95,12 +94,12 @@ impl<'memory> PageAllocator<'memory> {
     // Reserve the provided exclusion ranges if they are in the area served by
     // this allocator.
     for r in excl.get_ranges() {
-      allocator.reserve(r.base, r.size);
+      _ = allocator.reserve(r.base, r.size);
     }
 
-    // Reserve the allocator's own memory.
+    // Reserve the allocator's own metadata memory.
     let mem_addr = (mem as usize) - arch::get_kernel_virtual_base();
-    allocator.reserve(mem_addr, alloc_size);
+    _ = allocator.reserve(mem_addr, alloc_size);
 
     allocator
   }
@@ -112,9 +111,39 @@ impl<'memory> PageAllocator<'memory> {
   pub fn free(&mut self, base: usize, size: usize) {}
 
   /// Initialize memory block metadata.
+  ///
+  /// # Description
+  ///
+  /// All valid blocks at `PAGE_LEVELS - 1` are initialized to available.
+  ///
+  /// At lower levels, any blocks not covered by the level above are marked as
+  /// available. For example:
+  ///
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   | / | / | / | / | / | / | / | / | / | / | / | / | / | / | * | x |  0
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   0                               8                       14  15 16
+  ///
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   | ///// | ///// | ///// | ///// | ///// | ///// | ***** | xxxxx |  1
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   0                               4               6       7       8
+  ///
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   | ///////////// | ///////////// | ************* | xxxxxxxxxxxxx |  2
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   0                               2               3               4
+  ///
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   | ***************************** | xxxxxxxxxxxxxxxxxxxxxxxxxxxxx | 3
+  ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
+  ///   0                               1                               2
+  ///
+  /// The allocator covers 15 4 KiB pages. This means there are only 7 8 KiB
+  /// blocks possible covering 14 4 KiB pages. The 15th page is marked
+  /// available. Likewise, there are only 3 16 KiB blocks available covering 6
+  /// 8 KiB blocks, so the 7th 8 KiB block is marked available. And so on.
   fn init_flags(&mut self) {
-    // Initialize the availability flags. Any blocks not covered by the level
-    // above will be marked as available.
     let mut bits = self.size / self.page_size;
 
     self.flags.fill(0);
@@ -200,7 +229,7 @@ impl<'memory> PageAllocator<'memory> {
   /// * is an available page, / is an unavailable page, and the remaining pages
   /// are unchanged.
   ///
-  /// Next, shift the start and end down by 1 bit and repeat:
+  /// Next, shift the start and end down by 1 bit, then repeat:
   ///
   ///   3 >> 1 = 1 and 6 >> 1 = 3
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
@@ -208,13 +237,13 @@ impl<'memory> PageAllocator<'memory> {
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
   ///   0       1       2       3       4                               8
   ///
-  ///   1 >> 1 = 0, and 3 >> 1 = 1
+  ///   1 >> 1 = 0 and 3 >> 1 = 1
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
   ///   | ///////////// | ///////////// |               |               |  2
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
   ///   0                               2                               4
   ///
-  ///   0 >> 1 = 0, and 1 >> 1 = 0
+  ///   0 >> 1 = 0 and 1 >> 1 = 0
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
   ///   | ///////////////////////////// | ***************************** |  3
   ///   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
@@ -315,7 +344,7 @@ impl<'memory> PageAllocator<'memory> {
     // Level 0 will require 2 bytes where 15 of the bits will be valid:
     //
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-    //   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   | / |  0
+    //   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   | x |  0
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
     //   0                               8                              16
     let mut size = (bits + 7) >> 3;
@@ -329,17 +358,17 @@ impl<'memory> PageAllocator<'memory> {
     // of bits down by one and calculate ceil( bits / 8 ).
     //
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-    //   |       |       |       |       |       |       |       | ///// |  1
+    //   |       |       |       |       |       |       |       | xxxxx |  1
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
     //   0                               4                               8
     //
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-    //   |               |               |               | ///////////// |  2
+    //   |               |               |               | xxxxxxxxxxxxx |  2
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
     //   0                               2                               4
     //
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
-    //   |                               | ///////////////////////////// |  3
+    //   |                               | xxxxxxxxxxxxxxxxxxxxxxxxxxxxx |  3
     //   +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
     //   0                               1                               2
     //
