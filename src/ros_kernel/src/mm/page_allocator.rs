@@ -104,8 +104,29 @@ impl<'memory> PageAllocator<'memory> {
     allocator
   }
 
-  pub fn allocate(&mut self, size: usize) -> usize {
-    0
+  /// Allocate a physically contiguous block of pages.
+  ///
+  /// # Parameters
+  ///
+  /// `pages` - The number of pages to allocate.
+  ///
+  /// # Returns
+  ///
+  /// Ok with the starting physical address of the block if a contiguous block
+  /// is found. Err if a large enough contiguous block cannot be found or the
+  /// requested page count exceeds 2^(PAGE_LEVELS - 1).
+  pub fn allocate(&mut self, pages: usize) -> Result<usize, ()> {
+    // Calculate the level with the ideal block size.
+    let min_level = bits::ceil_log2(pages);
+
+    // Find the smallest available block.
+    if let Ok((level, idx, mask)) = self.find_available_block(min_level) {
+      // Allocate the block by splitting as necessary.
+      return Ok(self.allocate_block(min_level, level, idx, mask));
+    }
+
+    // Sorry, try another allocator or do some swapping.
+    Err(())
   }
 
   pub fn free(&mut self, base: usize, size: usize) {}
@@ -395,5 +416,111 @@ impl<'memory> PageAllocator<'memory> {
     }
 
     (levels, size)
+  }
+
+  /// Finds the first available block.
+  ///
+  /// # Parameters
+  ///
+  /// `min_level` - The minimum level. Start the search from here.
+  ///
+  /// # Description
+  ///
+  /// Searches upward, starting from `min_level`, for the smallest available
+  /// block that is at least `2^min_level` pages.
+  ///
+  /// # Returns
+  ///
+  /// Ok with a tuple containing the level at which the block was found, the
+  /// index of the byte with the available block, and a byte mask identifying
+  /// the available block's bit. Err if there is no block available or
+  /// `min_level` is too large.
+  fn find_available_block(&self, min_level: usize) -> Result<(usize, usize, u8), ()> {
+    for l in min_level..PAGE_LEVELS {
+      if self.levels[l].avail == 0 {
+        continue;
+      }
+
+      let mut idx = self.levels[l].offset;
+      let mut block = 0;
+  
+      while block < self.levels[l].valid {
+        if (self.flags[idx] & 0xff) == 0 {
+          idx += 1;
+          block += 8;
+          continue;
+        }
+  
+        let mask = bits::least_significant_bit(self.flags[idx] as usize);
+        return Ok((l, idx, mask as u8));
+      }
+
+      // There is something wrong with the availability accounting or there are
+      // no valid blocks. Either case is a panic.
+      debug_assert!(false);
+      break;
+    }
+
+    Err(())
+  }
+
+  /// Allocate a block.
+  ///
+  /// # Parameters
+  ///
+  /// `min_level` - The minimum block size.
+  /// `level` - The level with an available block.
+  /// `idx` - The byte index of the available block.
+  /// `mask` - The byte mask of the available block.
+  ///
+  /// # Description
+  ///
+  /// If `level` = `min_level`, the `allocate_block` simply clears the block's
+  /// bit and updates the availability count. Otherwise, splitting needs to be
+  /// done.
+  ///
+  /// # Returns
+  ///
+  /// The base address of the allocated block.
+  fn allocate_block(&mut self, min_level: usize, level: usize, idx: usize, mask: u8) -> usize {
+    let mut idx = idx;
+    let mut alloc_mask = mask;
+    let mut avail_mask = 0u8;
+
+    for l in (min_level..=level).rev() {
+      // Update the availability flags at this level.
+      self.flags[idx] &= !alloc_mask;
+      self.flags[idx] |= avail_mask;
+
+      // If `avail_mask` is zero, we are only allocating a block. Otherwise, we
+      // splitting. This adds two blocks to the level and allocates one.
+      if avail_mask == 0 {
+        self.levels[l].avail -= 1;
+      } else {
+        self.levels[l].avail += 1;
+      }
+
+      // If we're at the minimum level, there's nothing left to do.
+      if l == min_level {
+        break;
+      }
+
+      // Calculate the block number in the next level down, then set the masks.
+      // By definition, the buddy blocks will be in the same byte. It does not
+      // matter which block we allocate, so just allocate the even block.
+      let rel_idx = idx - self.levels[l].offset;
+      let block = ((rel_idx << 3) + bits::floor_log2(alloc_mask as usize)) << 1;
+      idx = (block >> 3) + self.levels[l - 1].offset;
+      alloc_mask = (1 << (block & 0x7)) as u8;
+      avail_mask = alloc_mask << 1;
+    }
+
+    // Calculate the page number from the block number.
+    let rel_idx = idx - self.levels[min_level].offset;
+    let block = ((rel_idx << 3) + bits::floor_log2(alloc_mask as usize)) << 1;
+    let page = block << level;
+
+    // Calculate and return the base address of the block.
+    self.base + (page << self.page_shift)
   }
 }

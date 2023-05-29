@@ -56,3 +56,16 @@ pub fn align_up(addr: usize, boundary: usize) -> usize {
 pub fn is_power_of_2(n: usize) -> bool {
   (n != 0) && ((n & (n - 1)) == 0)
 }
+
+/// Fast least-significant bit mask.
+///
+/// # Parameters
+///
+/// `n` - The number to mask off.
+///
+/// # Returns
+///
+/// A mask for the least-significant bit in `n`.
+pub fn least_significant_bit(n: usize) -> usize {
+  n & ((!n) + 1)
+}
