@@ -21,3 +21,7 @@ pub fn init() {
 
   pager::init();
 }
+
+pub fn run_tests() {
+  page_allocator::test::run_tests();
+}

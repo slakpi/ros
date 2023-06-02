@@ -3,6 +3,8 @@
 //!
 //!   NOTE: The allocator is NOT thread-safe.
 
+pub mod test;
+
 use crate::arch;
 use crate::arch::bits;
 use crate::peripherals::memory;
