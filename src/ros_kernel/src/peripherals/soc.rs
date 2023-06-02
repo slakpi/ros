@@ -137,16 +137,24 @@ fn read_ranges(
   soc_addr_cells: u32,
   cpu_addr_cells: u32,
   size_cells: u32,
-  property_size: usize,
+  prop_size: usize,
   config: &mut SocConfig,
 ) -> Result<(), dtb::DtbError> {
   let range_size = dtb::DtbReader::get_range_size(soc_addr_cells, cpu_addr_cells, size_cells);
 
-  if property_size % range_size != 0 {
+  if (range_size == 0)
+    || (prop_size == 0)
+    || (prop_size < range_size)
+    || (prop_size % range_size != 0)
+  {
     return Err(dtb::DtbError::InvalidDtb);
   }
 
-  let mut remaining = property_size;
+  if soc_addr_cells > cpu_addr_cells {
+    return Err(dtb::DtbError::InvalidDtb);
+  }
+
+  let mut remaining = prop_size;
   let mut tmp_cursor = *cursor;
 
   while remaining > 0 {
@@ -154,10 +162,32 @@ fn read_ranges(
       .get_range(soc_addr_cells, cpu_addr_cells, size_cells, &mut tmp_cursor)
       .ok_or(dtb::DtbError::InvalidDtb)?;
 
+    // Aside from the case where the SoC and CPU have the same address width,
+    // we need to also worry about the SoC being 64-bit, the CPU being 32-bit,
+    // and vice versa. We've already taken care of the SoC being 64-bit and the
+    // CPU being 32-bit above when we verify the SoC cells count is not greater
+    // than the CPU cell count. That leaves the SoC being 32-bit and the CPU
+    // being 64-bit. In that case, we still just need to verify that the base
+    // and size do not overflow 64-bit. This does not guarantee that we will
+    // correctly communicate with the SoC, but we will not panic.
+    if (cpu_base > usize::MAX as u64) || (soc_base > usize::MAX as u64) {
+      continue;
+    }
+
+    // The base addresses are known to be less than the maximum platform
+    // address. Subtract the bases to get the maximum allowable sizes. If the
+    // CPU or SoC size exceeds the maximum, we need to skip this mapping. We
+    // should not partially map the SoC.
+    let cpu_max_size = (usize::MAX as u64) - cpu_base;
+    let soc_max_size = (usize::MAX as u64) - soc_base;
+    if size > cpu_max_size || size > soc_max_size {
+      continue;
+    }
+
     config.add_mapping(SocMapping {
-      soc_base,
-      cpu_base,
-      size,
+      soc_base: soc_base as usize,
+      cpu_base: cpu_base as usize,
+      size: size as usize,
     });
 
     remaining -= range_size;

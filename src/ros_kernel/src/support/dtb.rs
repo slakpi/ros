@@ -385,13 +385,13 @@ impl<'blob> DtbReader<'blob> {
   /// # Returns
   ///
   /// A tuple with the address and size values or None if a reg value could not
-  /// be read.
+  /// be read. The return values are 64-bit regardless of platform.
   pub fn get_reg(
     &self,
     addr_cells: u32,
     size_cells: u32,
     cursor: &mut DtbCursor,
-  ) -> Option<(usize, usize)> {
+  ) -> Option<(u64, u64)> {
     check_cell_count!(addr_cells);
     check_cell_count!(size_cells);
 
@@ -401,17 +401,17 @@ impl<'blob> DtbReader<'blob> {
       return None;
     }
 
-    let mut addr = 0usize;
-    let mut size = 0usize;
+    let mut addr = 0u64;
+    let mut size = 0u64;
 
     for _ in 0..addr_cells {
       addr <<= FDT_WORD_BYTES;
-      addr |= self.get_u32_unchecked(cursor) as usize;
+      addr |= self.get_u32_unchecked(cursor) as u64;
     }
 
     for _ in 0..size_cells {
       size <<= FDT_WORD_BYTES;
-      size |= self.get_u32_unchecked(cursor) as usize;
+      size |= self.get_u32_unchecked(cursor) as u64;
     }
 
     Some((addr, size))
@@ -449,14 +449,15 @@ impl<'blob> DtbReader<'blob> {
   /// # Returns
   ///
   /// A tuple with the child address, parent address, and size values or None if
-  /// a range value could not be read.
+  /// a range value could not be read. The return values are 64-bit regardless
+  /// of platform.
   pub fn get_range(
     &self,
     child_addr_cells: u32,
     parent_addr_cells: u32,
     size_cells: u32,
     cursor: &mut DtbCursor,
-  ) -> Option<(usize, usize, usize)> {
+  ) -> Option<(u64, u64, u64)> {
     check_cell_count!(child_addr_cells);
     check_cell_count!(parent_addr_cells);
     check_cell_count!(size_cells);
@@ -467,23 +468,23 @@ impl<'blob> DtbReader<'blob> {
       return None;
     }
 
-    let mut child_addr = 0usize;
-    let mut parent_addr = 0usize;
-    let mut size = 0usize;
+    let mut child_addr = 0u64;
+    let mut parent_addr = 0u64;
+    let mut size = 0u64;
 
     for _ in 0..child_addr_cells {
       child_addr <<= FDT_WORD_BYTES;
-      child_addr |= self.get_u32_unchecked(cursor) as usize;
+      child_addr |= self.get_u32_unchecked(cursor) as u64;
     }
 
     for _ in 0..parent_addr_cells {
       parent_addr <<= FDT_WORD_BYTES;
-      parent_addr |= self.get_u32_unchecked(cursor) as usize;
+      parent_addr |= self.get_u32_unchecked(cursor) as u64;
     }
 
     for _ in 0..size_cells {
       size <<= FDT_WORD_BYTES;
-      size |= self.get_u32_unchecked(cursor) as usize;
+      size |= self.get_u32_unchecked(cursor) as u64;
     }
 
     Some((child_addr, parent_addr, size))

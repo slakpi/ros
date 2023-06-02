@@ -164,7 +164,20 @@ impl<'mem> DtbMemoryScanner<'mem> {
         .get_reg(addr_cells, size_cells, &mut tmp_cursor)
         .ok_or(dtb::DtbError::InvalidDtb)?;
 
-      self.config.insert_range(range::Range { base, size });
+      // The base is beyond the platform's addressable range, just skip it.
+      if base > usize::MAX as u64 {
+        continue;
+      }
+
+      // The base address is known to be less than the maximum platform address.
+      // Subtract the base to get the maximum allowable size and clamp the size
+      // from the DTB.
+      let max_size = (usize::MAX as u64) - base;
+      let size = cmp::min(size, max_size);
+      self.config.insert_range(range::Range {
+        base: base as usize,
+        size: size as usize,
+      });
     }
 
     Ok(true)

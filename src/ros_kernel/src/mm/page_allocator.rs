@@ -443,14 +443,14 @@ impl<'memory> PageAllocator<'memory> {
 
       let mut idx = self.levels[l].offset;
       let mut block = 0;
-  
+
       while block < self.levels[l].valid {
         if (self.flags[idx] & 0xff) == 0 {
           idx += 1;
           block += 8;
           continue;
         }
-  
+
         let mask = bits::least_significant_bit(self.flags[idx] as usize);
         return Ok((l, idx, mask as u8));
       }
