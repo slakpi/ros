@@ -4,6 +4,7 @@ mod page_allocator;
 mod pager;
 
 use crate::arch;
+use crate::debug_print;
 
 /// Re-initialization guard.
 static mut INITIALIZED: bool = false;
@@ -22,7 +23,8 @@ pub fn init() {
   pager::init();
 }
 
-#[cfg(feature = "unit_tests")]
+#[cfg(feature = "module_tests")]
 pub fn run_tests() {
+  debug_print!("[mm]\n");
   page_allocator::test::run_tests();
 }

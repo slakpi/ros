@@ -7,5 +7,5 @@ mod peripherals;
 mod ros_kernel;
 mod support;
 
-#[cfg(feature = "unit_tests")]
+#[cfg(feature = "module_tests")]
 mod test;

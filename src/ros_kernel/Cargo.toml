@@ -23,4 +23,4 @@ ros_kernel_user = {path="../ros_kernel_user"}
 
 [features]
 default = []
-unit_tests = []
+module_tests = []

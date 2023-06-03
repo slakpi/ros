@@ -92,6 +92,16 @@ const EXPECTED_LEVELS: [PageLevel; EXPECTED_PAGE_LEVELS] = [
   },
 ];
 
+// At level 10, the first and only block of 1024 is available. At level 9, the
+// third and last block of 512 is available. At all lower levels, the seventh
+// and last block is available. For example, at level 0, 8 * 255 = 2040 and page
+// 2047 should be available, so bit 7 should be set. At level 7, 8 * 1 = 8 and
+// page 15 should be available, so bit 7 should be set again. Etc. All other
+// bytes in all levels should be zero.
+const EXPECTED_AVAIL_FLAGS: [u8; EXPECTED_PAGE_LEVELS] = [
+  0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x4, 0x1,
+];
+
 pub fn run_tests() {
   execute_test!(test_size_calculation);
   execute_test!(test_level_construction);
@@ -118,21 +128,46 @@ fn test_level_construction(context: &mut test::TestContext) {
 }
 
 fn test_flag_init(context: &mut test::TestContext) {
-  let (levels, size) = PageAllocator::make_levels(TEST_PAGE_SIZE, TEST_MEM_SIZE);
+  // Initialize all bytes in the metadata buffer to 0xff to ensure flag
+  // initialization sets them appropriately. No bytes should be 0xff after
+  // initialization.
   let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0xff; EXPECTED_METADATA_SIZE];
-  let mem = buffer.as_mut_ptr();
-  let mut allocator = PageAllocator {
+
+  // Get a page allocator.
+  let mut allocator = make_allocator(buffer.as_mut_ptr());
+
+  // Test flag initialization.
+  allocator.init_flags();
+
+  // Verify the availability counts match.
+  for (a, b) in iter::zip(&allocator.levels, EXPECTED_LEVELS) {
+    check_eq!(context, a.avail, b.avail);
+  }
+
+  // Verify the availability flags match.
+  for (level, exp_avail) in iter::zip(&allocator.levels, EXPECTED_AVAIL_FLAGS) {
+    let last = level.valid >> 3;
+    let end = level.offset + last;
+
+    for i in level.offset..end {
+      check_eq!(context, allocator.flags[i], 0);
+    }
+
+    check_eq!(context, allocator.flags[end], exp_avail);
+  }
+}
+
+fn make_allocator<'memory>(mem: *mut u8) -> PageAllocator<'memory> {
+  let (levels, size) = PageAllocator::make_levels(TEST_PAGE_SIZE, TEST_MEM_SIZE);
+
+  // Manually create a PageAllocator to prevent it from performing any flag
+  // initializations or memory reservations.
+  PageAllocator {
     page_size: TEST_PAGE_SIZE,
     page_shift: bits::floor_log2(TEST_PAGE_SIZE),
     base: 0,
     size: TEST_MEM_SIZE,
     flags: unsafe { slice::from_raw_parts_mut(mem, size) },
     levels,
-  };
-
-  allocator.init_flags();
-
-  for (a, b) in iter::zip(allocator.levels, EXPECTED_LEVELS) {
-    check_eq!(context, a.avail, b.avail);
   }
 }
