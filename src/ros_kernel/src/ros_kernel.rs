@@ -25,7 +25,11 @@ fn panic(info: &PanicInfo) -> ! {
 #[no_mangle]
 extern "C" fn ros_kernel(config: usize) -> ! {
   arch::init(config);
-  mm::run_tests();
   mm::init();
+
+  if cfg!(feature = "unit_tests") {
+    mm::run_tests();
+  }
+
   loop {}
 }
