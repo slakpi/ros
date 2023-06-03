@@ -4,7 +4,6 @@
 /// the debug device.
 #[macro_export]
 macro_rules! debug_print {
-  () => {};
   ($($arg:tt)*) => {{
     $crate::arch::debug::debug_print(format_args!($($arg)*));
   }}

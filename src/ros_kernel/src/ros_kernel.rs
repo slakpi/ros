@@ -30,7 +30,6 @@ extern "C" fn ros_kernel(config: usize) -> ! {
   #[cfg(feature = "unit_tests")]
   {
     mm::run_tests();
-    debug_print!("Unit tests passed.\n");
   }
 
   loop {}

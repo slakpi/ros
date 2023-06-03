@@ -1,5 +1,9 @@
 use super::{PageAllocator, PageLevel};
-use core::iter;
+use crate::arch::bits;
+use crate::peripherals::memory;
+use crate::test;
+use crate::{check_eq, debug_print, execute_test};
+use core::{iter, slice};
 
 // Test with 4 KiB pages.
 const TEST_PAGE_SIZE: usize = 4096;
@@ -89,57 +93,46 @@ const EXPECTED_LEVELS: [PageLevel; EXPECTED_PAGE_LEVELS] = [
 ];
 
 pub fn run_tests() {
-  test_size_calculation();
-  test_level_construction();
+  execute_test!(test_size_calculation);
+  execute_test!(test_level_construction);
+  execute_test!(test_flag_init);
 }
 
-fn test_size_calculation() {
+fn test_size_calculation(context: &mut test::TestContext) {
   let size = PageAllocator::calc_size(TEST_PAGE_SIZE, TEST_MEM_SIZE);
-  assert!(
-    size == EXPECTED_METADATA_SIZE,
-    "Calculated size was {} instead of {}.",
-    size,
-    EXPECTED_METADATA_SIZE
-  );
+  check_eq!(context, size, EXPECTED_METADATA_SIZE);
 }
 
-fn test_level_construction() {
+fn test_level_construction(context: &mut test::TestContext) {
   let (levels, _) = PageAllocator::make_levels(TEST_PAGE_SIZE, TEST_MEM_SIZE);
-  assert!(
-    levels.len() == EXPECTED_LEVELS.len(),
-    "Level count mismatch: expected {}, received: {}",
-    EXPECTED_LEVELS.len(),
-    levels.len(),
-  );
+  check_eq!(context, levels.len(), EXPECTED_LEVELS.len());
 
-  for (a, b) in iter::zip(EXPECTED_LEVELS, levels) {
-    assert!(
-      a.offset == b.offset,
-      "Offset mismatch: expected {}, received: {}",
-      a.offset,
-      b.offset,
-    );
-
-    assert!(
-      a.valid == b.valid,
-      "Valid bit count mismatch: expected {}, received: {}",
-      a.valid,
-      b.valid,
-    );
+  for (a, b) in iter::zip(levels, EXPECTED_LEVELS) {
+    check_eq!(context, a.offset, b.offset);
+    check_eq!(context, a.valid, b.valid);
 
     // `make_levels` does not determine the number of available blocks at each
     // level. That is done when initializing the allocator's metadata.
-    assert!(
-      b.avail == 0,
-      "Available bit count mismatch: expected {}, received: {}",
-      0,
-      b.avail,
-    );
+    check_eq!(context, a.avail, 0);
   }
 }
 
-fn test_allocator_construction() {
+fn test_flag_init(context: &mut test::TestContext) {
+  let (levels, size) = PageAllocator::make_levels(TEST_PAGE_SIZE, TEST_MEM_SIZE);
   let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0xff; EXPECTED_METADATA_SIZE];
   let mem = buffer.as_mut_ptr();
-  
+  let mut allocator = PageAllocator {
+    page_size: TEST_PAGE_SIZE,
+    page_shift: bits::floor_log2(TEST_PAGE_SIZE),
+    base: 0,
+    size: TEST_MEM_SIZE,
+    flags: unsafe { slice::from_raw_parts_mut(mem, size) },
+    levels,
+  };
+
+  allocator.init_flags();
+
+  for (a, b) in iter::zip(allocator.levels, EXPECTED_LEVELS) {
+    check_eq!(context, a.avail, b.avail);
+  }
 }
