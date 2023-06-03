@@ -27,8 +27,10 @@ extern "C" fn ros_kernel(config: usize) -> ! {
   arch::init(config);
   mm::init();
 
-  if cfg!(feature = "unit_tests") {
+  #[cfg(feature = "unit_tests")]
+  {
     mm::run_tests();
+    debug_print!("Unit tests passed.\n");
   }
 
   loop {}

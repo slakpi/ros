@@ -22,6 +22,7 @@ pub fn init() {
   pager::init();
 }
 
+#[cfg(feature = "unit_tests")]
 pub fn run_tests() {
   page_allocator::test::run_tests();
 }

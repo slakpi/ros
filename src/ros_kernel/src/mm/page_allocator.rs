@@ -3,6 +3,7 @@
 //!
 //!   NOTE: The allocator is NOT thread-safe.
 
+#[cfg(feature = "unit_tests")]
 pub mod test;
 
 use crate::arch;
