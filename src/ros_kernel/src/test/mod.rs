@@ -1,6 +1,8 @@
+//! Basic Low-Level Module Testing Utilities
+
 pub struct TestContext {
-  pass_count: u32,
-  fail_count: u32,
+  pub pass_count: u32,
+  pub fail_count: u32,
 }
 
 impl TestContext {
@@ -10,46 +12,45 @@ impl TestContext {
       fail_count: 0,
     }
   }
-
-  pub fn log_pass(&mut self) {
-    self.pass_count += 1;
-  }
-
-  pub fn log_fail(&mut self) {
-    self.fail_count += 1;
-  }
-
-  pub fn get_pass_count(&self) -> u32 {
-    self.pass_count
-  }
-
-  pub fn get_fail_count(&self) -> u32 {
-    self.fail_count
-  }
 }
 
 #[macro_export]
 macro_rules! execute_test {
   ($fn:ident) => {
     let mut context = crate::test::TestContext::new();
+    debug_print!("* {}:\n", stringify!($fn));
     $fn(&mut context);
     debug_print!(
-      "{}: Pass: {}, Fail: {}\n",
-      stringify!($fn),
-      context.get_pass_count(),
-      context.get_fail_count(),
+      "  Pass: {}, Fail: {}\n",
+      context.pass_count,
+      context.fail_count
     );
   };
 }
 
 #[macro_export]
 macro_rules! check_eq {
-  ($c:ident, $a:expr, $b:expr) => {
-    if $a != $b {
-      $c.log_fail();
-      debug_print!("FAIL {} {}: {} != {}\n", file!(), line!(), $a, $b);
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act != $exp {
+      $ctx.fail_count += 1;
+      debug_print!("    FAIL: {} != {} ({} {})\n", $act, $exp, file!(), line!());
     } else {
-      $c.log_pass();
+      $ctx.pass_count += 1;
+    }
+  };
+  ($ctx:ident, $act:expr, $exp:expr, $tag:expr) => {
+    if $act != $exp {
+      $ctx.fail_count += 1;
+      debug_print!(
+        "    FAIL: {} != {} ({} {} {})\n",
+        $act,
+        $exp,
+        $tag,
+        file!(),
+        line!()
+      );
+    } else {
+      $ctx.pass_count += 1;
     }
   };
 }

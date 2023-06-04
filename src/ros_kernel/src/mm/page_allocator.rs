@@ -80,8 +80,8 @@ impl<'memory> PageAllocator<'memory> {
     assert!(bits::is_power_of_2(page_size));
     assert!(bits::align_down(base, page_size) == base);
 
-    let (levels, alloc_size) = PageAllocator::make_levels(page_size, size);
     let size = bits::align_down(size, page_size);
+    let (levels, alloc_size) = PageAllocator::make_levels(page_size, size);
     let mut allocator = PageAllocator {
       page_size,
       page_shift: bits::floor_log2(page_size),
@@ -111,7 +111,7 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `pages` - The number of pages to allocate.
+  /// * `pages` - The number of pages to allocate.
   ///
   /// # Returns
   ///
@@ -185,7 +185,7 @@ impl<'memory> PageAllocator<'memory> {
       // start with byte 1. 14 & 7 = 6, so start with bit 6.
       let mut bit = bits << 1;
       let mut idx = self.levels[i].offset + (bit >> 3);
-      let mut mask = (1 << (bit & 0x7)) as u8;
+      let mut mask = 1 << (bit & 0x7);
 
       // If this is the last possible page level or the next level has no valid
       // blocks, set all blocks as available.
@@ -216,7 +216,6 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// * `base` - The address of the block to reserve.
   /// * `size` - The size of the block to reserve.
-  ///
   ///
   /// # Description
   ///
@@ -276,40 +275,45 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// True if the block resides completely within the area served by this
-  /// allocator, false otherwise.
+  /// allocator and the size is greater than zero, false otherwise.
   fn reserve(&mut self, base: usize, size: usize) -> bool {
-    let last = base + size - 1;
-
     if size == 0 {
       return false;
     }
 
-    if (base < self.base) || (last >= self.base + self.size) {
+    if base < self.base {
       return false;
     }
 
-    // Find the page indices for the start and end of the reservation. Round the
-    // start down and round the end up.
-    let mut start = base >> self.page_shift;
-    let mut end = last >> self.page_shift;
+    let last = bits::align_up(base + size, self.page_size) - 1;
+
+    if last >= self.base + self.size {
+      return false;
+    }
+
+    let base = bits::align_down(base, self.page_size);
+
+    // Find the page indices for the start and end of the reservation.
+    let mut start = (base - self.base) >> self.page_shift;
+    let mut end = (last - self.base) >> self.page_shift;
 
     // Start from Level 0 and work up.
-    for l in 0..PAGE_LEVELS {
-      let mut idx = self.levels[l].offset + (start >> 3);
-      let mut mask = (1 << (start & 0x7)) as u8;
+    for (level, l) in self.levels.iter_mut().enumerate() {
+      let mut idx = l.offset + (start >> 3);
+      let mut mask = 1 << (start & 0x7);
 
-      // If the start index is odd, mark its even buddy as available. Only
-      // increment the available page count if the even buddy was not already
-      // marked available.
-      if (start & 0x1) != 0 {
-        self.levels[l].avail += ((self.flags[idx] & (mask >> 1)) == 0) as usize;
+      // If the start index is odd and this is not the top level, mark its even
+      // buddy as available. Only increment the available page count if the even
+      // buddy was not already marked available.
+      if (start & 0x1) != 0 && level < (PAGE_LEVELS - 1) {
+        l.avail += ((self.flags[idx] & (mask >> 1)) == 0) as usize;
         self.flags[idx] |= mask >> 1;
       }
 
       // Mark the occupied block as unavailable. Only decrement the available
       // count if the block was marked available.
       for _ in start..=end {
-        self.levels[l].avail -= ((self.flags[idx] & mask) != 0) as usize;
+        l.avail -= ((self.flags[idx] & mask) != 0) as usize;
         self.flags[idx] &= !mask;
         mask <<= 1;
 
@@ -319,13 +323,15 @@ impl<'memory> PageAllocator<'memory> {
         }
       }
 
-      // If the end index is even, mark its odd buddy as available. Only
-      // increment the available page count if the odd buddy was not already
-      // marked available. Note: `idx` and `mask` have already been updated to
-      // the correct position by the loop.
-      if (end & 0x1) == 0 {
-        self.levels[l].avail += ((self.flags[idx] & mask) == 0) as usize;
-        self.flags[idx] |= mask << 1;
+      // If the end index is even, this is not the top level, and the odd buddy
+      // is valid, then mark the odd buddy as available. Only increment the
+      // available page count if the odd buddy was not already marked available.
+      //
+      //   Note: `idx` and `mask` have already been updated to the correct
+      //         position by the loop.
+      if (end & 0x1) == 0 && end < (l.valid - 1) && level < (PAGE_LEVELS - 1) {
+        l.avail += ((self.flags[idx] & mask) == 0) as usize;
+        self.flags[idx] |= mask;
       }
 
       start >>= 1;
@@ -425,7 +431,7 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `min_level` - The minimum level. Start the search from here.
+  /// * `min_level` - The minimum level. Start the search from here.
   ///
   /// # Description
   ///
@@ -471,10 +477,10 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// `min_level` - The minimum block size.
-  /// `level` - The level with an available block.
-  /// `idx` - The byte index of the available block.
-  /// `mask` - The byte mask of the available block.
+  /// * `min_level` - The minimum block size.
+  /// * `level` - The level with an available block.
+  /// * `idx` - The byte index of the available block.
+  /// * `mask` - The byte mask of the available block.
   ///
   /// # Description
   ///
@@ -514,7 +520,7 @@ impl<'memory> PageAllocator<'memory> {
       let rel_idx = idx - self.levels[l].offset;
       let block = ((rel_idx << 3) + bits::floor_log2(alloc_mask as usize)) << 1;
       idx = (block >> 3) + self.levels[l - 1].offset;
-      alloc_mask = (1 << (block & 0x7)) as u8;
+      alloc_mask = 1 << (block & 0x7);
       avail_mask = alloc_mask << 1;
     }
 
