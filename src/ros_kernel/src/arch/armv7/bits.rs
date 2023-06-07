@@ -14,7 +14,7 @@ pub use crate::support::bits::*;
 /// # Returns
 ///
 /// The number of bits set to 1 in the address.
-fn ones(addr: usize) -> usize {
+pub const fn ones(addr: usize) -> usize {
   let mut n = addr;
   n -= (n >> 1) & 0x55555555;
   n = ((n >> 2) & 0x33333333) + (n & 0x33333333);
@@ -34,7 +34,7 @@ fn ones(addr: usize) -> usize {
 /// # Returns
 ///
 /// floor( log2( addr ) ) when addr > 0, 0 otherwise.
-pub fn floor_log2(addr: usize) -> usize {
+pub const fn floor_log2(addr: usize) -> usize {
   let mut n = addr;
   n |= n >> 1;
   n |= n >> 2;
@@ -54,7 +54,7 @@ pub fn floor_log2(addr: usize) -> usize {
 /// # Returns
 ///
 /// ceiling( log2( addr ) ) when addr > 0, 0 otherwise.
-fn ceil_log2(addr: usize) -> usize {
+pub const fn ceil_log2(addr: usize) -> usize {
   // Essentially the same as the fast power of 2 check, except the wrapping
   // subtractions allow for `addr = 0`. If `addr` is a power of 2, `m = 0` and
   // `ceiling( log2( addr ) ) = log2( addr )`. Otherwise `m = ` and the result

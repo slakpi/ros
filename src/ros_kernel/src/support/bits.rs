@@ -18,7 +18,7 @@
 /// # Returns
 ///
 /// The aligned address.
-pub fn align_down(addr: usize, boundary: usize) -> usize {
+pub const fn align_down(addr: usize, boundary: usize) -> usize {
   addr & !(boundary - 1)
 }
 
@@ -37,7 +37,7 @@ pub fn align_down(addr: usize, boundary: usize) -> usize {
 /// # Returns
 ///
 /// The aligned address.
-pub fn align_up(addr: usize, boundary: usize) -> usize {
+pub const fn align_up(addr: usize, boundary: usize) -> usize {
   let b = boundary - 1;
   (addr + b) & !b
 }
@@ -53,7 +53,7 @@ pub fn align_up(addr: usize, boundary: usize) -> usize {
 /// True if the address is a power of 2, false otherwise. The check against 0
 /// ensures 0 is not reported as a power of 2 and prevents the subtraction from
 /// asserting.
-pub fn is_power_of_2(n: usize) -> bool {
+pub const fn is_power_of_2(n: usize) -> bool {
   (n != 0) && ((n & (n - 1)) == 0)
 }
 
@@ -66,6 +66,6 @@ pub fn is_power_of_2(n: usize) -> bool {
 /// # Returns
 ///
 /// A mask for the least-significant bit in `n`.
-pub fn least_significant_bit(n: usize) -> usize {
+pub const fn least_significant_bit(n: usize) -> usize {
   n & ((!n) + 1)
 }
