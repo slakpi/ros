@@ -15,7 +15,16 @@ use core::slice;
 /// 4 KiB page size, the largest block size is 4 MiB.
 const PAGE_LEVELS: usize = 11;
 
-const INDEX_SHIFT: usize = bits::floor_log2(u8::BITS as usize);
+/// The size of a word in the flags array.
+const WORD_SIZE: usize = u8::BITS as usize;
+
+/// Given a block number, shift right by INDEX_SHIFT to get the index into the
+/// flags array.
+const INDEX_SHIFT: usize = bits::floor_log2(WORD_SIZE);
+
+/// Given a block number, used INDEX_MASK to get the bit number within the flags
+/// array word.
+const INDEX_MASK: usize = WORD_SIZE - 1;
 
 /// Metadata for each level in the buddy allocator.
 #[derive(Default)]
@@ -25,6 +34,21 @@ struct PageLevel {
   avail: usize,
 }
 
+/// The Buddy Allocator. The "textbook" implementation uses linked lists of
+/// available blocks. Splitting "buddies" involves removing a block from the
+/// list at level N and adding two blocks to the list at level N - 1. To keep
+/// the allocator as compact as possible, this Buddy Allocator only uses bit
+/// flags and an available count. Every bit starts as 1, and allocation sets the
+/// appropriate bits at every level to 0 when allocating a block. This is
+/// slower, but keeps the allocator much smaller.
+///
+/// For example, with 512 GiB of physical memory, an allocator needs 1 MiB to
+/// represent all possible 64 KiB pages as a single bit at level 0 and a total
+/// of ~2 MiB for all levels together.
+///
+/// A linked list version with a page number and next pointer would require
+/// 16 bytes per page meaning 128 MiB would have to be reserved to create nodes
+/// for all 64 KiB pages.
 pub struct PageAllocator<'memory> {
   page_size: usize,
   page_shift: usize,
@@ -65,7 +89,7 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Description
   ///
-  /// `make_levels` should have been called to ensure that `mem` has sufficient
+  /// `calc_size` should have been called to ensure that `mem` has sufficient
   /// space for the allocator's metadata. In addition to the provided exclusion
   /// ranges, the allocator will exclude its own metadata.
   ///
@@ -98,13 +122,13 @@ impl<'memory> PageAllocator<'memory> {
 
     // Reserve the provided exclusion ranges if they are in the area served by
     // this allocator.
-    // for r in excl.get_ranges() {
-    //   _ = allocator.reserve(r.base, r.size);
-    // }
+    for r in excl.get_ranges() {
+      _ = allocator.reserve(r.base, r.size);
+    }
 
     // Reserve the allocator's own metadata memory.
-    // let mem_addr = (mem as usize) - arch::get_kernel_virtual_base();
-    // _ = allocator.reserve(mem_addr, alloc_size);
+    let mem_addr = (mem as usize) - arch::get_kernel_virtual_base();
+    _ = allocator.reserve(mem_addr, alloc_size);
 
     allocator
   }
@@ -118,17 +142,18 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// Ok with the starting physical address of the block if a contiguous block
-  /// is found. Err if a large enough contiguous block cannot be found or the
+  /// is found. None if a large enough contiguous block cannot be found or the
   /// requested page count exceeds 2^(PAGE_LEVELS - 1).
   pub fn allocate(&mut self, pages: usize) -> Option<usize> {
-    // // Calculate the level with the ideal block size.
-    // let min_level = bits::ceil_log2(pages);
+    // Calculate the level with the ideal block size.
+    let level = bits::ceil_log2(pages);
 
-    // // Find the smallest available block.
-    // if let Ok((level, idx, mask)) = self.find_available_block(min_level) {
-    //   // Allocate the block by splitting as necessary.
-    //   return Ok(self.allocate_block(min_level, level, idx, mask));
-    // }
+    // Find the smallest available block. Handles the case where the number of
+    // pages requested is too large.
+    if let Some((idx, mask)) = self.find_available_block(level) {
+      // Allocate the block by splitting as necessary.
+      return Some(self.allocate_block(level, idx, mask));
+    }
 
     // Sorry, try another allocator or do some swapping.
     None
@@ -153,6 +178,12 @@ impl<'memory> PageAllocator<'memory> {
   }
 
   /// Reserve a block of memory.
+  ///
+  /// # Description
+  ///
+  ///   TODO: Setting individual bits is probably a very inefficient way to do
+  ///         this. However, reservations are a one-time setup thing, so for now
+  ///         this is probably fine.
   ///
   /// # Parameters
   ///
@@ -180,16 +211,25 @@ impl<'memory> PageAllocator<'memory> {
 
     let base = bits::align_down(base, self.page_size);
 
+    // Get the starting and ending pages at level 0.
     let mut start = (base - self.base) >> self.page_shift;
     let mut end = (last - self.base) >> self.page_shift;
 
     for level in self.levels.iter_mut() {
-      let mut idx = level.offset + (start >> 3);
-      let mut mask = 1 << (start & 0x7);
+      let mut idx = level.offset + (start >> INDEX_SHIFT);
+      let mut mask = 1 << (start & INDEX_MASK);
 
       for _ in start..=end {
+        // Only subtract from the available count if this block has not already
+        // been reserved. This keeps the accounting correct if two reserved
+        // blocks overlap.
+        //
+        //   NOTE: True is guaranteed to be 1 and false is guaranteed to be 0.
         level.avail -= ((self.flags[idx] & mask) != 0) as usize;
+
+        // Reserve the block.
         self.flags[idx] &= !mask;
+
         mask <<= 1;
 
         if mask == 0 {
@@ -198,6 +238,8 @@ impl<'memory> PageAllocator<'memory> {
         }
       }
 
+      // Moving up to the next level, shift the starting and ending blocks down
+      // by one, effectively dividing by two as the block sizes double.
       start >>= 1;
       end >>= 1;
     }
@@ -234,7 +276,7 @@ impl<'memory> PageAllocator<'memory> {
         avail: 0,
       };
 
-      offset += (blocks + 7) >> 3;
+      offset += (blocks + WORD_SIZE - 1) >> INDEX_SHIFT;
       blocks >>= 1;
     }
 
@@ -245,47 +287,37 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `min_level` - The minimum level. Start the search from here.
-  ///
-  /// # Description
-  ///
-  /// Searches upward, starting from `min_level`, for the smallest available
-  /// block that is at least `2^min_level` pages.
+  /// * `level` - The level to search.
   ///
   /// # Returns
   ///
-  /// Ok with a tuple containing the level at which the block was found, the
-  /// index of the byte with the available block, and a byte mask identifying
-  /// the available block's bit. Err if there is no block available or
-  /// `min_level` is too large.
-  fn find_available_block(&self, min_level: usize) -> Option<(usize, usize, u8)> {
-    // for l in min_level..PAGE_LEVELS {
-    //   if self.levels[l].avail == 0 {
-    //     continue;
-    //   }
+  /// A tuple with the byte index into the flags array and mask indicating the
+  /// available block.
+  fn find_available_block(&self, level: usize) -> Option<(usize, u8)> {
+    // Requested block size is too large.
+    if level >= PAGE_LEVELS {
+      return None
+    }
 
-    //   let mut idx = self.levels[l].offset;
-    //   let mut block = 0;
+    // No available blocks.
+    if self.levels[level].avail == 0 {
+      return None
+    }
 
-    //   while block < self.levels[l].valid {
-    //     if (self.flags[idx] & 0xff) == 0 {
-    //       idx += 1;
-    //       block += 8;
-    //       continue;
-    //     }
+    let start = self.levels[level].offset;
+    let end = start + (self.levels[level].valid >> INDEX_SHIFT);
 
-    //     let mask = bits::least_significant_bit(self.flags[idx] as usize);
-    //     return Ok((l, idx, mask as u8));
-    //   }
+    for idx in start..=end {
+      let byte = self.flags[idx];
+      let bit = bits::least_significant_bit(byte as usize) as u8;
 
-    //   // There is something wrong with the availability accounting or there are
-    //   // no valid blocks. Either case is a panic.
-    //   debug_assert!(false);
-    //   break;
-    // }
+      if bit != 0 {
+        return Some((idx, bit));
+      }
+    }
 
-    // Err(())
-
+    // No free block found, but the available block count is greater than zero.
+    debug_assert!(false, "Free block accounting is incorrect.");
     None
   }
 
@@ -293,61 +325,38 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `min_level` - The minimum block size.
   /// * `level` - The level with an available block.
   /// * `idx` - The byte index of the available block.
-  /// * `mask` - The byte mask of the available block.
+  /// * `mask` - The bit mask of the available block.
   ///
   /// # Description
   ///
-  /// If `level` = `min_level`, the `allocate_block` simply clears the block's
-  /// bit and updates the availability count. Otherwise, splitting needs to be
-  /// done.
+  /// Consider a free block at level 2, index 2, mask 0b100.
+  /// `log2( 0b100 ) = 2`, so the block of interest is the third block in the
+  /// third byte at level 2 and its offset is `( 2 << 3 ) + 2 = 18`. The page
+  /// offset is `18 << 2 = 72`, so the starting address is
+  /// `base + ( 72 * page size )`. If, for example the page size is 4 KiB and
+  /// the base address is 0, the starting address is 0x48000.
+  ///
+  /// At level 2, a block is `1 << 2 = 4` pages long. So, the size is simply
+  /// `( 1 << 2 ) * page size`. Again, if the page size is 4 KiB, then the block
+  /// is 16 KiB long.
+  ///
+  /// Knowing the base address and the size, allocation is no different than
+  /// reservation.
   ///
   /// # Returns
   ///
   /// The base address of the allocated block.
-  fn allocate_block(&mut self, min_level: usize, level: usize, idx: usize, mask: u8) -> usize {
-    // let mut idx = idx;
-    // let mut alloc_mask = mask;
-    // let mut avail_mask = 0u8;
+  fn allocate_block(&mut self, level: usize, idx: usize, mask: u8) -> usize {
+    // Compute the base address of the block and its size.
+    let block = (idx << INDEX_SHIFT) + bits::floor_log2(mask as usize);
+    let addr = self.base + ((block << level) * self.page_size);
+    let size = (1 << level) * self.page_size;
 
-    // for l in (min_level..=level).rev() {
-    //   // Update the availability flags at this level.
-    //   self.flags[idx] &= !alloc_mask;
-    //   self.flags[idx] |= avail_mask;
+    // Now simply reserve the block.
+    self.reserve(addr, size);
 
-    //   // If `avail_mask` is zero, we are only allocating a block. Otherwise, we
-    //   // splitting. This adds two blocks to the level and allocates one.
-    //   if avail_mask == 0 {
-    //     self.levels[l].avail -= 1;
-    //   } else {
-    //     self.levels[l].avail += 1;
-    //   }
-
-    //   // If we're at the minimum level, there's nothing left to do.
-    //   if l == min_level {
-    //     break;
-    //   }
-
-    //   // Calculate the block number in the next level down, then set the masks.
-    //   // By definition, the buddy blocks will be in the same byte. It does not
-    //   // matter which block we allocate, so just allocate the even block.
-    //   let rel_idx = idx - self.levels[l].offset;
-    //   let block = ((rel_idx << 3) + bits::floor_log2(alloc_mask as usize)) << 1;
-    //   idx = (block >> 3) + self.levels[l - 1].offset;
-    //   alloc_mask = 1 << (block & 0x7);
-    //   avail_mask = alloc_mask << 1;
-    // }
-
-    // // Calculate the page number from the block number.
-    // let rel_idx = idx - self.levels[min_level].offset;
-    // let block = ((rel_idx << 3) + bits::floor_log2(alloc_mask as usize)) << 1;
-    // let page = block << level;
-
-    // // Calculate and return the base address of the block.
-    // self.base + (page << self.page_shift)
-
-    0
+    addr
   }
 }
