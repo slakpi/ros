@@ -5,8 +5,10 @@ use crate::test;
 use crate::{check_eq, debug_print, execute_test};
 use core::{iter, slice};
 
-struct AvailableBlocks<'a> {
-  levels: [&'a [usize]; EXPECTED_PAGE_LEVELS],
+/// Represents an allocator state usings lists of closed, 1-based ranges of
+/// allocated blocks at each level.
+struct AllocatorState<'a> {
+  levels: [&'a [(usize, usize)]; EXPECTED_PAGE_LEVELS],
 }
 
 // Test with 4 KiB pages.
@@ -42,52 +44,52 @@ const EXPECTED_LEVELS: [PageLevel; EXPECTED_PAGE_LEVELS] = [
   PageLevel {
     offset: 0,
     valid: 2047,
-    avail: 1,
+    avail: 2047,
   },
   PageLevel {
     offset: 256,
     valid: 1023,
-    avail: 1,
+    avail: 1023,
   },
   PageLevel {
     offset: 384,
     valid: 511,
-    avail: 1,
+    avail: 511,
   },
   PageLevel {
     offset: 448,
     valid: 255,
-    avail: 1,
+    avail: 255,
   },
   PageLevel {
     offset: 480,
     valid: 127,
-    avail: 1,
+    avail: 127,
   },
   PageLevel {
     offset: 496,
     valid: 63,
-    avail: 1,
+    avail: 63,
   },
   PageLevel {
     offset: 504,
     valid: 31,
-    avail: 1,
+    avail: 31,
   },
   PageLevel {
     offset: 508,
     valid: 15,
-    avail: 1,
+    avail: 15,
   },
   PageLevel {
     offset: 510,
     valid: 7,
-    avail: 1,
+    avail: 7,
   },
   PageLevel {
     offset: 511,
     valid: 3,
-    avail: 1,
+    avail: 3,
   },
   PageLevel {
     offset: 512,
@@ -124,10 +126,14 @@ fn test_level_construction(context: &mut test::TestContext) {
 }
 
 fn test_flag_init(context: &mut test::TestContext) {
-  // Initialize all bytes in the metadata buffer to 0xff to ensure flag
-  // initialization sets them appropriately. No bytes should be 0xff after
+  const LAST_BYTES: [u8; EXPECTED_PAGE_LEVELS] = [
+    0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7, 0x1,
+  ];
+
+  // Initialize all bytes in the metadata buffer to 0 to ensure flag
+  // initialization sets them appropriately. No bytes should be zero after
   // initialization.
-  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0xff; EXPECTED_METADATA_SIZE];
+  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0; EXPECTED_METADATA_SIZE];
 
   // Get a page allocator.
   let mut allocator = make_allocator(0x2000, buffer.as_mut_ptr());
@@ -138,34 +144,19 @@ fn test_flag_init(context: &mut test::TestContext) {
   // Verify the availability counts match.
   for (a, b) in iter::zip(&allocator.levels, EXPECTED_LEVELS) {
     check_eq!(context, a.avail, b.avail);
+    check_eq!(context, a.avail, a.valid);
   }
 
-  // At level 10, the first and only block of 1024 is available. At level 9, the
-  // third and last block of 512 is available. At all lower levels, the seventh
-  // and last block is available. For example, at level 0, 8 * 255 = 2040 and
-  // page 2047 should be available, so bit 7 should be set. At level 7,
-  // 8 * 1 = 8 and block 15 should be available, so bit 7 should be set again.
-  // Etc.
-  verify_available_blocks(
-    context,
-    "Flag init",
-    &allocator,
-    AvailableBlocks {
-      levels: [
-        &[2047],
-        &[1023],
-        &[511],
-        &[255],
-        &[127],
-        &[63],
-        &[31],
-        &[15],
-        &[7],
-        &[3],
-        &[1],
-      ],
-    },
-  );
+  // Verify the availability flags.
+  for (level, last_byte) in iter::zip(&allocator.levels, &LAST_BYTES) {
+    let last = level.valid >> 3;
+
+    for i in 0..last {
+      check_eq!(context, allocator.flags[level.offset + i], 0xff);
+    }
+
+    check_eq!(context, allocator.flags[level.offset + last], *last_byte);
+  }
 }
 
 fn test_reservation_errors(context: &mut test::TestContext) {
@@ -213,7 +204,7 @@ fn test_reservation_errors(context: &mut test::TestContext) {
 fn test_reservations(context: &mut test::TestContext) {
   const TEST_ALLOC_BASE: usize = 0x80000;
 
-  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0xff; EXPECTED_METADATA_SIZE];
+  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0; EXPECTED_METADATA_SIZE];
   let mut allocator = make_allocator(TEST_ALLOC_BASE, buffer.as_mut_ptr());
 
   allocator.init_flags();
@@ -221,62 +212,76 @@ fn test_reservations(context: &mut test::TestContext) {
   // Reserve a 0xe000 byte block starting at 0x2001. Page-alignment forces
   // reservation of 0x2000 - 0x10fff (Pages 3 - 17).
   allocator.reserve(TEST_ALLOC_BASE + 0x2001, 0xe000);
-  verify_available_blocks(
+  verify_allocated_blocks(
     context,
     "Reservation step 1",
     &allocator,
-    AvailableBlocks {
+    AllocatorState {
       levels: [
-        &[18, 2047],
-        &[1, 10, 1023], // Split block 9
-        &[6, 511],      // Split blocks 1 and 5
-        &[4, 255],      // Split blocks 1 and 3
-        &[127],         // Split blocks 1 and 2
-        &[2, 63],       // Split block 1
-        &[2, 31],       // Split block 1
-        &[2, 15],       // Split block 1
-        &[2, 7],        // Split block 1
-        &[2, 3],        // Split block 1
-        &[],            // Split block 1
+        &[(3, 17)],
+        &[(2, 9)],
+        &[(1, 5)],
+        &[(1, 3)],
+        &[(1, 2)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
       ],
     },
   );
 
   // Without resetting the flags, reserve a 0x8000 byte block starting at
   // 0x12001. Page-alignment forces reservation of 0x12000 - 0x1afff (Pages
-  // 19 - 27). There should be no changes in levels 10 down to 4.
-  // Level 3: Split block 4, block 255 is available.
-  // Level 2: Consume block 6 and split block 7, blocks 8 and 511 are available.
-  // Level 1: Consume block 10 and split block 14, blocks 1 and 1023 are available.
-  // Level 0: Pages 18, 28, and 2047 are available.
+  // 19 - 27).
   allocator.reserve(TEST_ALLOC_BASE + 0x12001, 0x8000);
-  verify_available_blocks(
+  verify_allocated_blocks(
     context,
     "Reservation step 2",
     &allocator,
-    AvailableBlocks {
+    AllocatorState {
       levels: [
-        &[18, 28, 2047],
-        &[1, 1023],      // Consume block 10 and split block 14
-        &[8, 511],       // Consume block 6 and split block 7
-        &[255],          // Split block 4
-        &[127],          // No change
-        &[2, 63],        // No change
-        &[2, 31],        // No change
-        &[2, 15],        // No change
-        &[2, 7],         // No change
-        &[2, 3],         // No change
-        &[],             // No change
+        &[(3, 17), (19, 27)],
+        &[(2, 14)],
+        &[(1, 7)],
+        &[(1, 4)],
+        &[(1, 2)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
       ],
     },
   );
 
   // Without resetting the flags, reserve a 0x8000 byte block starting at
   // 0xd001. Page-alignment forces reservation of 0xd000 - 0x15fff (Pages
-  // 14 - 22). This overlaps the previous two ranges. There should be no changes
-  // in levels 10 down to 1.
-  // Level 0: Consume page 18, pages 28 and 2047 are available.
-  // allocator.reserve(0xd001, 0x8000);
+  // 14 - 22). This overlaps the previous two ranges.
+  allocator.reserve(TEST_ALLOC_BASE + 0xd001, 0x8000);
+  verify_allocated_blocks(
+    context,
+    "Reservation step 3",
+    &allocator,
+    AllocatorState {
+      levels: [
+        &[(3, 27)],
+        &[(2, 14)],
+        &[(1, 7)],
+        &[(1, 4)],
+        &[(1, 2)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+        &[(1, 1)],
+      ],
+    },
+  );
 }
 
 /// Construct an allocator without initializing the metadata flags.
@@ -304,58 +309,61 @@ fn make_allocator<'memory>(base: usize, mem: *mut u8) -> PageAllocator<'memory> 
   }
 }
 
-/// Verifies the allocator metadata given a list of expected available blocks.
+/// Verifies the allocator metadata given a list of expected allocated blocks.
 ///
 /// # Parameters
 ///
 /// * `context` - The testing context.
 /// * `tag` - A tag to include in check statements.
 /// * `allocator` - The allocator to verify.
-/// * `exp_avail` - Expected availability state.
-///
-/// # Description
-///
-/// Validates that each level in the allocator has the same number of available
-/// blocks as specified by the corresponding expected list.
-///
-/// Validates that each level's metadata has only the bits specified by the
-/// block numbers in the corresponding expected list set.
-///
-///   Note: Block numbers are 1-based. The function will assert if zero is
-///         encountered.
-fn verify_available_blocks(
+/// * `exp_alloc` - Expected allocation state.
+fn verify_allocated_blocks(
   context: &mut test::TestContext,
   tag: &str,
   allocator: &PageAllocator,
-  exp_avail: AvailableBlocks,
+  exp_alloc: AllocatorState,
 ) {
-  for (level, exp) in iter::zip(&allocator.levels, exp_avail.levels) {
-    check_eq!(context, level.avail, exp.len(), tag);
-
-    let last = level.valid >> 3;
-    let end = level.offset + last;
+  for (level, exp) in iter::zip(&allocator.levels, exp_alloc.levels) {
+    let mut idx = level.offset;
     let mut exp_idx = 0;
+    let mut mask = 0x1;
+    let mut avail = level.valid;
 
-    for idx in level.offset..=end {
-      let mut mask = 0;
-
+    for block in 0..level.valid {
       while exp_idx < exp.len() {
-        assert!(exp[exp_idx] > 0);
-        let block = exp[exp_idx] - 1;
-        let tmp_idx = level.offset + (block >> 3);
+        let r = exp[exp_idx];
+        assert!(r.0 > 0);
+        assert!(r.1 >= r.0);
 
-        if tmp_idx > idx {
+        if block > r.1 {
+          exp_idx += 1;
+        } else {
           break;
-        } else if tmp_idx == idx {
-          mask |= 1 << (block & 0x7);
         }
-
-        exp_idx += 1;
       }
 
-      debug_print!("  {} level {}\n", tag, level.offset);
-      check_eq!(context, allocator.flags[idx], mask, tag);
+      let mut bit = mask;
+
+      if exp_idx < exp.len() {
+        let r = exp[exp_idx];
+
+        if (block >= r.0 - 1) && (block <= r.1 - 1) {
+          bit = 0;
+          avail -= 1;
+        }
+      }
+
+      check_eq!(context, allocator.flags[idx] & mask, bit, tag);
+
+      mask <<= 1;
+
+      if mask == 0 {
+        idx += 1;
+        mask = 0x1;
+      }
     }
+
+    check_eq!(context, level.avail, avail, tag);
   }
 }
 
