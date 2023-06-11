@@ -1,8 +1,9 @@
 use super::{PageAllocator, PageLevel};
 use crate::arch::bits;
+use crate::debug_print;
 use crate::peripherals::memory;
 use crate::test;
-use crate::{check_eq, debug_print, execute_test};
+use crate::test::macros::*;
 use core::{iter, slice};
 
 /// Represents an allocator state usings lists of closed, 1-based ranges of
@@ -11,35 +12,33 @@ struct AllocatorState<'a> {
   levels: [&'a [(usize, usize)]; EXPECTED_PAGE_LEVELS],
 }
 
-// Test with 4 KiB pages.
+/// Test with 4 KiB pages.
 const TEST_PAGE_SIZE: usize = 4096;
 
-// Test with 2047 pages. The non-power of 2 tests proper setup and accounting.
-// At each level below 2^10, there should be one available block. For example,
-// There can only be 1 block of 1024 pages and 3 blocks of 512. The block of
-// 1024 covers two of the blocks of 512, leaving the last block of 512
-// available.
+/// Test with 2047 pages. The non-power of 2 tests proper setup and accounting.
 const TEST_MEM_SIZE: usize = TEST_PAGE_SIZE * 2047;
 
-// Block Size (Pages)       Bytes Required      Valid Bits      Available
-// ----------------------------------------------------------------------
-// 1024                       1                    1            1
-//  512                       1                    3            1
-//  256                       1                    7            1
-//  128                       2                   15            1
-//   64                       4                   31            1
-//   32                       8                   63            1
-//   16                      16                  127            1
-//    8                      32                  255            1
-//    4                      64                  511            1
-//    2                     128                 1023            1
-//    1                     256                 2047            1
-// ----------------------------------------------------------------------
-//                          513 bytes total for metadata
+/// Block Size (Pages)       Bytes Required      Valid Bits
+/// -------------------------------------------------------
+/// 1024                       1                    1
+///  512                       1                    3
+///  256                       1                    7
+///  128                       2                   15
+///   64                       4                   31
+///   32                       8                   63
+///   16                      16                  127
+///    8                      32                  255
+///    4                      64                  511
+///    2                     128                 1023
+///    1                     256                 2047
+/// -------------------------------------------------------
+///                          513 bytes total for metadata
 const EXPECTED_METADATA_SIZE: usize = 513;
 
+/// The allocator should serve up blocks of 2^0 up to 2^10 pages.
 const EXPECTED_PAGE_LEVELS: usize = 11;
 
+/// The expected layout of the allocator upon initialization.
 const EXPECTED_LEVELS: [PageLevel; EXPECTED_PAGE_LEVELS] = [
   PageLevel {
     offset: 0,
@@ -104,6 +103,7 @@ pub fn run_tests() {
   execute_test!(test_flag_init);
   execute_test!(test_reservation_errors);
   execute_test!(test_reservations);
+  execute_test!(test_allocation);
 }
 
 fn test_size_calculation(context: &mut test::TestContext) {
@@ -214,7 +214,6 @@ fn test_reservations(context: &mut test::TestContext) {
   allocator.reserve(TEST_ALLOC_BASE + 0x2001, 0xe000);
   verify_allocated_blocks(
     context,
-    "Reservation step 1",
     &allocator,
     AllocatorState {
       levels: [
@@ -239,7 +238,6 @@ fn test_reservations(context: &mut test::TestContext) {
   allocator.reserve(TEST_ALLOC_BASE + 0x12001, 0x8000);
   verify_allocated_blocks(
     context,
-    "Reservation step 2",
     &allocator,
     AllocatorState {
       levels: [
@@ -264,7 +262,6 @@ fn test_reservations(context: &mut test::TestContext) {
   allocator.reserve(TEST_ALLOC_BASE + 0xd001, 0x8000);
   verify_allocated_blocks(
     context,
-    "Reservation step 3",
     &allocator,
     AllocatorState {
       levels: [
@@ -282,6 +279,73 @@ fn test_reservations(context: &mut test::TestContext) {
       ],
     },
   );
+}
+
+fn test_allocation(context: &mut test::TestContext) {
+  const TEST_ALLOC_BASE: usize = 0x400000;
+  const TEST_ALLOC_END: usize = TEST_ALLOC_BASE + TEST_MEM_SIZE;
+
+  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0; EXPECTED_METADATA_SIZE];
+  let mut allocator = make_allocator(TEST_ALLOC_BASE, buffer.as_mut_ptr());
+
+  // Test allocating blocks of every size and verify the base address returned
+  // is within the memory served by the allocator.
+  for level in 0..EXPECTED_PAGE_LEVELS {
+    allocator.init_flags();
+
+    let pages = 1 << level;
+    let size = pages * TEST_PAGE_SIZE;
+
+    if let Some(addr) = allocator.allocate(pages) {
+      check_gteq!(context, addr, TEST_ALLOC_BASE);
+      check_lteq!(context, addr + size, TEST_ALLOC_END);
+    } else {
+      mark_fail!(context, "Allocation failed.");
+    }
+  }
+
+  // Test allocating all blocks in a level, then verifying the available blocks
+  // blocks in each level below the current level.
+  //
+  //   NOTE: For this test to be meaningful, the number of pages should not be a
+  //         power of 2.
+  for level in 1..EXPECTED_PAGE_LEVELS {
+    allocator.init_flags();
+
+    let pages = 1 << level;
+    let total_pages = pages * allocator.levels[level].valid;
+
+    for _ in 0..allocator.levels[level].valid {
+      _ = allocator.allocate(pages);
+    }
+
+    for i in 0..level {
+      let blocks = total_pages >> i;
+      check_eq!(context, allocator.levels[i].avail, allocator.levels[i].valid - blocks);
+    }
+  }
+  
+  // Test attempting to allocating too many blocks of every size.
+  for level in 0..EXPECTED_PAGE_LEVELS {
+    allocator.init_flags();
+
+    let pages = 1 << level;
+
+    for _ in 0..allocator.levels[level].valid {
+      check_eq!(context, allocator.allocate(pages).is_some(), true);
+    }
+
+    check_eq!(context, allocator.allocate(pages).is_none(), true);
+  }
+
+  // Test attempting to allocate a block that is larger than the maximum size.
+  let max_pages = 1 << (EXPECTED_PAGE_LEVELS - 1);
+  allocator.init_flags();
+  check_eq!(context, allocator.allocate(max_pages + 1).is_none(), true);
+
+  // Test attempting to allocate zero pages.
+  allocator.init_flags();
+  check_eq!(context, allocator.allocate(0).is_none(), true);
 }
 
 /// Construct an allocator without initializing the metadata flags.
@@ -319,7 +383,6 @@ fn make_allocator<'memory>(base: usize, mem: *mut u8) -> PageAllocator<'memory> 
 /// * `exp_alloc` - Expected allocation state.
 fn verify_allocated_blocks(
   context: &mut test::TestContext,
-  tag: &str,
   allocator: &PageAllocator,
   exp_alloc: AllocatorState,
 ) {
@@ -353,7 +416,7 @@ fn verify_allocated_blocks(
         }
       }
 
-      check_eq!(context, allocator.flags[idx] & mask, bit, tag);
+      check_eq!(context, allocator.flags[idx] & mask, bit);
 
       mask <<= 1;
 
@@ -363,7 +426,7 @@ fn verify_allocated_blocks(
       }
     }
 
-    check_eq!(context, level.avail, avail, tag);
+    check_eq!(context, level.avail, avail);
   }
 }
 

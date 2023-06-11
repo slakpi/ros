@@ -67,5 +67,5 @@ pub const fn is_power_of_2(n: usize) -> bool {
 ///
 /// A mask for the least-significant bit in `n`.
 pub const fn least_significant_bit(n: usize) -> usize {
-  n & ((!n) + 1)
+  n & ((!n).wrapping_add(1))
 }

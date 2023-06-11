@@ -145,14 +145,18 @@ impl<'memory> PageAllocator<'memory> {
   /// is found. None if a large enough contiguous block cannot be found or the
   /// requested page count exceeds 2^(PAGE_LEVELS - 1).
   pub fn allocate(&mut self, pages: usize) -> Option<usize> {
+    if pages == 0 {
+      return None;
+    }
+
     // Calculate the level with the ideal block size.
-    let level = bits::ceil_log2(pages);
+    let level_idx = bits::ceil_log2(pages);
 
     // Find the smallest available block. Handles the case where the number of
     // pages requested is too large.
-    if let Some((idx, mask)) = self.find_available_block(level) {
+    if let Some((idx, bit)) = self.find_available_block(level_idx) {
       // Allocate the block by splitting as necessary.
-      return Some(self.allocate_block(level, idx, mask));
+      return Some(self.allocate_block(level_idx, idx, bit));
     }
 
     // Sorry, try another allocator or do some swapping.
@@ -287,32 +291,35 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `level` - The level to search.
+  /// * `level_idx` - The level to search.
   ///
   /// # Returns
   ///
-  /// A tuple with the byte index into the flags array and mask indicating the
-  /// available block.
-  fn find_available_block(&self, level: usize) -> Option<(usize, u8)> {
+  /// A tuple with the word index of the available block relative to the start
+  /// of the flags for `level_idx` and a mask specifying the bit of the
+  /// available block within the word.
+  fn find_available_block(&self, level_idx: usize) -> Option<(usize, u8)> {
     // Requested block size is too large.
-    if level >= PAGE_LEVELS {
-      return None
+    if level_idx >= PAGE_LEVELS {
+      return None;
     }
+
+    let level = &self.levels[level_idx];
 
     // No available blocks.
-    if self.levels[level].avail == 0 {
-      return None
+    if level.avail == 0 {
+      return None;
     }
 
-    let start = self.levels[level].offset;
-    let end = start + (self.levels[level].valid >> INDEX_SHIFT);
+    let start = level.offset;
+    let end = start + (level.valid >> INDEX_SHIFT);
 
     for idx in start..=end {
-      let byte = self.flags[idx];
-      let bit = bits::least_significant_bit(byte as usize) as u8;
+      let word = self.flags[idx];
+      let bit = bits::least_significant_bit(word as usize) as u8;
 
       if bit != 0 {
-        return Some((idx, bit));
+        return Some((idx - level.offset, bit));
       }
     }
 
@@ -325,15 +332,16 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `level` - The level with an available block.
-  /// * `idx` - The byte index of the available block.
-  /// * `mask` - The bit mask of the available block.
+  /// * `level_idx` - The level with an available block.
+  /// * `idx` - The word index of the available block. The index is relative to
+  ///   the start of the level's flags, not the start of the metadata.
+  /// * `bit` - The bit mask of the available block.
   ///
   /// # Description
   ///
-  /// Consider a free block at level 2, index 2, mask 0b100.
+  /// Consider a free block at level 2, index 2, bit 0b100.
   /// `log2( 0b100 ) = 2`, so the block of interest is the third block in the
-  /// third byte at level 2 and its offset is `( 2 << 3 ) + 2 = 18`. The page
+  /// third word at level 2 and its offset is `( 2 << 3 ) + 2 = 18`. The page
   /// offset is `18 << 2 = 72`, so the starting address is
   /// `base + ( 72 * page size )`. If, for example the page size is 4 KiB and
   /// the base address is 0, the starting address is 0x48000.
@@ -348,11 +356,11 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// The base address of the allocated block.
-  fn allocate_block(&mut self, level: usize, idx: usize, mask: u8) -> usize {
+  fn allocate_block(&mut self, level_idx: usize, idx: usize, mask: u8) -> usize {
     // Compute the base address of the block and its size.
     let block = (idx << INDEX_SHIFT) + bits::floor_log2(mask as usize);
-    let addr = self.base + ((block << level) * self.page_size);
-    let size = (1 << level) * self.page_size;
+    let addr = self.base + ((block << level_idx) * self.page_size);
+    let size = (1 << level_idx) * self.page_size;
 
     // Now simply reserve the block.
     self.reserve(addr, size);

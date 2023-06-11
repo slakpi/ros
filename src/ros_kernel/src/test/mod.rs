@@ -1,5 +1,7 @@
 //! Basic Low-Level Module Testing Utilities
 
+pub mod macros;
+
 pub struct TestContext {
   pub pass_count: u32,
   pub fail_count: u32,
@@ -38,19 +40,72 @@ macro_rules! check_eq {
       $ctx.pass_count += 1;
     }
   };
-  ($ctx:ident, $act:expr, $exp:expr, $tag:expr) => {
-    if $act != $exp {
+}
+
+#[macro_export]
+macro_rules! check_neq {
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act == $exp {
       $ctx.fail_count += 1;
-      debug_print!(
-        "    FAIL: {} != {} ({} {} {})\n",
-        $act,
-        $exp,
-        $tag,
-        file!(),
-        line!()
-      );
+      debug_print!("    FAIL: {} == {} ({} {})\n", $act, $exp, file!(), line!());
     } else {
       $ctx.pass_count += 1;
     }
+  };
+}
+
+#[macro_export]
+macro_rules! check_lt {
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act >= $exp {
+      $ctx.fail_count += 1;
+      debug_print!("    FAIL: {} >= {} ({} {})\n", $act, $exp, file!(), line!());
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! check_lteq {
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act > $exp {
+      $ctx.fail_count += 1;
+      debug_print!("    FAIL: {} > {} ({} {})\n", $act, $exp, file!(), line!());
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! check_gt {
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act <= $exp {
+      $ctx.fail_count += 1;
+      debug_print!("    FAIL: {} <= {} ({} {})\n", $act, $exp, file!(), line!());
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! check_gteq {
+  ($ctx:ident, $act:expr, $exp:expr) => {
+    if $act < $exp {
+      $ctx.fail_count += 1;
+      debug_print!("    FAIL: {} < {} ({} {})\n", $act, $exp, file!(), line!());
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! mark_fail {
+  ($ctx:ident, $msg:literal) => {
+    $ctx.fail_count += 1;
+    debug_print!("    FAIL: {} ({} {})\n", $msg, file!(), line!());
   };
 }
