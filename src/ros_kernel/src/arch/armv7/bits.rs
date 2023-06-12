@@ -5,17 +5,17 @@
 
 pub use crate::support::bits::*;
 
-/// Fast 32-bit address population count.
+/// Fast 32-bit population count.
 ///
 /// # Parameters
 ///
-/// * `addr` - The address.
+/// * `n` - The number.
 ///
 /// # Returns
 ///
-/// The number of bits set to 1 in the address.
-pub const fn ones(addr: usize) -> usize {
-  let mut n = addr;
+/// The number of bits set to 1 in the number.
+pub const fn ones(n: usize) -> usize {
+  let mut n = n;
   n -= (n >> 1) & 0x55555555;
   n = ((n >> 2) & 0x33333333) + (n & 0x33333333);
   n = ((n >> 4) + n) & 0x0f0f0f0f;
@@ -25,17 +25,17 @@ pub const fn ones(addr: usize) -> usize {
   n & 0x3f
 }
 
-/// Fast 32-bit floor base-2 log of an address.
+/// Fast 32-bit floor base-2 log of a number.
 ///
 /// # Parameters
 ///
-/// * `addr` - The address
+/// * `n` - The number.
 ///
 /// # Returns
 ///
-/// floor( log2( addr ) ) when addr > 0, 0 otherwise.
-pub const fn floor_log2(addr: usize) -> usize {
-  let mut n = addr;
+/// floor( log2( n ) ) when n > 0, 0 otherwise.
+pub const fn floor_log2(n: usize) -> usize {
+  let mut n = n;
   n |= n >> 1;
   n |= n >> 2;
   n |= n >> 4;
@@ -45,25 +45,21 @@ pub const fn floor_log2(addr: usize) -> usize {
   ones(n >> 1)
 }
 
-/// Fast 32-bit ceiling base-2 log of an address.
+/// Fast 32-bit ceiling base-2 log of an n.
 ///
 /// # Parameters
 ///
-/// * `addr` - The address.
+/// * `n` - The number.
 ///
 /// # Returns
 ///
-/// ceiling( log2( addr ) ) when addr > 0, 0 otherwise.
-pub const fn ceil_log2(addr: usize) -> usize {
-  // Essentially the same as the fast power of 2 check, except the wrapping
-  // subtractions allow for `addr = 0`. If `addr` is a power of 2, `m = 0` and
-  // `ceiling( log2( addr ) ) = log2( addr )`. Otherwise `m = ` and the result
-  // is `floor( log2( addr ) ) + 1`.
-  let mut m = addr & (addr.wrapping_sub(1));
+/// ceiling( log2( n ) ) when n > 0, 0 otherwise.
+pub const fn ceil_log2(n: usize) -> usize {
+  let mut m = n & (n.wrapping_sub(1));
   m |= !m.wrapping_sub(1);
   m >>= 31;
 
-  let mut n = addr;
+  let mut n = n;
   n |= n >> 1;
   n |= n >> 2;
   n |= n >> 4;

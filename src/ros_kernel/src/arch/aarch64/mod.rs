@@ -37,6 +37,9 @@ static mut EXCL_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 /// Page size.
 static mut PAGE_SIZE: usize = 0;
 
+/// Page shift.
+static mut PAGE_SHIFT: usize = 0;
+
 /// Kernel virtual address base.
 static mut VIRTUAL_BASE: usize = 0;
 
@@ -69,6 +72,7 @@ pub fn init(config: usize) {
 
   unsafe {
     PAGE_SIZE = config.page_size;
+    PAGE_SHIFT = bits::floor_log2(config.page_size);
     VIRTUAL_BASE = config.virtual_base;
   }
 
@@ -136,6 +140,17 @@ pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
 ///         and sound.
 pub fn get_page_size() -> usize {
   unsafe { PAGE_SIZE }
+}
+
+/// Get the page shift.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+pub fn get_page_shift() -> usize {
+  unsafe { PAGE_SHIFT }
 }
 
 /// Get the kernel virtual base address.

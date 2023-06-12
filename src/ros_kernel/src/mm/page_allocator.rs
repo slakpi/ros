@@ -9,14 +9,17 @@ pub mod test;
 use crate::arch;
 use crate::arch::bits;
 use crate::peripherals::memory;
-use core::slice;
+use core::{mem, slice};
 
 /// Support blocks that are up to Page Size * 2^10 bytes. For example, with a
 /// 4 KiB page size, the largest block size is 4 MiB.
 const PAGE_LEVELS: usize = 11;
 
+/// Word type used for the bit map.
+type Word = u32;
+
 /// The size of a word in the flags array.
-const WORD_SIZE: usize = u8::BITS as usize;
+const WORD_SIZE: usize = Word::BITS as usize;
 
 /// Given a block number, shift right by INDEX_SHIFT to get the index into the
 /// flags array.
@@ -50,11 +53,9 @@ struct PageLevel {
 /// 16 bytes per page meaning 128 MiB would have to be reserved to create nodes
 /// for all 64 KiB pages.
 pub struct PageAllocator<'memory> {
-  page_size: usize,
-  page_shift: usize,
   base: usize,
   size: usize,
-  flags: &'memory mut [u8],
+  flags: &'memory mut [u32],
   levels: [PageLevel; PAGE_LEVELS],
 }
 
@@ -64,14 +65,13 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `page_size` - The page size in bytes.
-  /// * `block_size` - The size of the memory block served.
+  /// * `size` - The size of the memory block served.
   ///
   /// # Returns
   ///
   /// The allocator metadata size in bytes.
-  pub fn calc_size(page_size: usize, block_size: usize) -> usize {
-    let (_, size) = PageAllocator::make_levels(page_size, block_size);
+  pub fn calc_metadata_size(size: usize) -> usize {
+    let (_, size) = PageAllocator::make_levels(size);
     size
   }
 
@@ -79,7 +79,6 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `page_size` - The page size in bytes.
   /// * `base` - The base address of the memory block served. The base address
   ///   must be on a page boundary.
   /// * `size` - The size of the memory block served.
@@ -89,36 +88,34 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Description
   ///
-  /// `calc_size` should have been called to ensure that `mem` has sufficient
-  /// space for the allocator's metadata. In addition to the provided exclusion
-  /// ranges, the allocator will exclude its own metadata.
+  /// `calc_metadata_size` should have been called to ensure that `mem` has
+  /// sufficient space for the allocator's metadata. In addition to the provided
+  /// exclusion ranges, the allocator will exclude its own metadata.
   ///
   /// # Returns
   ///
   /// The allocator structure.
   pub fn new(
-    page_size: usize,
     base: usize,
     size: usize,
     mem: *mut u8,
     excl: &memory::MemoryConfig,
   ) -> Self {
-    assert!(bits::is_power_of_2(page_size));
+    let page_size = arch::get_page_size();
+
     assert!(bits::align_down(base, page_size) == base);
 
-    let size = bits::align_down(size, page_size);
-    let (levels, alloc_size) = PageAllocator::make_levels(page_size, size);
+    let (levels, alloc_size) = PageAllocator::make_levels(size);
+    let words = alloc_size / mem::size_of::<Word>();
     let mut allocator = PageAllocator {
-      page_size,
-      page_shift: bits::floor_log2(page_size),
       base,
       size,
-      flags: unsafe { slice::from_raw_parts_mut(mem, alloc_size) },
+      flags: unsafe { slice::from_raw_parts_mut(mem as *mut Word, words) },
       levels,
     };
 
     // Initialize the metadata.
-    allocator.init_flags();
+    allocator.init_metadata();
 
     // Reserve the provided exclusion ranges if they are in the area served by
     // this allocator.
@@ -170,8 +167,8 @@ impl<'memory> PageAllocator<'memory> {
   /// # Description
   ///
   /// Marks all valid blocks as available.
-  fn init_flags(&mut self) {
-    self.flags.fill(u8::MAX);
+  fn init_metadata(&mut self) {
+    self.flags.fill(Word::MAX);
 
     for level in &mut self.levels {
       let last = level.valid >> INDEX_SHIFT;
@@ -199,6 +196,9 @@ impl<'memory> PageAllocator<'memory> {
   /// True if the block resides completely within the area served by this
   /// allocator and the size is greater than zero, false otherwise.
   fn reserve(&mut self, base: usize, size: usize) -> bool {
+    let page_size = arch::get_page_size();
+    let page_shift = arch::get_page_shift();
+
     if size == 0 {
       return false;
     }
@@ -207,40 +207,46 @@ impl<'memory> PageAllocator<'memory> {
       return false;
     }
 
-    let last = bits::align_up(base + size, self.page_size) - 1;
+    let last = bits::align_up(base + size, page_size) - 1;
 
     if last >= self.base + self.size {
       return false;
     }
 
-    let base = bits::align_down(base, self.page_size);
+    let base = bits::align_down(base, page_size);
 
     // Get the starting and ending pages at level 0.
-    let mut start = (base - self.base) >> self.page_shift;
-    let mut end = (last - self.base) >> self.page_shift;
+    let mut start = (base - self.base) >> page_shift;
+    let mut end = (last - self.base) >> page_shift;
 
     for level in self.levels.iter_mut() {
-      let mut idx = level.offset + (start >> INDEX_SHIFT);
-      let mut mask = 1 << (start & INDEX_MASK);
+      let start_idx = level.offset + (start >> INDEX_SHIFT);
+      let end_idx = level.offset + (end >> INDEX_SHIFT);
 
-      for _ in start..=end {
-        // Only subtract from the available count if this block has not already
-        // been reserved. This keeps the accounting correct if two reserved
-        // blocks overlap.
-        //
-        //   NOTE: True is guaranteed to be 1 and false is guaranteed to be 0.
-        level.avail -= ((self.flags[idx] & mask) != 0) as usize;
+      // For the first iteration, clear the bits before the start bit.
+      let mut mask = Word::MAX << (start & INDEX_MASK);
 
-        // Reserve the block.
+      // If `start_idx == end_idx`, we'll skip the loop and clear the bits after
+      // the end bit. Otherwise, the loop will execute up to, but not including,
+      // the end index resetting the mask every time.
+      for idx in start_idx..end_idx {
+        // Mask off the bits we intend to clear and only reduce the available
+        // count by the number of bits that are actually currently one.
+        let clear = self.flags[idx] & mask;
+        level.avail -= bits::ones(clear as usize);
         self.flags[idx] &= !mask;
 
-        mask <<= 1;
-
-        if mask == 0 {
-          idx += 1;
-          mask = 1;
-        }
+        // Reset the mask for the next word.
+        mask = Word::MAX;
       }
+
+      // Intersect the mask with the valid bits in the last word.
+      mask &= Word::MAX >> (WORD_SIZE - (end & INDEX_MASK) - 1);
+
+      // Perform the last iteration of the loop on the final index.
+      let clear = self.flags[end_idx] & mask;
+      level.avail -= bits::ones(clear as usize);
+      self.flags[end_idx] &= !mask;
 
       // Moving up to the next level, shift the starting and ending blocks down
       // by one, effectively dividing by two as the block sizes double.
@@ -251,26 +257,21 @@ impl<'memory> PageAllocator<'memory> {
     true
   }
 
-  /// Calculates the size of the allocator metadata for the given page size and
-  /// memory block size, and constructs a list of descriptors for the allocator
-  /// levels.
+  /// Calculates the size of the allocator metadata for the given block size,
+  /// and constructs a list of descriptors for the allocator levels.
   ///
   /// # Parameters
   ///
-  /// * `page_size` - The page size in bytes.
-  /// * `block_size` - The size of the memory block served.
+  /// * `size` - The size of the memory block served.
   ///
   /// # Returns
   ///
   /// The a list of descriptors and the allocator metadata size in bytes.
-  ///
-  /// # Assumes
-  ///
-  /// Assumes that the page size has already been validated for the
-  /// architecture.
-  fn make_levels(page_size: usize, block_size: usize) -> ([PageLevel; PAGE_LEVELS], usize) {
+  fn make_levels(size: usize) -> ([PageLevel; PAGE_LEVELS], usize) {
+    let page_shift = arch::get_page_shift();
+
     let mut levels: [PageLevel; PAGE_LEVELS] = Default::default();
-    let mut blocks = block_size / page_size;
+    let mut blocks = size >> page_shift;
     let mut offset = 0;
 
     for i in 0..PAGE_LEVELS {
@@ -284,7 +285,7 @@ impl<'memory> PageAllocator<'memory> {
       blocks >>= 1;
     }
 
-    (levels, offset)
+    (levels, (offset * WORD_SIZE) >> 3)
   }
 
   /// Finds the first available block.
@@ -298,7 +299,7 @@ impl<'memory> PageAllocator<'memory> {
   /// A tuple with the word index of the available block relative to the start
   /// of the flags for `level_idx` and a mask specifying the bit of the
   /// available block within the word.
-  fn find_available_block(&self, level_idx: usize) -> Option<(usize, u8)> {
+  fn find_available_block(&self, level_idx: usize) -> Option<(usize, Word)> {
     // Requested block size is too large.
     if level_idx >= PAGE_LEVELS {
       return None;
@@ -316,7 +317,7 @@ impl<'memory> PageAllocator<'memory> {
 
     for idx in start..=end {
       let word = self.flags[idx];
-      let bit = bits::least_significant_bit(word as usize) as u8;
+      let bit = bits::least_significant_bit(word as usize) as Word;
 
       if bit != 0 {
         return Some((idx - level.offset, bit));
@@ -356,11 +357,13 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// The base address of the allocated block.
-  fn allocate_block(&mut self, level_idx: usize, idx: usize, mask: u8) -> usize {
+  fn allocate_block(&mut self, level_idx: usize, idx: usize, mask: Word) -> usize {
+    let page_size = arch::get_page_size();
+
     // Compute the base address of the block and its size.
     let block = (idx << INDEX_SHIFT) + bits::floor_log2(mask as usize);
-    let addr = self.base + ((block << level_idx) * self.page_size);
-    let size = (1 << level_idx) * self.page_size;
+    let addr = self.base + ((block << level_idx) * page_size);
+    let size = (1 << level_idx) * page_size;
 
     // Now simply reserve the block.
     self.reserve(addr, size);

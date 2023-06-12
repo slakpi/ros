@@ -42,15 +42,15 @@ pub const fn align_up(addr: usize, boundary: usize) -> usize {
   (addr + b) & !b
 }
 
-/// Fast check if an address is a power of 2.
+/// Fast check if a number is a power of 2.
 ///
 /// # Parameters
 ///
-/// * `n` - The address to check.
+/// * `n` - The number to check.
 ///
 /// # Returns
 ///
-/// True if the address is a power of 2, false otherwise. The check against 0
+/// True if the number is a power of 2, false otherwise. The check against 0
 /// ensures 0 is not reported as a power of 2 and prevents the subtraction from
 /// asserting.
 pub const fn is_power_of_2(n: usize) -> bool {

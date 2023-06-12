@@ -28,14 +28,14 @@ pub fn init() {
   let excl_layout = arch::get_exclusion_layout();
 
   for (i, r) in mem_layout.get_ranges().iter().enumerate() {
-    let alloc_size = bits::align_up(PageAllocator::calc_size(page_size, r.size), page_size);
+    let size = PageAllocator::calc_metadata_size(r.size);
+    let alloc_size = bits::align_up(size, page_size);
     assert!(alloc_size < r.size);
 
     let ptr = (r.base + virtual_base + r.size - alloc_size) as *mut u8;
 
     unsafe {
       ALLOCATORS[i] = Some(PageAllocator::new(
-        page_size,
         r.base,
         r.size,
         ptr,
