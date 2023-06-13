@@ -71,3 +71,47 @@ pub const fn ceil_log2(n: usize) -> usize {
 
   ones(n >> 1) + m
 }
+
+/// Removes all even (1-based) bits and leaves the odd bits in the lower
+/// 32-bits.
+///
+/// # Parameters
+///
+/// * `n` - The number.
+///
+/// # Description
+///
+/// Given a 64-bit word 0xeoeoeoeoeoeoeoeo, where `e` is a 1-based even bit and
+/// `o` is an odd bit, the function returns 0x00000000oooooooo. Each odd bit
+/// maintains its relative order with the other bits.
+///
+/// # Returns
+///
+/// The odd bits moved to the lower 32-bits.
+pub const fn compact_odd_bits(n: usize) -> usize {
+  let mut n = n;
+  n = ((n & 0x4444444444444444) >> 1)  | (n & 0x1111111111111111);
+  n = ((n & 0x3030303030303030) >> 2)  | (n & 0x0303030303030303);
+  n = ((n & 0x0f000f000f000f00) >> 4)  | (n & 0x000f000f000f000f);
+  n = ((n & 0x00ff000000ff0000) >> 8)  | (n & 0x000000ff000000ff);
+  n = ((n & 0x0000ffff00000000) >> 16) | (n & 0x000000000000ffff);
+  n
+}
+
+/// Removes all odd (1-based) bits and leaves the even bits in the lower
+/// 32-bits.
+///
+/// # Parameters
+///
+/// * `n` - The number.
+///
+/// # Description
+///
+/// See `compact_odd_bits`.
+///
+/// # Returns
+///
+/// The even bits moved to the lower 32-bits.
+pub const fn compact_even_bits(n: usize) -> usize {
+  compact_odd_bits(n >> 1)
+}
