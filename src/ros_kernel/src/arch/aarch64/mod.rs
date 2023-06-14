@@ -1,12 +1,12 @@
 //! AArch64 Initialization
 
-pub mod bits;
 pub mod debug;
 
 mod exceptions;
 mod mm;
 mod peripherals;
 
+use crate::arch::bits;
 use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{dtb, range};

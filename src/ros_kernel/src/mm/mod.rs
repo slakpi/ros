@@ -3,7 +3,7 @@
 mod page_allocator;
 mod pager;
 
-use crate::arch;
+#[cfg(feature = "module_tests")]
 use crate::debug_print;
 
 /// Re-initialization guard.

@@ -1,4 +1,4 @@
-//! ARMv7a Bit Manipulation Utilities
+//! 32-bit Bit Manipulation Utilities
 //!
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html

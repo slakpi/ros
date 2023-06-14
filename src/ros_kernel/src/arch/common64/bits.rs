@@ -1,4 +1,4 @@
-//! AArch64 Bit Manipulation Utilities
+//! 64-bit Bit Manipulation Utilities
 //!
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html

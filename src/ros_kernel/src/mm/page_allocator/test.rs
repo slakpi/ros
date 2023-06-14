@@ -1,10 +1,8 @@
-use super::{INDEX_SHIFT, PageAllocator, PageLevel, Word};
-use crate::arch::bits;
+use super::{INDEX_SHIFT, PageAllocator, PageLevel, WORD_LEN, WORD_SIZE};
 use crate::debug_print;
-use crate::peripherals::memory;
 use crate::test;
 use crate::test::macros::*;
-use core::{iter, mem, slice};
+use core::{iter, slice};
 
 /// Represents an allocator state usings lists of closed, 1-based ranges of
 /// allocated blocks at each level.
@@ -19,83 +17,29 @@ const TEST_PAGE_SIZE: usize = 4096;
 const TEST_MEM_SIZE: usize = TEST_PAGE_SIZE * 2047;
 
 /// Block Size (Pages)       Bytes Required      Valid Bits
+///                          32-bit  64-bit
 /// -------------------------------------------------------
-/// 1024                       4                    1
-///  512                       4                    3
-///  256                       4                    7
-///  128                       4                   15
-///   64                       4                   31
-///   32                       8                   63
-///   16                      16                  127
-///    8                      32                  255
-///    4                      64                  511
-///    2                     128                 1023
-///    1                     256                 2047
+/// 1024                       4       8            1
+///  512                       4       8            3
+///  256                       4       8            7
+///  128                       4       8           15
+///   64                       4       8           31
+///   32                       8       8           63
+///   16                      16      16          127
+///    8                      32      32          255
+///    4                      64      64          511
+///    2                     128     128         1023
+///    1                     256     256         2047
 /// -------------------------------------------------------
-///                          524 bytes total for metadata
+///                          524     544
+#[cfg(target_pointer_width = "32")]
 const EXPECTED_METADATA_SIZE: usize = 524;
+
+#[cfg(target_pointer_width = "64")]
+const EXPECTED_METADATA_SIZE: usize = 544;
 
 /// The allocator should serve up blocks of 2^0 up to 2^10 pages.
 const EXPECTED_PAGE_LEVELS: usize = 11;
-
-/// The expected layout of the allocator upon initialization.
-const EXPECTED_LEVELS: [PageLevel; EXPECTED_PAGE_LEVELS] = [
-  PageLevel {
-    offset: 0,
-    valid: 2047,
-    avail: 2047,
-  },
-  PageLevel {
-    offset: 64,
-    valid: 1023,
-    avail: 1023,
-  },
-  PageLevel {
-    offset: 96,
-    valid: 511,
-    avail: 511,
-  },
-  PageLevel {
-    offset: 112,
-    valid: 255,
-    avail: 255,
-  },
-  PageLevel {
-    offset: 120,
-    valid: 127,
-    avail: 127,
-  },
-  PageLevel {
-    offset: 124,
-    valid: 63,
-    avail: 63,
-  },
-  PageLevel {
-    offset: 126,
-    valid: 31,
-    avail: 31,
-  },
-  PageLevel {
-    offset: 127,
-    valid: 15,
-    avail: 15,
-  },
-  PageLevel {
-    offset: 128,
-    valid: 7,
-    avail: 7,
-  },
-  PageLevel {
-    offset: 129,
-    valid: 3,
-    avail: 3,
-  },
-  PageLevel {
-    offset: 130,
-    valid: 1,
-    avail: 1,
-  },
-];
 
 pub fn run_tests() {
   execute_test!(test_size_calculation);
@@ -113,9 +57,10 @@ fn test_size_calculation(context: &mut test::TestContext) {
 
 fn test_level_construction(context: &mut test::TestContext) {
   let (levels, _) = PageAllocator::make_levels(TEST_MEM_SIZE);
-  check_eq!(context, levels.len(), EXPECTED_LEVELS.len());
+  let exp_levels = make_expected_levels();
+  check_eq!(context, levels.len(), exp_levels.len());
 
-  for (a, b) in iter::zip(levels, EXPECTED_LEVELS) {
+  for (a, b) in iter::zip(levels, exp_levels) {
     check_eq!(context, a.offset, b.offset);
     check_eq!(context, a.valid, b.valid);
 
@@ -126,10 +71,20 @@ fn test_level_construction(context: &mut test::TestContext) {
 }
 
 fn test_metadata_init(context: &mut test::TestContext) {
-  const LAST_WORDS: [u32; EXPECTED_PAGE_LEVELS] = [
+  #[cfg(target_pointer_width = "32")]
+  const LAST_WORDS: [usize; EXPECTED_PAGE_LEVELS] = [
     0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff,
     0x00007fff, 0x0000007f, 0x00000007, 0x00000001
   ];
+
+  #[cfg(target_pointer_width = "64")]
+  const LAST_WORDS: [usize; EXPECTED_PAGE_LEVELS] = [
+    0x7fffffffffffffff, 0x7fffffffffffffff, 0x7fffffffffffffff, 0x7fffffffffffffff,
+    0x7fffffffffffffff, 0x7fffffffffffffff, 0x000000007fffffff, 0x0000000000007fff,
+    0x000000000000007f, 0x0000000000000007, 0x0000000000000001
+  ];
+
+  let exp_levels = make_expected_levels();
 
   // Initialize all bytes in the metadata buffer to 0 to ensure flag
   // initialization sets them appropriately. No bytes should be zero after
@@ -143,20 +98,20 @@ fn test_metadata_init(context: &mut test::TestContext) {
   allocator.init_metadata();
 
   // Verify the availability counts match.
-  for (a, b) in iter::zip(&allocator.levels, EXPECTED_LEVELS) {
+  for (a, b) in iter::zip(&allocator.levels, exp_levels) {
     check_eq!(context, a.avail, b.avail);
     check_eq!(context, a.avail, a.valid);
   }
 
   // Verify the availability flags.
-  for (level, last_byte) in iter::zip(&allocator.levels, &LAST_WORDS) {
+  for (level, last_word) in iter::zip(&allocator.levels, &LAST_WORDS) {
     let last = level.valid >> INDEX_SHIFT;
 
     for i in 0..last {
-      check_eq!(context, allocator.flags[level.offset + i], Word::MAX);
+      check_eq!(context, allocator.flags[level.offset + i], usize::MAX);
     }
 
-    check_eq!(context, allocator.flags[level.offset + last], *last_byte);
+    check_eq!(context, allocator.flags[level.offset + last], *last_word);
   }
 }
 
@@ -349,6 +304,72 @@ fn test_allocation(context: &mut test::TestContext) {
   check_eq!(context, allocator.allocate(0).is_none(), true);
 }
 
+fn make_expected_levels() -> [PageLevel; EXPECTED_PAGE_LEVELS] {
+  let mut levels: [PageLevel; EXPECTED_PAGE_LEVELS] = [
+    PageLevel {
+      offset: 0,
+      valid: 2047,
+      avail: 2047,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 1023,
+      avail: 1023,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 511,
+      avail: 511,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 255,
+      avail: 255,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 127,
+      avail: 127,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 63,
+      avail: 63,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 31,
+      avail: 31,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 15,
+      avail: 15,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 7,
+      avail: 7,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 3,
+      avail: 3,
+    },
+    PageLevel {
+      offset: 0,
+      valid: 1,
+      avail: 1,
+    },
+  ];
+
+  for i in 1..EXPECTED_PAGE_LEVELS {
+    levels[i].offset = levels[i - 1].offset + ((levels[i - 1].valid + WORD_LEN - 1) / WORD_LEN);
+  }
+
+  levels
+}
+
 /// Construct an allocator without initializing the metadata flags.
 ///
 /// # Parameters
@@ -361,14 +382,14 @@ fn test_allocation(context: &mut test::TestContext) {
 /// A partially initialized allocator.
 fn make_allocator<'memory>(base: usize, mem: *mut u8) -> PageAllocator<'memory> {
   let (levels, alloc_size) = PageAllocator::make_levels(TEST_MEM_SIZE);
-  let words = alloc_size / mem::size_of::<Word>();
+  let words = alloc_size / WORD_SIZE;
 
   // Manually create a PageAllocator to prevent it from performing any flag
   // initializations or memory reservations.
   PageAllocator {
     base,
     size: TEST_MEM_SIZE,
-    flags: unsafe { slice::from_raw_parts_mut(mem as *mut Word, words) },
+    flags: unsafe { slice::from_raw_parts_mut(mem as *mut usize, words) },
     levels,
   }
 }

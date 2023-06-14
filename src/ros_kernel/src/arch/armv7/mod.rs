@@ -1,12 +1,12 @@
 //! ARMv7a Initialization
 
-pub mod bits;
 pub mod debug;
 
 mod exceptions;
 mod mm;
 mod peripherals;
 
+use crate::arch::bits;
 use crate::peripherals::memory;
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
