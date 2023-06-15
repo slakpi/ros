@@ -16,7 +16,10 @@ set(CMAKE_OBJCOPY ${cross_compiler}objcopy
 set(CMAKE_OBJDUMP ${cross_compiler}objdump
     CACHE FILEPATH "The toolchain objdump command " FORCE )
 
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles")
+# -nostdlib: Do not link the standard library.
+# -nostartfiles: Do not use the standard library startup files.
+# -z noexecstack: Prevents executing code in a stack.
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles -z noexecstack")
 
 set(Rust_RUSTFLAGS "")
 
