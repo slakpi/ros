@@ -22,10 +22,6 @@ SECTIONS
     __text_end = .;
   }
 
-  // Add space between the text and data segments. This prevents the linker from
-  // combining them into one executable segment.
-  . = ALIGN(CONSTANT(__page_size));
-
   .rodata :
   {
     __rodata_start = .;
