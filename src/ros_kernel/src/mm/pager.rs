@@ -31,11 +31,12 @@ pub fn init() {
     let size = PageAllocator::calc_metadata_size(r.size);
     let alloc_size = bits::align_up(size, page_size);
     assert!(alloc_size < r.size);
+    assert!(r.size - alloc_size >= page_size);
 
     let ptr = (r.base + virtual_base + r.size - alloc_size) as *mut u8;
 
     unsafe {
-      ALLOCATORS[i] = Some(PageAllocator::new(r.base, r.size, ptr, &excl_layout));
+      ALLOCATORS[i] = PageAllocator::new(r.base, r.size, ptr, &excl_layout);
     }
   }
 }

@@ -95,17 +95,30 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// The allocator structure.
-  pub fn new(base: usize, size: usize, mem: *mut u8, excl: &memory::MemoryConfig) -> Self {
+  pub fn new(base: usize, size: usize, mem: *mut u8, excl: &memory::MemoryConfig) -> Option<Self> {
     let page_size = arch::get_page_size();
 
-    assert!(bits::align_down(base, page_size) == base);
+    // Base address must be page aligned. We cannot page align the base address
+    // for the caller because we do not know if memory below the address is
+    // actually available.
+    if bits::align_down(base, page_size) != base {
+      return None;
+    }
+
+    // For the same reason as above, round down to the nearest page.
+    let size = bits::align_down(size, page_size);
+
+    // Ensure that the size is not going to overflow a pointer.
+    if usize::MAX - base < size {
+      return None;
+    }
 
     let (levels, alloc_size) = PageAllocator::make_levels(size);
-    let words = alloc_size / WORD_SIZE;
+
     let mut allocator = PageAllocator {
       base,
       size,
-      flags: unsafe { slice::from_raw_parts_mut(mem as *mut usize, words) },
+      flags: unsafe { slice::from_raw_parts_mut(mem as *mut usize, alloc_size / WORD_SIZE) },
       levels,
     };
 
@@ -122,7 +135,7 @@ impl<'memory> PageAllocator<'memory> {
     let mem_addr = (mem as usize) - arch::get_kernel_virtual_base();
     _ = allocator.reserve(mem_addr, alloc_size);
 
-    allocator
+    Some(allocator)
   }
 
   /// Allocate a physically contiguous block of pages.
@@ -155,7 +168,26 @@ impl<'memory> PageAllocator<'memory> {
     None
   }
 
-  pub fn free(&mut self, base: usize, size: usize) {}
+  pub fn free(&mut self, base: usize, pages: usize) {
+    let page_size = arch::get_page_size();
+    let page_shift = arch::get_page_shift();
+
+    if pages == 0 {
+      return;
+    }
+
+    let total_pages = self.size >> page_shift;
+
+    assert!(pages < total_pages);
+
+    let size = pages * page_size;
+
+    if base < self.base {
+      return;
+    }
+
+    assert!(usize::MAX - base >= size);
+  }
 
   /// Initialize memory block metadata.
   ///
