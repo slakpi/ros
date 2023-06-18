@@ -87,10 +87,10 @@ pub const fn ceil_log2(n: usize) -> usize {
 /// The odd bits moved to the lower 16-bits.
 pub const fn compact_odd_bits(n: usize) -> usize {
   let mut n = n;
-  n = ((n & 0x44444444) >> 1)  | (n & 0x11111111);
-  n = ((n & 0x30303030) >> 2)  | (n & 0x03030303);
-  n = ((n & 0x0f000f00) >> 4)  | (n & 0x000f000f);
-  n = ((n & 0x00ff0000) >> 8)  | (n & 0x000000ff);
+  n = ((n & 0x44444444) >> 1) | (n & 0x11111111);
+  n = ((n & 0x30303030) >> 2) | (n & 0x03030303);
+  n = ((n & 0x0f000f00) >> 4) | (n & 0x000f000f);
+  n = ((n & 0x00ff0000) >> 8) | (n & 0x000000ff);
   n
 }
 

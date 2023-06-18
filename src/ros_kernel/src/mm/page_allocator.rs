@@ -95,12 +95,7 @@ impl<'memory> PageAllocator<'memory> {
   /// # Returns
   ///
   /// The allocator structure.
-  pub fn new(
-    base: usize,
-    size: usize,
-    mem: *mut u8,
-    excl: &memory::MemoryConfig,
-  ) -> Self {
+  pub fn new(base: usize, size: usize, mem: *mut u8, excl: &memory::MemoryConfig) -> Self {
     let page_size = arch::get_page_size();
 
     assert!(bits::align_down(base, page_size) == base);

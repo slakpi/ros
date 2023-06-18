@@ -1,4 +1,4 @@
-use super::{INDEX_SHIFT, PageAllocator, PageLevel, WORD_LEN, WORD_SIZE};
+use super::{PageAllocator, PageLevel, INDEX_SHIFT, WORD_LEN, WORD_SIZE};
 use crate::debug_print;
 use crate::test;
 use crate::test::macros::*;
@@ -73,15 +73,23 @@ fn test_level_construction(context: &mut test::TestContext) {
 fn test_metadata_init(context: &mut test::TestContext) {
   #[cfg(target_pointer_width = "32")]
   const LAST_WORDS: [usize; EXPECTED_PAGE_LEVELS] = [
-    0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff,
-    0x00007fff, 0x0000007f, 0x00000007, 0x00000001
+    0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x00007fff,
+    0x0000007f, 0x00000007, 0x00000001,
   ];
 
   #[cfg(target_pointer_width = "64")]
   const LAST_WORDS: [usize; EXPECTED_PAGE_LEVELS] = [
-    0x7fffffffffffffff, 0x7fffffffffffffff, 0x7fffffffffffffff, 0x7fffffffffffffff,
-    0x7fffffffffffffff, 0x7fffffffffffffff, 0x000000007fffffff, 0x0000000000007fff,
-    0x000000000000007f, 0x0000000000000007, 0x0000000000000001
+    0x7fffffffffffffff,
+    0x7fffffffffffffff,
+    0x7fffffffffffffff,
+    0x7fffffffffffffff,
+    0x7fffffffffffffff,
+    0x7fffffffffffffff,
+    0x000000007fffffff,
+    0x0000000000007fff,
+    0x000000000000007f,
+    0x0000000000000007,
+    0x0000000000000001,
   ];
 
   let exp_levels = make_expected_levels();
@@ -277,10 +285,14 @@ fn test_allocation(context: &mut test::TestContext) {
 
     for i in 0..level {
       let blocks = total_pages >> i;
-      check_eq!(context, allocator.levels[i].avail, allocator.levels[i].valid - blocks);
+      check_eq!(
+        context,
+        allocator.levels[i].avail,
+        allocator.levels[i].valid - blocks
+      );
     }
   }
-  
+
   // Test attempting to allocating too many blocks of every size.
   for level in 0..EXPECTED_PAGE_LEVELS {
     allocator.init_metadata();

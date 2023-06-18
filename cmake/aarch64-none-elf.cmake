@@ -14,7 +14,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(CMAKE_OBJCOPY ${cross_compiler}objcopy
     CACHE FILEPATH "The toolchain objcopy command " FORCE)
 set(CMAKE_OBJDUMP ${cross_compiler}objdump
-    CACHE FILEPATH "The toolchain objdump command " FORCE )
+    CACHE FILEPATH "The toolchain objdump command " FORCE)
 
 # -nostdlib: Do not link the standard library.
 # -nostartfiles: Do not use the standard library startup files.
