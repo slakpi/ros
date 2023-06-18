@@ -28,26 +28,20 @@ extern "C" fn ros_kernel(config: usize) -> ! {
   // all available memory and configures some method of debug output.
   arch::init(config);
 
-  // If configured for module tests, run the module tests and then halt.
-  #[cfg(feature = "module_tests")]
-  module_tests();
-
-  // ...otherwise, continue initializing the architecture-independent bits and
-  // run normally.
-  #[cfg(not(feature = "module_tests"))]
   kernel_init();
 
   loop {}
 }
 
 /// Kernel architecture-independent initialization.
+#[cfg(not(feature = "module_tests"))]
 fn kernel_init() {
   mm::init();
 }
 
-/// Kernel module tests.
+/// Dummy version to run module tests.
 #[cfg(feature = "module_tests")]
-fn module_tests() {
+fn kernel_init() {
   debug_print!("--- Running module tests  ---\n");
   mm::run_tests();
   debug_print!("--- Module tests complete ---\n");

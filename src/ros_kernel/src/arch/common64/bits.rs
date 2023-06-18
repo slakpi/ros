@@ -2,6 +2,7 @@
 //!
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html
+//! https://stackoverflow.com/questions/45694690/how-i-can-remove-all-odds-bits-in-c
 
 pub use crate::support::bits::*;
 

@@ -1,4 +1,4 @@
-use super::{PageAllocator, PageLevel, INDEX_SHIFT, WORD_LEN, WORD_SIZE};
+use super::{INDEX_SHIFT, PageAllocator, PageLevel, WORD_BITS, WORD_SIZE};
 use crate::debug_print;
 use crate::test;
 use crate::test::macros::*;
@@ -48,6 +48,7 @@ pub fn run_tests() {
   execute_test!(test_reservation_errors);
   execute_test!(test_reservations);
   execute_test!(test_allocation);
+  execute_test!(test_free);
 }
 
 fn test_size_calculation(context: &mut test::TestContext) {
@@ -260,9 +261,10 @@ fn test_allocation(context: &mut test::TestContext) {
     let pages = 1 << level;
     let size = pages * TEST_PAGE_SIZE;
 
-    if let Some(addr) = allocator.allocate(pages) {
+    if let Some((addr, count)) = allocator.allocate(pages) {
       check_gteq!(context, addr, TEST_ALLOC_BASE);
       check_lteq!(context, addr + size, TEST_ALLOC_END);
+      check_eq!(context, count, pages);
     } else {
       mark_fail!(context, "Allocation failed.");
     }
@@ -314,6 +316,106 @@ fn test_allocation(context: &mut test::TestContext) {
   // Test attempting to allocate zero pages.
   allocator.init_metadata();
   check_eq!(context, allocator.allocate(0).is_none(), true);
+}
+
+fn test_free(context: &mut test::TestContext) {
+  const TEST_ALLOC_BASE: usize = 0x80000000;
+  const TEST_ALLOC_END: usize = TEST_ALLOC_BASE + TEST_MEM_SIZE;
+
+  let mut buffer: [u8; EXPECTED_METADATA_SIZE] = [0; EXPECTED_METADATA_SIZE];
+  let mut allocator = make_allocator(TEST_ALLOC_BASE, buffer.as_mut_ptr());
+
+  // Allocate three blocks of 257 pages each. This should allocate all available
+  // 512-page blocks.
+  allocator.init_metadata();
+  let (block1_addr, block1_count) = allocator.allocate(257).unwrap();
+  let (block2_addr, block2_count) = allocator.allocate(257).unwrap();
+  let (block3_addr, block3_count) = allocator.allocate(257).unwrap();
+  verify_allocated_blocks(
+    context,
+    &allocator,
+    AllocatorState {
+      levels: [
+        &[(1, 1536)],
+        &[(1, 768)],
+        &[(1, 384)],
+        &[(1, 192)],
+        &[(1, 96)],
+        &[(1, 48)],
+        &[(1, 24)],
+        &[(1, 12)],
+        &[(1, 6)],
+        &[(1, 3)],
+        &[(1, 1)],
+      ],
+    },
+  );
+
+  // Free the second block.
+  allocator.free(block2_addr, block2_count);
+  verify_allocated_blocks(
+    context,
+    &allocator,
+    AllocatorState {
+      levels: [
+        &[(1, 512), (1025, 1536)],
+        &[(1, 256), (513, 768)],
+        &[(1, 128), (257, 384)],
+        &[(1, 64), (129, 192)],
+        &[(1, 32), (65, 96)],
+        &[(1, 16), (33, 48)],
+        &[(1, 8), (17, 24)],
+        &[(1, 4), (9, 12)],
+        &[(1, 2), (5, 6)],
+        &[(1, 1), (3, 3)],
+        &[(1, 1)],
+      ],
+    },
+  );
+
+  // Free the first block.
+  allocator.free(block1_addr, block1_count);
+  verify_allocated_blocks(
+    context,
+    &allocator,
+    AllocatorState {
+      levels: [
+        &[(1025, 1536)],
+        &[(513, 768)],
+        &[(257, 384)],
+        &[(129, 192)],
+        &[(65, 96)],
+        &[(33, 48)],
+        &[(17, 24)],
+        &[(9, 12)],
+        &[(5, 6)],
+        &[(3, 3)],
+        &[],
+      ],
+    },
+  );
+
+  // Free the third block.
+  allocator.free(block3_addr, block3_count);
+  verify_allocated_blocks(
+    context,
+    &allocator,
+    AllocatorState {
+      levels: [
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+      ],
+    },
+  );
 }
 
 fn make_expected_levels() -> [PageLevel; EXPECTED_PAGE_LEVELS] {
@@ -376,7 +478,7 @@ fn make_expected_levels() -> [PageLevel; EXPECTED_PAGE_LEVELS] {
   ];
 
   for i in 1..EXPECTED_PAGE_LEVELS {
-    levels[i].offset = levels[i - 1].offset + ((levels[i - 1].valid + WORD_LEN - 1) / WORD_LEN);
+    levels[i].offset = levels[i - 1].offset + ((levels[i - 1].valid + WORD_BITS - 1) / WORD_BITS);
   }
 
   levels
