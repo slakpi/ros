@@ -10,5 +10,6 @@ directory and the `TC_PATH` variable to the compiles. For example:
       "cmake.configureSettings": {
         "TC_PATH": "${env:HOME}/.local/cross",
         "RPI_VERSION": "3",
+        "ROS_FEATURES": "module_tests",
       }
     }
