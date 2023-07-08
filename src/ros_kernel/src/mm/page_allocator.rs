@@ -30,6 +30,9 @@ const WORD_MASK: usize = WORD_BITS - 1;
 /// Shift count for the metadata index of a block's word.
 const INDEX_SHIFT: usize = bits::floor_log2(WORD_BITS);
 
+/// Initial value for the simple XOR checksum.
+const CHECKSUM_SEED: usize = 0xbaadf00d;
+
 /// Linked-list node placed at the beginning of each unallocated block.
 #[repr(C)]
 struct BlockNode {
@@ -66,14 +69,14 @@ impl BlockNode {
   ///
   /// # Description
   ///
-  /// The checksum is meant for simple error detection. It is not meant as a
-  /// security token.
+  /// The checksum is meant for simple error detection. It is not meant for
+  /// error correction or security.
   ///
   /// # Returns
   ///
   /// A checksum.
   fn calc_checksum(next: usize, prev: usize) -> usize {
-    next ^ prev
+    (CHECKSUM_SEED ^ next) ^ prev
   }
 }
 
@@ -126,8 +129,8 @@ impl<'memory> PageAllocator<'memory> {
   /// allocator's metadata is within the memory area, it too should be excluded
   /// from the available regions.
   ///
-  /// The base memory address is not page-aligned, it will be aligned down. If
-  /// the size is not page-aligned, it too will be aligned down.
+  /// If the base memory address is not page-aligned, it will be aligned down.
+  /// If the size is not page-aligned, it too will be aligned down.
   ///
   /// # Returns
   ///
@@ -164,11 +167,13 @@ impl<'memory> PageAllocator<'memory> {
     let page_size = arch::get_page_size();
     let kernel_base = arch::get_kernel_virtual_base();
 
+    self.flags.fill(0);
+
     for range in avail.get_ranges() {
       let mut addr = range.base;
       let mut remaining = range.size;
 
-      while remaining > page_size {
+      while remaining >= page_size {
         // Consider the address 0x1ed000. With 4 KiB pages, this address is
         // 0x1ed pages from the beginning of the address space. Each block must
         // be exactly aligned on a multiple of its size. We can figure out the
