@@ -1,5 +1,9 @@
+# Set the assembly target.
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+# Set the Rust target. Use the software floating-point variant.
+set(Rust_CARGO_TARGET aarch64-unknown-none-softfloat)
 
 if(DEFINED RPI_VERSION AND NOT ("${RPI_VERSION}" MATCHES "^(3|4)$"))
   message(FATAL_ERROR "Unsupported Raspberry Pi board version.")
@@ -9,27 +13,22 @@ set(cross_compiler ${TC_PATH}/gnu-aarch64-none-elf/bin/aarch64-none-elf-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 set(CMAKE_C_COMPILER ${cross_compiler}gcc)
+set(CMAKE_OBJCOPY ${cross_compiler}objcopy)
+set(CMAKE_OBJDUMP ${cross_compiler}objdump)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-
-set(CMAKE_OBJCOPY ${cross_compiler}objcopy
-    CACHE FILEPATH "The toolchain objcopy command " FORCE)
-set(CMAKE_OBJDUMP ${cross_compiler}objdump
-    CACHE FILEPATH "The toolchain objdump command " FORCE)
 
 # -nostdlib: Do not link the standard library.
 # -nostartfiles: Do not use the standard library startup files.
 # -z noexecstack: Prevents executing code in a stack.
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles -z noexecstack")
-
-set(Rust_RUSTFLAGS "")
+add_link_options(-nostdlib -nostartfiles -z noexecstack)
 
 # If a Raspberry Pi version is specified, set the CPU model. NOTE: The Zero 2W
 # model uses the same processor as the 3, the SoC just has less RAM.
 if("${RPI_VERSION}" STREQUAL "4")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a72")
+  add_compile_options(-mcpu=cortex-a72)
   set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-cpu=cortex-a72)
 elseif("${RPI_VERSION}" STREQUAL "3")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a53")
+  add_compile_options(-mcpu=cortex-a53)
   set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-cpu=cortex-a53)
 endif()
 
@@ -38,15 +37,8 @@ endif()
 # exceptions trap into the kernel. This wastes time and memory, so just disable
 # both for the kernel. NOTE: The Rust toolchain only supports software floating-
 # point, so only SIMD needs to be disabled.
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -march=armv8-a+nofp+nosimd")
+add_compile_options(-march=armv8-a+nofp+nosimd)
 set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-feature=-neon)
-
-set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
-
-# Set the Rust target. Use the software floating-point variant.
-set(Rust_CARGO_TARGET aarch64-unknown-none-softfloat)
 
 # If a Raspberry Pi version is specified, set the kernel image name for the
 # bootloader.

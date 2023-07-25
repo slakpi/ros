@@ -1,5 +1,10 @@
+# Set the assembly target. Unlike the AArch64 toolchain, the ARM toolchain only
+# supports software floating-point and does not enable SIMD by default.
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR armv7)
+
+# Set the Rust target. Use the software floating-point variant.
+set(Rust_CARGO_TARGET armv7a-none-eabi)
 
 if(DEFINED RPI_VERSION AND NOT ("${RPI_VERSION}" MATCHES "^(2|3|4)$"))
   message(FATAL_ERROR "Unsupported Raspberry Pi board version.")
@@ -9,44 +14,27 @@ set(cross_compiler ${TC_PATH}/gnu-arm-none-eabi/bin/arm-none-eabi-)
 
 set(CMAKE_ASM_COMPILER ${cross_compiler}gcc)
 set(CMAKE_C_COMPILER ${cross_compiler}gcc)
+set(CMAKE_OBJCOPY ${cross_compiler}objcopy)
+set(CMAKE_OBJDUMP ${cross_compiler}objdump)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-
-set(CMAKE_OBJCOPY ${cross_compiler}objcopy
-    CACHE FILEPATH "The toolchain objcopy command " FORCE)
-set(CMAKE_OBJDUMP ${cross_compiler}objdump
-    CACHE FILEPATH "The toolchain objdump command " FORCE)
 
 # -nostdlib: Do not link the standard library.
 # -nostartfiles: Do not use the standard library startup files.
 # -z noexecstack: Prevents executing code in a stack.
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -nostdlib -nostartfiles -z noexecstack")
-
-set(Rust_RUSTFLAGS "")
+add_link_options(-nostdlib -nostartfiles -z noexecstack)
 
 # If a Raspberry Pi version is specified, set the CPU model. NOTE: The Zero 2W
 # model uses the same processor as the 3, the SoC just has less RAM.
 if("${RPI_VERSION}" STREQUAL "4")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a72")
+  add_compile_options(-mcpu=cortex-a72)
   set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-cpu=cortex-a72)
 elseif("${RPI_VERSION}" STREQUAL "3")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a53")
+  add_compile_options(-mcpu=cortex-a53)
   set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-cpu=cortex-a53)
 elseif("${RPI_VERSION}" STREQUAL "2")
-  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -mcpu=cortex-a7")
+  add_compile_options(-mcpu=cortex-a7)
   set(Rust_RUSTFLAGS ${Rust_RUSTFLAGS} -Ctarget-cpu=cortex-a7)
 endif()
-
-# Unlike the AArch64 toolchain, the ARM toolchain only supports software
-# floating-point and does not enable SIMD by default. No need to turn them off
-# here.
-
-set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}")
-set(CMAKE_C_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS}" CACHE STRING "")
-
-# Set the Rust target. Use the software floating-point variant. The kernel does
-# not allow floating-point or vector instructions.
-set(Rust_CARGO_TARGET armv7a-none-eabi)
 
 # If a Raspberry Pi version is specified, set the kernel image name for the
 # bootloader:
