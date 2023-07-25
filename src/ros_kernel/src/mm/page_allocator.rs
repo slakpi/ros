@@ -12,7 +12,7 @@ pub mod test;
 use crate::arch;
 use crate::arch::bits;
 use crate::peripherals::memory;
-use core::{cmp, mem, slice};
+use core::{cmp, ptr, slice};
 
 /// Support blocks that are up to Page Size * 2^10 bytes. For example, with a
 /// 4 KiB page size, the largest block size is 4 MiB.
@@ -22,7 +22,7 @@ const BLOCK_LEVELS: usize = 11;
 const WORD_BITS: usize = usize::BITS as usize;
 
 /// Word byte-size shift.
-const WORD_SHIFT: usize = bits::floor_log2(mem::size_of::<usize>());
+const WORD_SHIFT: usize = bits::floor_log2(WORD_BITS >> 3);
 
 /// Masks a block number to find a block's index within a word.
 const WORD_MASK: usize = WORD_BITS - 1;
@@ -30,8 +30,8 @@ const WORD_MASK: usize = WORD_BITS - 1;
 /// Shift count for the metadata index of a block's word.
 const INDEX_SHIFT: usize = bits::floor_log2(WORD_BITS);
 
-/// Initial value for the simple XOR checksum.
-const CHECKSUM_SEED: usize = 0xbaadf00d;
+/// Random initial value for the simple XOR checksum.
+const CHECKSUM_SEED: usize = 0xbc3a8241;
 
 /// Linked-list node placed at the beginning of each unallocated block.
 #[repr(C)]
@@ -110,7 +110,39 @@ impl<'memory> PageAllocator<'memory> {
     size
   }
 
-  /// Construct a new page allocator for a given memory area.
+  /// Construct the block level metadata for an allocator.
+  ///
+  /// # Parameters
+  ///
+  /// * `size` - The size of the memory area served by the allocator.
+  ///
+  /// # Returns
+  ///
+  /// A tuple with the block level metadata and the required size of the flag
+  /// metadata in bytes.
+  fn make_levels(size: usize) -> ([BlockLevel; BLOCK_LEVELS], usize) {
+    let page_shift = arch::get_page_shift();
+
+    let mut levels: [BlockLevel; BLOCK_LEVELS] = Default::default();
+    let mut blocks = size >> page_shift;
+    let mut offset = 0;
+
+    for level in &mut levels {
+      level.offset = offset;
+
+      // One bit per pair of blocks.
+      let bits = (blocks + 1) >> 1;
+
+      // Round up the number of bits to whole words.
+      offset += (bits + WORD_BITS - 1) >> INDEX_SHIFT;
+
+      blocks >>= 1;
+    }
+
+    (levels, offset << WORD_SHIFT)
+  }
+
+  /// Construct a new page allocator for a given contiguous memory area.
   ///
   /// # Parameters
   ///
@@ -134,7 +166,13 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Returns
   ///
-  /// A new allocator if the parameters are valid.
+  /// A new allocator, or None if:
+  ///
+  /// * `base` is 0 after alignment.
+  /// * `size` is less than the page size after alignment.
+  /// * `base + size` would overflow a pointer after alignment.
+  /// * `mem` is null.
+  /// * `avail` is empty.
   pub fn new(base: usize, size: usize, mem: *mut u8, avail: &memory::MemoryConfig) -> Option<Self> {
     let page_size = arch::get_page_size();
 
@@ -142,12 +180,27 @@ impl<'memory> PageAllocator<'memory> {
     let base = bits::align_down(base, page_size);
     let size = bits::align_down(size, page_size);
 
+    if base == 0 {
+      return None;
+    }
+
+    if size < page_size {
+      return None;
+    }
+
     // Ensure that the size is not going to overflow a pointer.
     if usize::MAX - base < size {
       return None;
     }
 
-    // Initialize the block levels.
+    if mem == ptr::null_mut() {
+      return None;
+    }
+
+    if avail.is_empty() {
+      return None;
+    }
+
     let (levels, alloc_size) = Self::make_levels(size);
 
     let mut allocator = PageAllocator {
@@ -162,6 +215,11 @@ impl<'memory> PageAllocator<'memory> {
     Some(allocator)
   }
 
+  /// Initializes the allocator's linked list and accounting meta data.
+  ///
+  /// # Parameters
+  ///
+  /// * `avail` - Available regions with the memory area.
   fn init_metadata(&mut self, avail: &memory::MemoryConfig) {
     let page_shift = arch::get_page_shift();
     let page_size = arch::get_page_size();
@@ -182,19 +240,17 @@ impl<'memory> PageAllocator<'memory> {
         // so the address is aligned on a 1-page multiple and we cannot allocate
         // more than a single page at that address.
         //
-        // After make a single page block available at 0x1ed000, we increment
+        // After making a single page block available at 0x1ed000, we increment
         // the address to 0x1ee000. This is block 0x1ee = 0b111101110. This
         // address is aligned on a 2-page multiple. So, we make a 2-page block
         // available and increment the address to 0x1f0000. This address is
-        // aligned on a 16-page block, so the next address is 0x200000 and we
-        // can now make a 512-page block available and so on.
-        let page_num = (addr - self.base) >> page_shift;
+        // aligned on a 16-page multiple, so the next address is 0x200000. This
+        // address is aligned on a 512-page multiple, and so on.
+        //
+        // Page 0 should never be used.
+        let page_num = addr >> page_shift;
         let addr_align = bits::least_significant_bit(page_num);
-        let max_level = if page_num == 0 {
-          BLOCK_LEVELS - 1
-        } else {
-          cmp::min(bits::floor_log2(addr_align), BLOCK_LEVELS - 1)
-        };
+        let max_level = cmp::min(bits::floor_log2(addr_align), BLOCK_LEVELS - 1);
 
         // Of course, the above is only half the story. We also have to cap the
         // maximum block size by the remaining memory size.
@@ -203,21 +259,41 @@ impl<'memory> PageAllocator<'memory> {
         let blocks = 1 << level;
         let size = blocks << page_shift;
 
-        // Find the flag array index and bit index for the new block.
-        let block_num = page_num >> level;
-        let index = self.levels[level].offset + (block_num >> INDEX_SHIFT);
-        let bit = block_num & WORD_MASK;
-
-        let virt_addr = addr + kernel_base;
-
-        Self::add_to_list(self.levels[level].head, virt_addr);
-        self.levels[level].head = virt_addr;
-        self.flags[index] ^= 1 << bit;
+        // XOR the bit and add the block to the level's available list.
+        let page_num = (addr - self.base) >> page_shift;
+        let (index, bit_idx) = self.get_flag_index_and_bit(page_num, level);
+        self.levels[level].head = Self::add_to_list(self.levels[level].head, addr + kernel_base);
+        self.flags[index] ^= 1 << bit_idx;
 
         addr += size;
         remaining -= size;
       }
     }
+  }
+
+  /// Get the flag index and bit for a given page number at a given level.
+  ///
+  /// # Parameters
+  ///
+  /// * `page_num` - The page number.
+  /// * `level` - The block level.
+  ///
+  /// # Description
+  ///
+  /// Assumes that the start address for the page is aligned on a multiple of
+  /// the block size for the specified level.
+  ///
+  /// # Returns
+  ///
+  /// A tuple with the absolute word index into the metadata flags and the bit
+  /// index in that word for the block represented by the page number.
+  fn get_flag_index_and_bit(&self, page_num: usize, level: usize) -> (usize, usize) {
+    let block_num = page_num >> level;
+    let block_pair = (block_num + 1) >> 1;
+    let index = self.levels[level].offset + (block_pair >> INDEX_SHIFT);
+    let bit = block_pair & WORD_MASK;
+
+    (index, bit)
   }
 
   /// Get a reference to a block's linked-list node.
@@ -246,7 +322,8 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Description
   ///
-  /// Verifies the node's checksum.
+  /// Verifies that the pointer is page-aligned and that the node's checksum is
+  /// correct.
   ///
   /// # Returns
   ///
@@ -276,15 +353,28 @@ impl<'memory> PageAllocator<'memory> {
   fn get_block_node_unchecked_mut(addr: usize) -> &'static mut BlockNode {
     let page_size = arch::get_page_size();
     assert!(bits::align_down(addr, page_size) == addr);
+
     unsafe { &mut *(addr as *mut BlockNode) }
   }
 
-  fn add_to_list(head_addr: usize, block_addr: usize) {
+  /// Adds a block to the tail of the linked list.
+  ///
+  /// # Parameters
+  ///
+  /// * `head_addr` - The head address of the linked list.
+  /// * `block_addr` - The block address.
+  ///
+  /// # Returns
+  ///
+  /// The head address of the list.
+  fn add_to_list(head_addr: usize, block_addr: usize) -> usize {
     let block = Self::get_block_node_unchecked_mut(block_addr);
 
+    // If the list is empty, initialize a new node that points only to itself
+    // and return the block address as the new head address.
     if head_addr == 0 {
       *block = BlockNode::new(block_addr, block_addr);
-      return;
+      return block_addr;
     }
 
     let head = Self::get_block_node_mut(head_addr);
@@ -293,23 +383,7 @@ impl<'memory> PageAllocator<'memory> {
     *block = BlockNode::new(head_addr, head.prev);
     *head = BlockNode::new(head.next, block_addr);
     *prev = BlockNode::new(block_addr, prev.prev);
-  }
 
-  fn make_levels(size: usize) -> ([BlockLevel; BLOCK_LEVELS], usize) {
-    let page_shift = arch::get_page_shift();
-
-    let mut levels: [BlockLevel; BLOCK_LEVELS] = Default::default();
-    let mut blocks = size >> page_shift;
-    let mut offset = 0;
-
-    for level in &mut levels {
-      level.offset = offset;
-
-      let bits = (blocks + 1) >> 1;
-      offset += (bits + WORD_BITS - 1) >> INDEX_SHIFT;
-      blocks >>= 1;
-    }
-
-    (levels, offset << WORD_SHIFT)
+    head_addr
   }
 }

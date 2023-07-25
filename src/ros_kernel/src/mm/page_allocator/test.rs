@@ -43,6 +43,9 @@ const EXPECTED_METADATA_SIZE: usize = 272;
 #[cfg(target_pointer_width = "64")]
 const EXPECTED_METADATA_SIZE: usize = 296;
 
+/// The total size of the test memory buffer.
+const TOTAL_MEM_SIZE: usize = TEST_BUFFER_SIZE + EXPECTED_METADATA_SIZE;
+
 /// The allocator should serve up blocks of 2^0 up to 2^10 pages.
 const EXPECTED_BLOCK_LEVELS: usize = 11;
 
@@ -55,14 +58,14 @@ struct _Align4MiB;
 /// kernel size.
 struct _MemWrapper {
   _alignment: [_Align4MiB; 0],
-  mem: [u8; TEST_BUFFER_SIZE + EXPECTED_METADATA_SIZE],
+  mem: [u8; TOTAL_MEM_SIZE],
 }
 
 /// Use a statically allocated memory block within the kernel to avoid any
 /// issues with memory configuration.
 static mut TEST_MEM: _MemWrapper = _MemWrapper {
   _alignment: [],
-  mem: [0xcc; TEST_BUFFER_SIZE + EXPECTED_METADATA_SIZE],
+  mem: [0xcc; TOTAL_MEM_SIZE],
 };
 
 /// Represents an allocator state usings lists of block addresses.
@@ -238,8 +241,7 @@ fn make_block_addr(base_addr: usize, block: usize, level: usize) -> usize {
 }
 
 fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::MemoryConfig) {
-  let total_mem = unsafe { TEST_MEM.mem.len() };
-  let (levels, meta_size) = PageAllocator::make_levels(total_mem);
+  let (levels, meta_size) = PageAllocator::make_levels(TOTAL_MEM_SIZE);
   let (virt_addr, meta_addr) = get_addrs();
   let base_addr = virt_addr - arch::get_kernel_virtual_base();
 
@@ -255,7 +257,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
   (
     PageAllocator {
       base: base_addr,
-      size: total_mem,
+      size: TOTAL_MEM_SIZE,
       levels,
       flags: unsafe { slice::from_raw_parts_mut(meta_addr as *mut usize, meta_size >> WORD_SHIFT) },
     },
@@ -269,7 +271,7 @@ fn verify_allocator(
   state: &AllocatorState
 ) {
   let kernel_base = arch::get_kernel_virtual_base();
-  let mut blocks = allocator.size >> TEST_PAGE_SHIFT;
+  let mut blocks = TEST_MEM_SIZE >> TEST_PAGE_SHIFT;
   let mut level_shift = 0;
 
   for (level, exp_blocks) in iter::zip(&allocator.levels, &state.levels) {
@@ -279,7 +281,7 @@ fn verify_allocator(
     }
 
     if level.head == 0 {
-      check_eq!(context, false, true);
+      mark_fail!(context, "Head pointer is null.");
       continue;
     }
 
@@ -296,9 +298,10 @@ fn verify_allocator(
       check_eq!(context, ptr, *block);
       ptr = node.next;
 
-      let page_num = (block - kernel_base - allocator.base) >> TEST_PAGE_SHIFT;
+      let page_num = ((*block - kernel_base) - allocator.base) >> TEST_PAGE_SHIFT;
       let block_num = page_num >> level_shift;
-      let block_idx = block_num >> INDEX_SHIFT;
+      let block_pair = (block_num + 1) >> 1;
+      let block_idx = block_pair >> INDEX_SHIFT;
 
       if block_idx > idx {
         for i in idx..block_idx {
@@ -309,7 +312,7 @@ fn verify_allocator(
         idx = block_idx;
       }
 
-      mask ^= 1 << (block_num & WORD_MASK);
+      mask ^= 1 << (block_pair & WORD_MASK);
     }
 
     for i in idx..words {
