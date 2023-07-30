@@ -1,4 +1,4 @@
-use super::{BlockLevel, INDEX_SHIFT, PageAllocator, WORD_BITS, WORD_MASK, WORD_SHIFT};
+use super::{BlockLevel, PageAllocator, INDEX_SHIFT, WORD_BITS, WORD_MASK, WORD_SHIFT};
 use crate::arch;
 use crate::debug_print;
 use crate::peripherals::memory;
@@ -109,30 +109,34 @@ fn test_metadata_init(context: &mut test::TestContext) {
 
   allocator.init_metadata(&avail);
 
-  verify_allocator(context, &allocator, &AllocatorState {
-    levels: [
-      &[make_block_addr(virt_addr, 2047, 0)],
-      &[make_block_addr(virt_addr, 1023, 1)],
-      &[make_block_addr(virt_addr, 511, 2)],
-      &[make_block_addr(virt_addr, 255, 3)],
-      &[make_block_addr(virt_addr, 127, 4)],
-      &[make_block_addr(virt_addr, 63, 5)],
-      &[make_block_addr(virt_addr, 31, 6)],
-      &[make_block_addr(virt_addr, 15, 7)],
-      &[make_block_addr(virt_addr, 7, 8)],
-      &[make_block_addr(virt_addr, 3, 9)],
-      &[make_block_addr(virt_addr, 1, 10)],
-    ]
-  })
+  verify_allocator(
+    context,
+    &allocator,
+    &AllocatorState {
+      levels: [
+        &[make_block_addr(virt_addr, 2047, 0)],
+        &[make_block_addr(virt_addr, 1023, 1)],
+        &[make_block_addr(virt_addr, 511, 2)],
+        &[make_block_addr(virt_addr, 255, 3)],
+        &[make_block_addr(virt_addr, 127, 4)],
+        &[make_block_addr(virt_addr, 63, 5)],
+        &[make_block_addr(virt_addr, 31, 6)],
+        &[make_block_addr(virt_addr, 15, 7)],
+        &[make_block_addr(virt_addr, 7, 8)],
+        &[make_block_addr(virt_addr, 3, 9)],
+        &[make_block_addr(virt_addr, 1, 10)],
+      ],
+    },
+  )
 }
 
-fn test_reservation_errors(context: &mut test::TestContext) {}
+fn test_reservation_errors(_context: &mut test::TestContext) {}
 
-fn test_reservations(context: &mut test::TestContext) {}
+fn test_reservations(_context: &mut test::TestContext) {}
 
-fn test_allocation(context: &mut test::TestContext) {}
+fn test_allocation(_context: &mut test::TestContext) {}
 
-fn test_free(context: &mut test::TestContext) {}
+fn test_free(_context: &mut test::TestContext) {}
 
 #[cfg(target_pointer_width = "32")]
 fn make_expected_levels() -> [BlockLevel; EXPECTED_BLOCK_LEVELS] {
@@ -268,7 +272,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
 fn verify_allocator(
   context: &mut test::TestContext,
   allocator: &PageAllocator,
-  state: &AllocatorState
+  state: &AllocatorState,
 ) {
   let kernel_base = arch::get_kernel_virtual_base();
   let mut blocks = TEST_MEM_SIZE >> TEST_PAGE_SHIFT;

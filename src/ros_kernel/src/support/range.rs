@@ -1,6 +1,6 @@
 //! Range data structure.
 
-use crate::arch::bits;
+use super::bits;
 
 /// Range ordering.
 ///

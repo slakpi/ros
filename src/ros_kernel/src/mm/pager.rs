@@ -2,9 +2,8 @@
 
 use super::page_allocator::PageAllocator;
 use crate::arch;
-use crate::arch::bits;
 use crate::peripherals::memory;
-use crate::support::range;
+use crate::support::{bits, range};
 
 /// We need to have at least as many allocators as we have memory ranges. The
 /// allocator only works on contiguous blocks of memory.

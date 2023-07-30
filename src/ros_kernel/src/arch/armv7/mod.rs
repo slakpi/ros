@@ -6,8 +6,8 @@ mod exceptions;
 mod mm;
 mod peripherals;
 
-use crate::arch::bits;
 use crate::peripherals::memory;
+use crate::support::bits;
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.

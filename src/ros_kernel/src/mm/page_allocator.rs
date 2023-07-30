@@ -10,8 +10,8 @@
 pub mod test;
 
 use crate::arch;
-use crate::arch::bits;
 use crate::peripherals::memory;
+use crate::support::bits;
 use core::{cmp, ptr, slice};
 
 /// Support blocks that are up to Page Size * 2^10 bytes. For example, with a
@@ -29,9 +29,6 @@ const WORD_MASK: usize = WORD_BITS - 1;
 
 /// Shift count for the metadata index of a block's word.
 const INDEX_SHIFT: usize = bits::floor_log2(WORD_BITS);
-
-/// Random initial value for the simple XOR checksum.
-const CHECKSUM_SEED: usize = 0xbc3a8241;
 
 /// Linked-list node placed at the beginning of each unallocated block.
 #[repr(C)]
@@ -76,7 +73,7 @@ impl BlockNode {
   ///
   /// A checksum.
   fn calc_checksum(next: usize, prev: usize) -> usize {
-    (CHECKSUM_SEED ^ next) ^ prev
+    bits::xor_checksum(&[next, prev])
   }
 }
 
@@ -142,6 +139,67 @@ impl<'memory> PageAllocator<'memory> {
     (levels, offset << WORD_SHIFT)
   }
 
+  /// Get a reference to a block's linked-list node.
+  ///
+  /// # Parameters
+  ///
+  /// * `addr` - Pointer to the block.
+  ///
+  /// # Description
+  ///
+  /// Verifies that the pointer is page-aligned and that the node's checksum is
+  /// correct.
+  ///
+  /// # Returns
+  ///
+  /// A node reference.
+  fn get_block_node(addr: usize) -> &'static BlockNode {
+    Self::get_block_node_mut(addr)
+  }
+
+  /// Get a mutable reference to a block's linked-list node.
+  ///
+  /// # Parameters
+  ///
+  /// * `addr` - Pointer to the block.
+  ///
+  /// # Description
+  ///
+  /// Verifies that the pointer is page-aligned and that the node's checksum is
+  /// correct.
+  ///
+  /// # Returns
+  ///
+  /// A mutable node reference.
+  fn get_block_node_mut(addr: usize) -> &'static mut BlockNode {
+    let node = Self::get_block_node_unchecked_mut(addr);
+    let checksum = BlockNode::calc_checksum(node.next, node.prev);
+    assert!(node.checksum == checksum);
+
+    node
+  }
+
+  /// Get a mutable reference to a block's linked-list node.
+  ///
+  /// # Parameters
+  ///
+  /// * `addr` - Pointer to the block.
+  ///
+  /// # Description
+  ///
+  /// Verifies that the pointer is page-aligned, but does not verify the check-
+  /// sum. Used when the node is not expected to be initialized.
+  ///
+  /// # Returns
+  ///
+  /// A mutable, uninitialized node reference.
+  fn get_block_node_unchecked_mut(addr: usize) -> &'static mut BlockNode {
+    let page_size = arch::get_page_size();
+    assert!(bits::align_down(addr, page_size) == addr);
+
+    unsafe { &mut *(addr as *mut BlockNode) }
+  }
+  
   /// Construct a new page allocator for a given contiguous memory area.
   ///
   /// # Parameters
@@ -215,6 +273,46 @@ impl<'memory> PageAllocator<'memory> {
     Some(allocator)
   }
 
+  /// Attempts to allocate a contiguous block of pages.
+  ///
+  /// # Parameters
+  ///
+  /// * `pages` - The requested number of pages.
+  ///
+  /// # Description
+  ///
+  /// If `pages` is not a power of 2, the size of the block returned will be the
+  /// smallest power of 2 pages larger than the requested number of pages.
+  ///
+  /// # Returns
+  ///
+  /// A tuple with the base address of the contigous block and the actual number
+  /// of pages allocated, or None if the allocator could not find an available
+  /// contigous block of the requested size.
+  pub fn allocate(&mut self, pages: usize) -> Option<(usize, usize)> {
+    if pages == 0 {
+      return None;
+    }
+
+    // Calculate the level with the minimum block size.
+    let min_level = bits::ceil_log2(pages);
+
+    for level in min_level..BLOCK_LEVELS {
+      if self.levels[level].head == 0 {
+        continue;
+      }
+
+      let block = self.split_free_block(level, min_level);
+      let pages = 1 << min_level;
+      return Some((block, pages));
+    }
+
+    // No blocks available.
+    None
+  }
+
+  pub fn free(&mut self, _base: usize, _pages: usize) {}
+
   /// Initializes the allocator's linked list and accounting meta data.
   ///
   /// # Parameters
@@ -259,11 +357,8 @@ impl<'memory> PageAllocator<'memory> {
         let blocks = 1 << level;
         let size = blocks << page_shift;
 
-        // XOR the bit and add the block to the level's available list.
-        let page_num = (addr - self.base) >> page_shift;
-        let (index, bit_idx) = self.get_flag_index_and_bit(page_num, level);
-        self.levels[level].head = Self::add_to_list(self.levels[level].head, addr + kernel_base);
-        self.flags[index] ^= 1 << bit_idx;
+        // Add the block to the level's available list.
+        self.add_to_list(level, addr + kernel_base);
 
         addr += size;
         remaining -= size;
@@ -271,24 +366,23 @@ impl<'memory> PageAllocator<'memory> {
     }
   }
 
-  /// Get the flag index and bit for a given page number at a given level.
+  /// Get the flag index and bit for a given block number at a given level.
   ///
   /// # Parameters
   ///
-  /// * `page_num` - The page number.
+  /// * `block_num` - The block number.
   /// * `level` - The block level.
   ///
   /// # Description
   ///
-  /// Assumes that the start address for the page is aligned on a multiple of
+  /// Assumes that the start address for the block is aligned on a multiple of
   /// the block size for the specified level.
   ///
   /// # Returns
   ///
   /// A tuple with the absolute word index into the metadata flags and the bit
-  /// index in that word for the block represented by the page number.
-  fn get_flag_index_and_bit(&self, page_num: usize, level: usize) -> (usize, usize) {
-    let block_num = page_num >> level;
+  /// index in that word for the block.
+  fn get_flag_index_and_bit(&self, block_num: usize, level: usize) -> (usize, usize) {
     let block_pair = (block_num + 1) >> 1;
     let index = self.levels[level].offset + (block_pair >> INDEX_SHIFT);
     let bit = block_pair & WORD_MASK;
@@ -296,94 +390,146 @@ impl<'memory> PageAllocator<'memory> {
     (index, bit)
   }
 
-  /// Get a reference to a block's linked-list node.
+  /// Split a free block until it is the required size.
   ///
   /// # Parameters
   ///
-  /// * `addr` - Pointer to the block.
+  /// * `level` - The level at which to split.
+  /// * `min_level` - The level at which the split stops.
   ///
   /// # Description
   ///
-  /// Verifies that the pointer is page-aligned and that the node's checksum is
-  /// correct.
+  /// Assumes at least one block is available at `level`. Removes the first
+  /// available block, splits it in half, and adds the odd half to the first
+  /// list at `level - 1`. Repeats until reaching `min_level`.
   ///
   /// # Returns
   ///
-  /// A node reference.
-  fn get_block_node(addr: usize) -> &'static BlockNode {
-    Self::get_block_node_mut(addr)
+  /// The block address of the block removed from `level`.
+  fn split_free_block(&mut self, level: usize, min_level: usize) -> usize {
+    let block_addr = self.pop_from_list(level);
+
+    // Assume block 2 is free at level 4 covering pages [32, 48), and assume we
+    // want to allocate two pages. Starting at level 3, the odd buddy is
+    // 0x20 | 0x08:
+    //
+    //  0x20                             0x28                             0x30
+    //   +--------+--------+----------------+--------------------------------+
+    //   |                                  |                                |
+    //   +--------+--------+----------------+--------------------------------+
+    //
+    // Add 0x28 to the free list at level 3 to cover pages [40, 48), then move
+    // down. At level 2, the odd buddy is 0x20 | 0x04:
+    //
+    //  0x20            0x24             0x28
+    //   +--------+--------+----------------+----
+    //   |                 |                |
+    //   +--------+--------+----------------+----
+    //
+    // Add 0x24 to the free list at level 2 to cover pages [36, 40), then move
+    // down. At level 1, the odd buddy is 0x20 | 0x02:
+    //
+    //  0x20   0x22     0x24
+    //   +--------+--------+----
+    //   |        |        |
+    //   +--------+--------+----
+    //
+    // Add 0x22 to the free list at level 1 to cover pages [34, 36). We are now
+    // done splitting and can return 0x20 as the two-page block covering pages
+    // [32, 34).
+    for l in (min_level..level).rev() {
+      let buddy_addr = block_addr | (1 << l);
+      self.add_to_list(l, buddy_addr);
+    }
+
+    block_addr
   }
 
-  /// Get a mutable reference to a block's linked-list node.
+  /// Adds a block to the tail of a level's list of available blocks.
   ///
   /// # Parameters
   ///
-  /// * `addr` - Pointer to the block.
-  ///
-  /// # Description
-  ///
-  /// Verifies that the pointer is page-aligned and that the node's checksum is
-  /// correct.
-  ///
-  /// # Returns
-  ///
-  /// A mutable node reference.
-  fn get_block_node_mut(addr: usize) -> &'static mut BlockNode {
-    let node = Self::get_block_node_unchecked_mut(addr);
-    let checksum = BlockNode::calc_checksum(node.next, node.prev);
-    assert!(node.checksum == checksum);
-
-    node
-  }
-
-  /// Get a mutable reference to a block's linked-list node.
-  ///
-  /// # Parameters
-  ///
-  /// * `addr` - Pointer to the block.
-  ///
-  /// # Description
-  ///
-  /// Verifies that the pointer is page-aligned, but does not verify the check-
-  /// sum. Used when the node is not expected to be initialized.
-  ///
-  /// # Returns
-  ///
-  /// A mutable, uninitialized node reference.
-  fn get_block_node_unchecked_mut(addr: usize) -> &'static mut BlockNode {
-    let page_size = arch::get_page_size();
-    assert!(bits::align_down(addr, page_size) == addr);
-
-    unsafe { &mut *(addr as *mut BlockNode) }
-  }
-
-  /// Adds a block to the tail of the linked list.
-  ///
-  /// # Parameters
-  ///
-  /// * `head_addr` - The head address of the linked list.
+  /// * `level` - The level to which the block will be added.
   /// * `block_addr` - The block address.
-  ///
-  /// # Returns
-  ///
-  /// The head address of the list.
-  fn add_to_list(head_addr: usize, block_addr: usize) -> usize {
+  fn add_to_list(&mut self, level: usize, block_addr: usize) {
+    let page_shift = arch::get_page_shift();
+    let page_num = (block_addr - self.base) >> page_shift;
+    let block_num = page_num >> level;
+    let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
+
+    let head_addr = self.levels[level].head;
     let block = Self::get_block_node_unchecked_mut(block_addr);
 
     // If the list is empty, initialize a new node that points only to itself
-    // and return the block address as the new head address.
+    // and return the block address as the new head address. Otherwise, add the
+    // block to the tail of the list.
     if head_addr == 0 {
       *block = BlockNode::new(block_addr, block_addr);
-      return block_addr;
+      self.levels[level].head = head_addr;
+    } else {
+      let head = Self::get_block_node_mut(head_addr);
+      let prev = Self::get_block_node_mut(head.prev);
+
+      *block = BlockNode::new(head_addr, head.prev);
+      *head = BlockNode::new(head.next, block_addr);
+      *prev = BlockNode::new(block_addr, prev.prev);
     }
 
-    let head = Self::get_block_node_mut(head_addr);
-    let prev = Self::get_block_node_mut(head.prev);
+    self.flags[index] ^= 1 << bit_idx;
+  }
 
-    *block = BlockNode::new(head_addr, head.prev);
-    *head = BlockNode::new(head.next, block_addr);
-    *prev = BlockNode::new(block_addr, prev.prev);
-
+  /// Pop the head of a level's free list.
+  ///
+  /// # Parameters
+  ///
+  /// * `level` - The level from which to remove a free block.
+  ///
+  /// # Description
+  ///
+  /// Assumes that the list is not empty.
+  ///
+  /// # Returns
+  ///
+  /// The block address popped from the list.
+  fn pop_from_list(&mut self, level: usize) -> usize {
+    let head_addr = self.levels[level].head;
+    self.remove_from_list(level, head_addr);
     head_addr
+  }
+
+  /// Removes a specific block from a level's free list.
+  ///
+  /// # Parameters
+  ///
+  /// * `level` - The level from which to remove a free block.
+  /// * `block_addr` - The block to remove from the list.
+  fn remove_from_list(&mut self, level: usize, block_addr: usize) {
+    let page_shift = arch::get_page_shift();
+    let page_num = (block_addr - self.base) >> page_shift;
+    let block_num = page_num >> level;
+    let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
+
+    let head_addr = self.levels[level].head;
+    let block = Self::get_block_node(block_addr);
+
+    // If the block address is the same as the head address, then we need to
+    // check if the head points to itself. If it does, simply set the list head
+    // to zero. Otherwise, we assume there is more than one block and perform a
+    // normal list removal.
+    if block_addr == head_addr {
+      let head = Self::get_block_node(head_addr);
+
+      if head.next == head_addr {
+        self.levels[level].head = 0;
+      }
+    } else {
+      let prev = Self::get_block_node_mut(block.prev);
+      let next = Self::get_block_node_mut(block.next);
+  
+      *prev = BlockNode::new(prev.prev, block.next);
+      *next = BlockNode::new(block.prev, next.next);
+    }
+
+    self.flags[index] ^= 1 << bit_idx;
   }
 }

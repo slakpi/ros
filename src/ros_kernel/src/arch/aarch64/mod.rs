@@ -6,10 +6,9 @@ mod exceptions;
 mod mm;
 mod peripherals;
 
-use crate::arch::bits;
 use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
-use crate::support::{dtb, range};
+use crate::support::{bits, dtb, range};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.

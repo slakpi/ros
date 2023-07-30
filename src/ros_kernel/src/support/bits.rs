@@ -3,6 +3,8 @@
 //! http://aggregate.org/MAGIC/
 //! http://graphics.stanford.edu/~seander/bithacks.html
 
+pub use crate::arch::bits::*;
+
 /// Aligns an address with the start of the boundary.
 ///
 /// # Parameters
@@ -68,4 +70,23 @@ pub const fn _is_power_of_2(n: usize) -> bool {
 /// A mask for the least-significant bit in `n`.
 pub const fn least_significant_bit(n: usize) -> usize {
   n & ((!n).wrapping_add(1))
+}
+
+/// Simple XOR checksum of a list of words.
+///
+/// # Parameters
+///
+/// * `words` - A slice of usize words to sum.
+///
+/// # Returns
+///
+/// The words XOR'd with a random, constant seed.
+pub fn xor_checksum(words: &[usize]) -> usize {
+  let mut sum = CHECKSUM_SEED;
+  
+  for w in words {
+    sum ^= w;
+  }
+
+  sum
 }
