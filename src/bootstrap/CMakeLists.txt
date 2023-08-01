@@ -1,3 +1,5 @@
+include(platform)
+
 #-------------------------------------------------------------------------------
 # Generate the linker script by using the C pre-processor to replace literal
 # definitions in the `boot.ld.in` file.
@@ -6,12 +8,14 @@
 #   -P    Inhibit line markers (not calling on C source code)
 #   -x c  Treat as C source code.
 #-------------------------------------------------------------------------------
+get_kernel_base_address(kernel_base)
+get_kernel_virtual_base_address(kernel_virtual_base)
 set(ld_in ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/boot.ld.in)
 set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/boot.ld)
 add_custom_command(
   OUTPUT ${ld_out}
-  COMMAND ${CMAKE_C_COMPILER} -DVIRT_BASE=${ROS_VIRTUAL_BASE_ADDRESS}
-                              -DKERNEL_BASE=${ROS_KERNEL_BASE_ADDRESS}
+  COMMAND ${CMAKE_C_COMPILER} -DVIRT_BASE=${kernel_virtual_base}
+                              -DKERNEL_BASE=${kernel_base}
                               -E -P -x c ${ld_in} >${ld_out}
   DEPENDS ${ld_in}
   COMMENT "Making linker script...")
@@ -32,11 +36,14 @@ target_include_directories(
 target_compile_definitions(kernel PRIVATE RPI_VERSION=${RPI_VERSION})
 target_link_libraries(kernel PRIVATE ROS::Kernel)
 target_link_options(kernel PUBLIC -T ${ld_out})
+target_arch_agnostic_asm_options(kernel)
+target_arch_asm_options(kernel)
 
 #-------------------------------------------------------------------------------
 # Build the raw binary image file.
 #-------------------------------------------------------------------------------
-set(image_out ${CMAKE_CURRENT_BINARY_DIR}/${ROS_KERNEL_IMAGE_FILE})
+get_kernel_image_file(image_file)
+set(image_out ${CMAKE_CURRENT_BINARY_DIR}/${image_file})
 add_custom_command(
   OUTPUT ${image_out}
   COMMAND ${CMAKE_OBJCOPY} $<TARGET_FILE:kernel> -O binary ${image_out}
