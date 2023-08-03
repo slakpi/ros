@@ -452,8 +452,9 @@ impl<'memory> PageAllocator<'memory> {
   /// * `level` - The level to which the block will be added.
   /// * `block_addr` - The block address.
   fn add_to_list(&mut self, level: usize, block_addr: usize) {
+    let kernel_base = arch::get_kernel_virtual_base();
     let page_shift = arch::get_page_shift();
-    let page_num = (block_addr - self.base) >> page_shift;
+    let page_num = (block_addr - self.base - kernel_base) >> page_shift;
     let block_num = page_num >> level;
     let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
 
@@ -465,7 +466,7 @@ impl<'memory> PageAllocator<'memory> {
     // block to the tail of the list.
     if head_addr == 0 {
       *block = BlockNode::new(block_addr, block_addr);
-      self.levels[level].head = head_addr;
+      self.levels[level].head = block_addr;
     } else {
       let head = Self::get_block_node_mut(head_addr);
       let prev = Self::get_block_node_mut(head.prev);
