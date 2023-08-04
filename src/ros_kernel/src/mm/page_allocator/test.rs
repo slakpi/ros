@@ -73,6 +73,7 @@ struct AllocatorState<'a> {
   levels: [&'a [usize]; EXPECTED_BLOCK_LEVELS],
 }
 
+/// Test entry-point.
 pub fn run_tests() {
   execute_test!(test_size_calculation);
   execute_test!(test_level_construction);
@@ -83,6 +84,11 @@ pub fn run_tests() {
   execute_test!(test_free);
 }
 
+/// Test calculating the size required for the allocator metadata.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
 fn test_size_calculation(context: &mut test::TestContext) {
   let (_, size) = PageAllocator::make_levels(TEST_MEM_SIZE);
   check_eq!(context, size, EXPECTED_METADATA_SIZE);
@@ -91,6 +97,11 @@ fn test_size_calculation(context: &mut test::TestContext) {
   check_eq!(context, size, 0);
 }
 
+/// Test initializing the head pointers and bit array offsets.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
 fn test_level_construction(context: &mut test::TestContext) {
   let (levels, _) = PageAllocator::make_levels(TEST_MEM_SIZE);
   let exp_levels = make_expected_levels();
@@ -103,7 +114,114 @@ fn test_level_construction(context: &mut test::TestContext) {
   }
 }
 
+/// Wrapper for metadata initialization tests.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
 fn test_metadata_init(context: &mut test::TestContext) {
+  test_metadata_front_load(context);
+  test_metadata_end_load(context);
+}
+
+/// Test front-loading free blocks.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+///
+/// # Description
+///
+/// The test starts by offseting the base address of the memory area by one
+/// page. When shifting the address down by TEST_PAGE_SHIFT, the least
+/// significant 1 bit in the page number will be bit 0 meaning the largest block
+/// that can be allocated at that address is a single page.
+///
+/// The allocator should make a single block available at level 0, then add one
+/// page to the base address. Now the least significant 1 bit in the page number
+/// is bit 1 meaning the largest block that can be allocated at that address is
+/// two pages.
+///
+/// The process should repeat placing a single block at the lowest address for
+/// each level.
+///
+/// Note that the test expects the block number at each level to be block 2, the
+/// odd buddy to the first block at each level (the block numbers are 1-based).
+///
+///          Base Address
+///      +---+---+---
+///   0  | / | 2 |
+///      +---+---+---
+///
+///      +-------+-------+---
+///   1  | / / / |   2   |
+///      +-------+-------+---
+///
+///      +---------------+---------------+---
+///   2  | / / / / / / / |       2       |
+///      +---------------+---------------+---
+///
+///   ...etc...
+fn test_metadata_front_load(context: &mut test::TestContext) {
+  let (mut allocator, avail) = make_allocator(TEST_PAGE_SIZE);
+  let (virt_addr, _) = get_addrs();
+
+  allocator.init_metadata(&avail);
+
+  verify_allocator(
+    context,
+    &allocator,
+    &AllocatorState {
+      levels: [
+        &[make_block_addr(virt_addr, 2, 0)],
+        &[make_block_addr(virt_addr, 2, 1)],
+        &[make_block_addr(virt_addr, 2, 2)],
+        &[make_block_addr(virt_addr, 2, 3)],
+        &[make_block_addr(virt_addr, 2, 4)],
+        &[make_block_addr(virt_addr, 2, 5)],
+        &[make_block_addr(virt_addr, 2, 6)],
+        &[make_block_addr(virt_addr, 2, 7)],
+        &[make_block_addr(virt_addr, 2, 8)],
+        &[make_block_addr(virt_addr, 2, 9)],
+        &[make_block_addr(virt_addr, 2, 10)],
+      ]
+    }
+  );
+}
+
+/// Test end-loading free blocks.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+///
+/// # Description
+///
+/// The test starts with the base address of the memory area aligned to allow
+/// the largest possible block. The size of the memory area is set to
+/// `(2^11) - 1`. This allows exactly one block at each level.
+///
+/// Because the alignment allows the allocator to place large blocks first, each
+/// block should be placed at the highest address for each level.
+///
+/// Note that the test expects the block number at each level to be an even
+/// buddy (the block numbers are 1-based).
+///
+///      Base Address
+///      +-------------------------------+---
+///   10 |               1               |
+///      +-------------------------------+---
+///
+///      +-------------------------------+---------------+---
+///    9 | / / / / / / / / / / / / / / / |       3       |
+///      +-------------------------------+---------------+---
+///
+///      +-------------------------------+---------------+-------+---
+///    8 | / / / / / / / / / / / / / / / | / / / / / / / |   7   |
+///      +-------------------------------+---------------+-------+---
+///
+///  ...etc...
+fn test_metadata_end_load(context: &mut test::TestContext) {
   let (mut allocator, avail) = make_allocator(0);
   let (virt_addr, _) = get_addrs();
 
