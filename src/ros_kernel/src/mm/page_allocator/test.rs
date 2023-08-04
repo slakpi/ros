@@ -5,7 +5,7 @@ use crate::peripherals::memory;
 use crate::support::range;
 use crate::test;
 use crate::test::macros::*;
-use core::{iter, slice};
+use core::{iter, ptr, slice};
 
 /// Test with 4 KiB pages.
 const TEST_PAGE_SIZE: usize = 4096;
@@ -78,7 +78,7 @@ pub fn run_tests() {
   execute_test!(test_size_calculation);
   execute_test!(test_level_construction);
   execute_test!(test_metadata_init);
-  execute_test!(test_reservation_errors);
+  execute_test!(test_construction_errors);
   execute_test!(test_reservations);
   execute_test!(test_allocation);
   execute_test!(test_free);
@@ -184,8 +184,8 @@ fn test_metadata_front_load(context: &mut test::TestContext) {
         &[make_block_addr(virt_addr, 2, 8)],
         &[make_block_addr(virt_addr, 2, 9)],
         &[make_block_addr(virt_addr, 2, 10)],
-      ]
-    }
+      ],
+    },
   );
 }
 
@@ -248,7 +248,50 @@ fn test_metadata_end_load(context: &mut test::TestContext) {
   )
 }
 
-fn test_reservation_errors(_context: &mut test::TestContext) {}
+/// Test that the allocator constructor sanity checks parameters.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+fn test_construction_errors(context: &mut test::TestContext) {
+  let (levels, meta_size) = PageAllocator::make_levels(TOTAL_MEM_SIZE);
+  let (virt_addr, meta_addr) = get_addrs();
+  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let meta = meta_addr as *mut u8;
+
+  let mut good_avail = memory::MemoryConfig::new();
+
+  good_avail.insert_range(range::Range {
+    base: base_addr,
+    size: TEST_MEM_SIZE,
+  });
+
+  let bad_avail = memory::MemoryConfig::new();
+
+  // Base case, verify valid parameters produce a valid allocator.
+  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &good_avail);
+  check_not_none!(context, allocator);
+
+  // Use a base address that aligns down to 0.
+  let allocator = PageAllocator::new(TEST_PAGE_SIZE - 1, TOTAL_MEM_SIZE, meta, &good_avail);
+  check_none!(context, allocator);
+
+  // Use a memory size that aligns done to a size less than a page.
+  let allocator = PageAllocator::new(base_addr, TEST_PAGE_SIZE - 1, meta, &good_avail);
+  check_none!(context, allocator);
+
+  // Use a base address and memory size that would overflow a pointer.
+  let allocator = PageAllocator::new(base_addr, usize::MAX, meta, &good_avail);
+  check_none!(context, allocator);
+
+  // Use a null metadata pointer.
+  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, ptr::null_mut(), &good_avail);
+  check_none!(context, allocator);
+
+  // Use an empty list of available memory regions.
+  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &bad_avail);
+  check_none!(context, allocator);
+}
 
 fn test_reservations(_context: &mut test::TestContext) {}
 

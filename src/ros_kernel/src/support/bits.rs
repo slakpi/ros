@@ -83,7 +83,7 @@ pub const fn least_significant_bit(n: usize) -> usize {
 /// The words XOR'd with a random, constant seed.
 pub fn xor_checksum(words: &[usize]) -> usize {
   let mut sum = CHECKSUM_SEED;
-  
+
   for w in words {
     sum ^= w;
   }

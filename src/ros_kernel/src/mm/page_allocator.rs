@@ -199,7 +199,7 @@ impl<'memory> PageAllocator<'memory> {
 
     unsafe { &mut *(addr as *mut BlockNode) }
   }
-  
+
   /// Construct a new page allocator for a given contiguous memory area.
   ///
   /// # Parameters
@@ -526,7 +526,7 @@ impl<'memory> PageAllocator<'memory> {
     } else {
       let prev = Self::get_block_node_mut(block.prev);
       let next = Self::get_block_node_mut(block.next);
-  
+
       *prev = BlockNode::new(prev.prev, block.next);
       *next = BlockNode::new(block.prev, next.next);
     }

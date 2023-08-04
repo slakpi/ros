@@ -103,6 +103,40 @@ macro_rules! check_gteq {
 }
 
 #[macro_export]
+macro_rules! check_not_none {
+  ($ctx:ident, $act:expr) => {
+    if $act.is_none() {
+      $ctx.fail_count += 1;
+      debug_print!(
+        "   FAIL: {} is None ({} {})\n",
+        stringify!($act),
+        file!(),
+        line!()
+      );
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! check_none {
+  ($ctx:ident, $act:expr) => {
+    if !$act.is_none() {
+      $ctx.fail_count += 1;
+      debug_print!(
+        "   FAIL: {} is not None ({} {})\n",
+        stringify!($act),
+        file!(),
+        line!()
+      );
+    } else {
+      $ctx.pass_count += 1;
+    }
+  };
+}
+
+#[macro_export]
 macro_rules! mark_fail {
   ($ctx:ident, $msg:literal) => {
     $ctx.fail_count += 1;
