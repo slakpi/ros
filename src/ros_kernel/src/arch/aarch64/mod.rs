@@ -223,19 +223,16 @@ fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) ->
 ///
 /// The kernel area is assumed to start at address 0.
 fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
-  let mut excl_layout = memory::MemoryConfig::new();
-
-  excl_layout.insert_range(range::Range {
-    base: 0,
-    size: kernel_size,
-  });
-
-  excl_layout.insert_range(range::Range {
-    base: blob_addr,
-    size: blob_size,
-  });
-
-  excl_layout.trim_ranges();
+  let excl_layout = memory::MemoryConfig::new_with_ranges(&[
+    range::Range {
+      base: 0,
+      size: kernel_size,
+    },
+    range::Range {
+      base: blob_addr,
+      size: blob_size,
+    },
+  ]);
 
   unsafe {
     EXCL_LAYOUT = excl_layout;

@@ -21,6 +21,27 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
     }
   }
 
+  /// Construct a new RangeSet with a list of ranges.
+  ///
+  /// # Parameters
+  ///
+  /// * `ranges` - A list of ranges to insert into the new set.
+  ///
+  /// # Returns
+  ///
+  /// A new RangeSet.
+  pub fn new_with_ranges(ranges: &[Range]) -> Self {
+    let mut set = Self::new();
+
+    for range in ranges {
+      set.insert_range(*range);
+    }
+
+    set.trim_ranges();
+
+    set
+  }
+
   /// Check if the set is empty.
   ///
   /// # Returns

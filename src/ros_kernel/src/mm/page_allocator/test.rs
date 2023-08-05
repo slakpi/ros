@@ -79,7 +79,6 @@ pub fn run_tests() {
   execute_test!(test_level_construction);
   execute_test!(test_metadata_init);
   execute_test!(test_construction_errors);
-  execute_test!(test_reservations);
   execute_test!(test_allocation);
   execute_test!(test_free);
 }
@@ -122,6 +121,7 @@ fn test_level_construction(context: &mut test::TestContext) {
 fn test_metadata_init(context: &mut test::TestContext) {
   test_metadata_front_load(context);
   test_metadata_end_load(context);
+  test_available_regions(context);
 }
 
 /// Test front-loading free blocks.
@@ -248,6 +248,89 @@ fn test_metadata_end_load(context: &mut test::TestContext) {
   )
 }
 
+/// Test front- and end-loading using disjoint holes in the memory area.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+fn test_available_regions(context: &mut test::TestContext) {
+  let (virt_addr, meta_addr) = get_addrs();
+  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let meta = meta_addr as *mut u8;
+
+  // Set up the available memory to have two holes:
+  //
+  //     Pages
+  //     1     511       512           1023
+  //   +---+---------+---------+------------------+
+  //   | / |         | / / / / |                  |
+  //   +---+---------+---------+------------------+
+  //
+  // The 1-page hole at the beginning should cause front-loading for the 511-
+  // page block and the 512-page hole should cause end-loading for the 1023-
+  // page block.
+  let avail = memory::MemoryConfig::new_with_ranges(&[
+    range::Range {
+      base: base_addr + TEST_PAGE_SIZE,
+      size: 511 * TEST_PAGE_SIZE,
+    },
+    range::Range {
+      base: base_addr + (1024 * TEST_PAGE_SIZE),
+      size: TEST_MEM_SIZE - (1024 * TEST_PAGE_SIZE),
+    },
+  ]);
+
+  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &avail);
+  check_not_none!(context, allocator);
+
+  verify_allocator(
+    context,
+    &allocator.unwrap(),
+    &AllocatorState {
+      levels: [
+        &[
+          make_block_addr(virt_addr, 2, 0),
+          make_block_addr(virt_addr, 2047, 0),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 1),
+          make_block_addr(virt_addr, 1023, 1),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 2),
+          make_block_addr(virt_addr, 511, 2),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 3),
+          make_block_addr(virt_addr, 255, 3),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 4),
+          make_block_addr(virt_addr, 127, 4),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 5),
+          make_block_addr(virt_addr, 63, 5),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 6),
+          make_block_addr(virt_addr, 31, 6),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 7),
+          make_block_addr(virt_addr, 15, 7),
+        ],
+        &[
+          make_block_addr(virt_addr, 2, 8),
+          make_block_addr(virt_addr, 7, 8),
+        ],
+        &[make_block_addr(virt_addr, 3, 9)],
+        &[],
+      ],
+    },
+  );
+}
+
 /// Test that the allocator constructor sanity checks parameters.
 ///
 /// # Parameters
@@ -259,12 +342,10 @@ fn test_construction_errors(context: &mut test::TestContext) {
   let base_addr = virt_addr - arch::get_kernel_virtual_base();
   let meta = meta_addr as *mut u8;
 
-  let mut good_avail = memory::MemoryConfig::new();
-
-  good_avail.insert_range(range::Range {
+  let good_avail = memory::MemoryConfig::new_with_ranges(&[range::Range {
     base: base_addr,
     size: TEST_MEM_SIZE,
-  });
+  }]);
 
   let bad_avail = memory::MemoryConfig::new();
 
@@ -292,8 +373,6 @@ fn test_construction_errors(context: &mut test::TestContext) {
   let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &bad_avail);
   check_none!(context, allocator);
 }
-
-fn test_reservations(_context: &mut test::TestContext) {}
 
 fn test_allocation(_context: &mut test::TestContext) {}
 
@@ -412,12 +491,10 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
 
   unsafe { TEST_MEM.mem.fill(0xcc) };
 
-  let mut avail = memory::MemoryConfig::new();
-
-  avail.insert_range(range::Range {
+  let avail = memory::MemoryConfig::new_with_ranges(&[range::Range {
     base: base_addr + base_offset,
     size: TEST_MEM_SIZE,
-  });
+  }]);
 
   (
     PageAllocator {
@@ -493,7 +570,7 @@ fn verify_allocator(
       check_eq!(context, ptr, *block);
     }
 
-    check_eq!(context, ptr, *exp_blocks.last().unwrap());
+    check_eq!(context, ptr, *exp_blocks.first().unwrap());
 
     level_shift += 1;
   }
