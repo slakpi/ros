@@ -321,7 +321,7 @@ impl<'memory> PageAllocator<'memory> {
   fn init_metadata(&mut self, avail: &memory::MemoryConfig) {
     let page_shift = arch::get_page_shift();
     let page_size = arch::get_page_size();
-    let kernel_base = arch::get_kernel_virtual_base();
+    let virtual_base = arch::get_kernel_virtual_base();
 
     self.flags.fill(0);
 
@@ -358,7 +358,7 @@ impl<'memory> PageAllocator<'memory> {
         let size = blocks << page_shift;
 
         // Add the block to the level's available list.
-        self.add_to_list(level, addr + kernel_base);
+        self.add_to_list(level, addr + virtual_base);
 
         addr += size;
         remaining -= size;
@@ -407,11 +407,14 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// The block address of the block removed from `level`.
   fn split_free_block(&mut self, level: usize, min_level: usize) -> usize {
+    let page_size = arch::get_page_size();
     let block_addr = self.pop_from_list(level);
 
+    // For this example, just assume 1 byte pages starting at 0 for simplicity.
+    //
     // Assume block 2 is free at level 4 covering pages [32, 48), and assume we
-    // want to allocate two pages. Starting at level 3, the odd buddy is
-    // 0x20 | 0x08:
+    // want to allocate two pages. Remove 0x20 from block 4. At level 3, the odd
+    // buddy is 0x20 | 0x08:
     //
     //  0x20                             0x28                             0x30
     //   +--------+--------+----------------+--------------------------------+
@@ -438,7 +441,7 @@ impl<'memory> PageAllocator<'memory> {
     // done splitting and can return 0x20 as the two-page block covering pages
     // [32, 34).
     for l in (min_level..level).rev() {
-      let buddy_addr = block_addr | (1 << l);
+      let buddy_addr = block_addr | (page_size << l);
       self.add_to_list(l, buddy_addr);
     }
 
@@ -452,9 +455,9 @@ impl<'memory> PageAllocator<'memory> {
   /// * `level` - The level to which the block will be added.
   /// * `block_addr` - The block address.
   fn add_to_list(&mut self, level: usize, block_addr: usize) {
-    let kernel_base = arch::get_kernel_virtual_base();
+    let virtual_base = arch::get_kernel_virtual_base();
     let page_shift = arch::get_page_shift();
-    let page_num = (block_addr - self.base - kernel_base) >> page_shift;
+    let page_num = (block_addr - self.base - virtual_base) >> page_shift;
     let block_num = page_num >> level;
     let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
 
@@ -505,8 +508,9 @@ impl<'memory> PageAllocator<'memory> {
   /// * `level` - The level from which to remove a free block.
   /// * `block_addr` - The block to remove from the list.
   fn remove_from_list(&mut self, level: usize, block_addr: usize) {
+    let virtual_base = arch::get_kernel_virtual_base();
     let page_shift = arch::get_page_shift();
-    let page_num = (block_addr - self.base) >> page_shift;
+    let page_num = (block_addr - self.base - virtual_base) >> page_shift;
     let block_num = page_num >> level;
     let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
 

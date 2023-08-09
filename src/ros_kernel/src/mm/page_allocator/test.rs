@@ -12,7 +12,8 @@ const TEST_PAGE_SIZE: usize = 4096;
 const TEST_PAGE_SHIFT: usize = 12;
 
 /// Test with 2047 pages. The non-power of 2 tests proper setup and accounting.
-const TEST_MEM_SIZE: usize = TEST_PAGE_SIZE * 2047;
+const TEST_PAGE_COUNT: usize = 2047;
+const TEST_MEM_SIZE: usize = TEST_PAGE_SIZE * TEST_PAGE_COUNT;
 
 /// Make the memory buffer larger to accommodate testing offset blocks.
 const TEST_BUFFER_SIZE: usize = TEST_MEM_SIZE + (TEST_PAGE_SIZE * 256);
@@ -374,7 +375,33 @@ fn test_construction_errors(context: &mut test::TestContext) {
   check_none!(context, allocator);
 }
 
-fn test_allocation(_context: &mut test::TestContext) {}
+fn test_allocation(context: &mut test::TestContext) {
+  for level in 0..EXPECTED_BLOCK_LEVELS {
+    let mut pages: [bool; TEST_PAGE_COUNT] = [false; TEST_PAGE_COUNT];
+    let exp_count = 1 << level;
+    let mask = (TEST_PAGE_SIZE << level) - 1;
+    let (mut allocator, avail) = make_allocator(0);
+    let (virt_addr, _) = get_addrs();
+
+    allocator.init_metadata(&avail);
+
+    for _ in 0..(TEST_PAGE_COUNT >> level) {
+      let result = allocator.allocate(exp_count);
+      check_not_none!(context, result);
+
+      let (addr, act_count) = result.unwrap();
+      check_eq!(context, addr & mask, 0);
+      check_eq!(context, act_count, exp_count);
+
+      let start_page = (addr - virt_addr) >> TEST_PAGE_SHIFT;
+      let end_page = start_page + act_count;
+      for i in start_page..end_page {
+        check_eq!(context, pages[i], false);
+        pages[i] = true;
+      }
+    }
+  }
+}
 
 fn test_free(_context: &mut test::TestContext) {}
 
