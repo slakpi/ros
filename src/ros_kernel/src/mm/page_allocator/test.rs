@@ -375,6 +375,20 @@ fn test_construction_errors(context: &mut test::TestContext) {
   check_none!(context, allocator);
 }
 
+/// Test allocation.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+///
+/// # Description
+///
+/// For each block size level, the test starts with a cleanly initialized
+/// allocator then allocates all blocks at that level. The test verifies that
+/// the blocks allocated are on the proper memory boundaries, the block is the
+/// correct size, and that there is no overlap. After allocating allof the
+/// blocks at that level, the test verifies that no more blocks can be
+/// allocated.
 fn test_allocation(context: &mut test::TestContext) {
   for level in 0..EXPECTED_BLOCK_LEVELS {
     let mut pages: [bool; TEST_PAGE_COUNT] = [false; TEST_PAGE_COUNT];
@@ -400,6 +414,9 @@ fn test_allocation(context: &mut test::TestContext) {
         pages[i] = true;
       }
     }
+
+    let result = allocator.allocate(exp_count);
+    check_none!(context, result);
   }
 }
 
