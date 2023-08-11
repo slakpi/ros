@@ -338,7 +338,6 @@ fn test_available_regions(context: &mut test::TestContext) {
 ///
 /// * `context` - The test context.
 fn test_construction_errors(context: &mut test::TestContext) {
-  let (levels, meta_size) = PageAllocator::make_levels(TOTAL_MEM_SIZE);
   let (virt_addr, meta_addr) = get_addrs();
   let base_addr = virt_addr - arch::get_kernel_virtual_base();
   let meta = meta_addr as *mut u8;
@@ -373,6 +372,8 @@ fn test_construction_errors(context: &mut test::TestContext) {
   // Use an empty list of available memory regions.
   let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &bad_avail);
   check_none!(context, allocator);
+
+  // TODO: Error check providing virtual addresses and invalid available ranges.
 }
 
 /// Test allocation.
@@ -396,6 +397,7 @@ fn test_allocation(context: &mut test::TestContext) {
     let mask = (TEST_PAGE_SIZE << level) - 1;
     let (mut allocator, avail) = make_allocator(0);
     let (virt_addr, _) = get_addrs();
+    let base_addr = virt_addr - arch::get_kernel_virtual_base();
 
     allocator.init_metadata(&avail);
 
@@ -407,7 +409,7 @@ fn test_allocation(context: &mut test::TestContext) {
       check_eq!(context, addr & mask, 0);
       check_eq!(context, act_count, exp_count);
 
-      let start_page = (addr - virt_addr) >> TEST_PAGE_SHIFT;
+      let start_page = (addr - base_addr) >> TEST_PAGE_SHIFT;
       let end_page = start_page + act_count;
       for i in start_page..end_page {
         check_eq!(context, pages[i], false);
@@ -542,7 +544,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
 
   (
     PageAllocator {
-      base: base_addr,
+      base: virt_addr,
       size: TOTAL_MEM_SIZE,
       levels,
       flags: unsafe { slice::from_raw_parts_mut(meta_addr as *mut usize, meta_size >> WORD_SHIFT) },
@@ -556,7 +558,6 @@ fn verify_allocator(
   allocator: &PageAllocator,
   state: &AllocatorState,
 ) {
-  let kernel_base = arch::get_kernel_virtual_base();
   let mut blocks = TEST_MEM_SIZE >> TEST_PAGE_SHIFT;
   let mut level_shift = 0;
 
@@ -584,7 +585,7 @@ fn verify_allocator(
       check_eq!(context, ptr, *block);
       ptr = node.next;
 
-      let page_num = ((*block - kernel_base) - allocator.base) >> TEST_PAGE_SHIFT;
+      let page_num = (*block - allocator.base) >> TEST_PAGE_SHIFT;
       let block_num = page_num >> level_shift;
       let block_pair = (block_num + 1) >> 1;
       let block_idx = block_pair >> INDEX_SHIFT;

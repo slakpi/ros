@@ -207,7 +207,7 @@ impl<'memory> PageAllocator<'memory> {
   /// * `base` - Base physical address of the memory area served.
   /// * `size` - Size of the memory area.
   /// * `mem` - Pointer to a memory block available for metadata.
-  /// * `avail` - Available regions with the memory area.
+  /// * `avail` - Available physical regions with the memory area.
   ///
   /// # Description
   ///
@@ -233,6 +233,7 @@ impl<'memory> PageAllocator<'memory> {
   /// * `avail` is empty.
   pub fn new(base: usize, size: usize, mem: *mut u8, avail: &memory::MemoryConfig) -> Option<Self> {
     let page_size = arch::get_page_size();
+    let virtual_base = arch::get_kernel_virtual_base();
 
     // Align the base and size down.
     let base = bits::align_down(base, page_size);
@@ -246,8 +247,14 @@ impl<'memory> PageAllocator<'memory> {
       return None;
     }
 
-    // Ensure that the size is not going to overflow a pointer.
-    if usize::MAX - base < size {
+    // Ensure the base address is physical.
+    if base & virtual_base != 0 {
+      return None;
+    }
+
+    // Ensure that the size is not going to overflow a pointer. Note that we're
+    // use the virtual base address rather than usize::MAX.
+    if virtual_base - base < size {
       return None;
     }
 
@@ -262,7 +269,7 @@ impl<'memory> PageAllocator<'memory> {
     let (levels, alloc_size) = Self::make_levels(size);
 
     let mut allocator = PageAllocator {
-      base,
+      base: virtual_base + base,
       size,
       levels,
       flags: unsafe { slice::from_raw_parts_mut(mem as *mut usize, alloc_size >> WORD_SHIFT) },
@@ -286,9 +293,9 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Returns
   ///
-  /// A tuple with the base address of the contigous block and the actual number
-  /// of pages allocated, or None if the allocator could not find an available
-  /// contigous block of the requested size.
+  /// A tuple with the base physical address of the contigous block and the
+  /// actual number of pages allocated, or None if the allocator could not find
+  /// an available contigous block of the requested size.
   pub fn allocate(&mut self, pages: usize) -> Option<(usize, usize)> {
     if pages == 0 {
       return None;
@@ -302,9 +309,10 @@ impl<'memory> PageAllocator<'memory> {
         continue;
       }
 
+      let virtual_base = arch::get_kernel_virtual_base();
       let block = self.split_free_block(level, min_level);
       let pages = 1 << min_level;
-      return Some((block, pages));
+      return Some((block - virtual_base, pages));
     }
 
     // No blocks available.
@@ -317,7 +325,7 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `avail` - Available regions with the memory area.
+  /// * `avail` - Available physical regions with the memory area.
   fn init_metadata(&mut self, avail: &memory::MemoryConfig) {
     let page_shift = arch::get_page_shift();
     let page_size = arch::get_page_size();
@@ -326,8 +334,27 @@ impl<'memory> PageAllocator<'memory> {
     self.flags.fill(0);
 
     for range in avail.get_ranges() {
+      // If the range has an invalid base, skip it.
+      if range.base & virtual_base != 0 {
+        continue;
+      }
+
+      // If the range has an invalid size, skip it.
+      if virtual_base - range.base < range.size {
+        continue;
+      }
+
+      // We now know that adding the size to the base is safe. We know from the
+      // checks in Self::new() that adding the memory area size to the memory
+      // area base is safe. Now check if the range is fully enclosed within the
+      // memory area. If not, skip it.
+      let end = range.base + range.size;
       let mut addr = range.base;
       let mut remaining = range.size;
+
+      if (addr + virtual_base) < self.base || (end + virtual_base) > (self.base + self.size) {
+        continue;
+      }
 
       while remaining >= page_size {
         // Consider the address 0x1ed000. With 4 KiB pages, this address is
@@ -366,11 +393,11 @@ impl<'memory> PageAllocator<'memory> {
     }
   }
 
-  /// Get the flag index and bit for a given block number at a given level.
+  /// Get the flag index and bit for a given virtual address at a given level.
   ///
   /// # Parameters
   ///
-  /// * `block_num` - The block number.
+  /// * `block_addr` - The virtual block address.
   /// * `level` - The block level.
   ///
   /// # Description
@@ -382,11 +409,14 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// A tuple with the absolute word index into the metadata flags and the bit
   /// index in that word for the block.
-  fn get_flag_index_and_bit(&self, block_num: usize, level: usize) -> (usize, usize) {
+  fn get_flag_index_and_bit(&self, block_addr: usize, level: usize) -> (usize, usize) {
+    let page_shift = arch::get_page_shift();
+    let page_num = (block_addr - self.base) >> page_shift;
+    let block_num = page_num >> level;
     let block_pair = (block_num + 1) >> 1;
     let index = self.levels[level].offset + (block_pair >> INDEX_SHIFT);
     let bit = block_pair & WORD_MASK;
-
+    
     (index, bit)
   }
 
@@ -453,14 +483,9 @@ impl<'memory> PageAllocator<'memory> {
   /// # Parameters
   ///
   /// * `level` - The level to which the block will be added.
-  /// * `block_addr` - The block address.
+  /// * `block_addr` - The virtual block address to add to the list.
   fn add_to_list(&mut self, level: usize, block_addr: usize) {
-    let virtual_base = arch::get_kernel_virtual_base();
-    let page_shift = arch::get_page_shift();
-    let page_num = (block_addr - self.base - virtual_base) >> page_shift;
-    let block_num = page_num >> level;
-    let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
-
+    let (index, bit_idx) = self.get_flag_index_and_bit(block_addr, level);
     let head_addr = self.levels[level].head;
     let block = Self::get_block_node_unchecked_mut(block_addr);
 
@@ -498,6 +523,7 @@ impl<'memory> PageAllocator<'memory> {
   fn pop_from_list(&mut self, level: usize) -> usize {
     let head_addr = self.levels[level].head;
     self.remove_from_list(level, head_addr);
+
     head_addr
   }
 
@@ -506,14 +532,9 @@ impl<'memory> PageAllocator<'memory> {
   /// # Parameters
   ///
   /// * `level` - The level from which to remove a free block.
-  /// * `block_addr` - The block to remove from the list.
+  /// * `block_addr` - The virtual block address to remove from the list.
   fn remove_from_list(&mut self, level: usize, block_addr: usize) {
-    let virtual_base = arch::get_kernel_virtual_base();
-    let page_shift = arch::get_page_shift();
-    let page_num = (block_addr - self.base - virtual_base) >> page_shift;
-    let block_num = page_num >> level;
-    let (index, bit_idx) = self.get_flag_index_and_bit(block_num, level);
-
+    let (index, bit_idx) = self.get_flag_index_and_bit(block_addr, level);
     let head_addr = self.levels[level].head;
     let block = Self::get_block_node(block_addr);
 
