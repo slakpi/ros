@@ -319,7 +319,52 @@ impl<'memory> PageAllocator<'memory> {
     None
   }
 
-  pub fn free(&mut self, _base: usize, _pages: usize) {}
+  /// Frees a block of memory.
+  ///
+  /// # Parameters
+  ///
+  /// * `base` - The base physical address of the block.
+  /// * `pages` - The number of pages in the block.
+  ///
+  /// # Description
+  ///
+  /// The number of pages must be a power of 2. The base address of the block
+  /// must be aligned on an address that is a multiple of the block size. The
+  /// function ignores a base address of 0 or a page count of 0.
+  pub fn free(&mut self, base: usize, pages: usize) {
+    if (base == 0) || (pages == 0) {
+      return;
+    }
+
+    assert!(bits::is_power_of_2(pages));
+
+    let min_level = bits::floor_log2(pages);
+    assert!(min_level < BLOCK_LEVELS);
+    assert!(base & (pages - 1) == 0);
+
+    let page_shift = arch::get_page_shift();
+    let virtual_base = arch::get_kernel_virtual_base();
+    let mut base_addr = base + virtual_base;
+
+    for level in min_level..BLOCK_LEVELS {
+      let (index, bit_idx) = self.get_flag_index_and_bit(base_addr, level);
+
+      // The allocator does not protect against double-free, so the assumption
+      // here is that the buddy block is in use if the bit is zero and we cannot
+      // coalesce the two.
+      if self.flags[index] & (1 << bit_idx) == 0 {
+        self.add_to_list(level, base_addr);
+        break;
+      }
+
+      // If the bit is not zero, get the buddy block address using XOR. Remove
+      // the buddy from the list at this level, then update the base address to
+      // the minimum of the two.
+      let buddy_addr = base_addr ^ ((1 << level) << page_shift);
+      self.remove_from_list(level, buddy_addr);
+      base_addr = cmp::min(base_addr, buddy_addr);
+    }
+  }
 
   /// Initializes the allocator's linked list and accounting meta data.
   ///
@@ -413,7 +458,7 @@ impl<'memory> PageAllocator<'memory> {
     let page_shift = arch::get_page_shift();
     let page_num = (block_addr - self.base) >> page_shift;
     let block_num = page_num >> level;
-    let block_pair = (block_num + 1) >> 1;
+    let block_pair = block_num >> 1;
     let index = self.levels[level].offset + (block_pair >> INDEX_SHIFT);
     let bit = block_pair & WORD_MASK;
     

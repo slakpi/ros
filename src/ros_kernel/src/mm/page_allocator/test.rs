@@ -422,7 +422,49 @@ fn test_allocation(context: &mut test::TestContext) {
   }
 }
 
-fn test_free(_context: &mut test::TestContext) {}
+/// Test freeing blocks.
+///
+/// # Parameters
+///
+/// * `context` - The test context.
+///
+/// # Description
+///
+/// The test starts with an allocator and allocates all available blocks. After
+/// allocating all blocks, the test frees each block sequentially from the
+/// beginning and verifies blocks coalesce as they are freed.
+fn test_free(context: &mut test::TestContext) {
+  let (mut allocator, avail) = make_allocator(0);
+  let (virt_addr, _) = get_addrs();
+  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+
+  allocator.init_metadata(&avail);
+
+  for i in 0..EXPECTED_BLOCK_LEVELS {
+    _ = allocator.allocate(1 << i);
+  }
+
+  let result = allocator.allocate(1);
+  check_none!(context, result);
+
+  let mut mask = 0;
+  let mut addr = base_addr;
+  for _ in 0..TEST_PAGE_COUNT {
+    allocator.free(addr, 1);
+    mask += 1;
+    addr += TEST_PAGE_SIZE;
+
+    for i in 0..EXPECTED_BLOCK_LEVELS {
+      let bit = 1 << i;
+
+      if mask & bit == 0 {
+        check_eq!(context, allocator.levels[i].head, 0);
+      } else {
+        check_neq!(context, allocator.levels[i].head, 0);
+      }
+    }
+  }
+}
 
 #[cfg(target_pointer_width = "32")]
 fn make_expected_levels() -> [BlockLevel; EXPECTED_BLOCK_LEVELS] {
@@ -587,7 +629,7 @@ fn verify_allocator(
 
       let page_num = (*block - allocator.base) >> TEST_PAGE_SHIFT;
       let block_num = page_num >> level_shift;
-      let block_pair = (block_num + 1) >> 1;
+      let block_pair = block_num >> 1;
       let block_idx = block_pair >> INDEX_SHIFT;
 
       if block_idx > idx {
