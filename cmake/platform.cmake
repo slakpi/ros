@@ -50,13 +50,18 @@ function(rust_arch_options opts)
   set(tmp ${${opts}})
 
   if(DEFINED cpu)
-    list(APPEND tmp -Ctarget-cpu=${cpu})
+    list(APPEND tmp -C target-cpu=${cpu})
   endif()
 
   # The Rust toolchain only supports software floating-point, but will enable
   # SIMD by default.
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    list(APPEND tmp -Ctarget-feature=-neon)
+    list(APPEND tmp -C target-feature=-neon)
+  endif()
+
+  # Quiet Rust's dead code and unused variable warnings in Debug.
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND tmp -A dead_code -A unused_variables)
   endif()
 
   set(${opts} ${tmp} PARENT_SCOPE)
