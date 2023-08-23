@@ -103,7 +103,7 @@ _el1_entry:
   bl      dtb_quick_check
 
   mov     x1, x0            // dtb_quick_check return value to x1
-  mov     x0, x19           // blobl address to x0
+  mov     x0, x19           // blob address to x0
   bl      create_kernel_pages
 
 // Setup the MMU. The identity map in ttbr0_el1 is going to allow us to get to

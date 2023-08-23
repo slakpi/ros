@@ -12,10 +12,11 @@
 
 
 /*----------------------------------------------------------------------------*/
-/// Implements the ARM calling convention exit bookkeeping.
+/// Implements the ARM calling convention exit bookkeeping. Pops LR into PC to
+/// return from the subroutine.
 .macro fn_exit
   mov     sp, fp
-  pop     {fp, lr}
+  pop     {fp, pc}
 .endm
 
 #endif

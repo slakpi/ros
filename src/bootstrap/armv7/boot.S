@@ -48,6 +48,10 @@ _start:
   mov     r0, r6
   bl      dtb_quick_check
 
+  mov     r1, r0
+  mov     r0, r6
+  bl      create_kernel_pages
+
 // Write kernel configuration struct.
   ldr     r2, =__virtual_start
   str     r2, [fp, #-28]

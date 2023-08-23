@@ -3,6 +3,10 @@
 #include "abi.h"
 #include "mmu.h"
 
+///  +---------+----+----+----+----+--------+
+///  | / / / / | L1 | L2 | L3 | L4 | Offset |
+///  +---------+----+----+----+----+--------+
+///  63       48   39   30   21   12        0
 #define PAGE_SHIFT      12
 #define TABLE_SHIFT     9
 #define SECTION_SHIFT   (PAGE_SHIFT + TABLE_SHIFT)
@@ -32,8 +36,9 @@ create_kernel_pages:
   stp     x21, x22, [sp, #-16]!
   stp     x23, x24, [sp, #-16]!
 
-// Align the blob size on a section.
   mov     x19, x0
+
+// Align the blob size on a section.
   mov     x0, x1
   bl      section_align_size
   mov     x20, x0
@@ -66,6 +71,8 @@ create_kernel_pages:
   mov     x23, x0
 
 // Map the kernel area as RW normal memory.
+// TODO: The code should probably be separate from the stack and page tables to
+//       prevent the code from being re-written.
   mov     x0, x22
   mov     x1, #0
   ldr     x2, =__virtual_start

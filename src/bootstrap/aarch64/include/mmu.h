@@ -44,8 +44,8 @@
 #define MM_TYPE_PAGE       0x3
 #define MM_TYPE_BLOCK      0x1
 #define MM_ACCESS_FLAG     (1 << 10)
-#define MM_ACCESS_RW       (0x00 << 6)
-#define MM_ACCESS_RO       (0x10 << 6)
+#define MM_ACCESS_RW       (0b00 << 6)
+#define MM_ACCESS_RO       (0b10 << 6)
 
 #define MMU_NORMAL_RO_FLAGS (MM_TYPE_BLOCK | (MT_NORMAL_NC << 2) | \
                              MM_ACCESS_RO | MM_ACCESS_FLAG)
