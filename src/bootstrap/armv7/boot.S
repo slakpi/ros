@@ -3,6 +3,14 @@
 #include "abi.h"
 #include "mmu.h"
 
+// SCTLR flags. See B4.1.130.
+#define SCTLR_MMU_ENABLE 1
+#define SCLTR_AFE        (1 << 29)
+
+// DACR setup. See B4.1.43. Only using domain 0 in client mode (access
+// permissions are checked).
+#define DACR_VALUE 0x1
+
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
 
@@ -65,7 +73,7 @@ _start:
   add     r4, r4, r5
 
 // Setup the MMU. The identity map in TTBR0 is going to allow us to get to the
-// next instruction after we switch on the MMU.
+// next instruction after we switch on the MMU. 
   adr     r0, kernel_id_pages_start_rel
   ldr     r1, kernel_id_pages_start_rel
   add     r0, r0, r1
@@ -86,7 +94,8 @@ _start:
 
   isb
   mrc     p15, 0, r0, c1, c0, 0
-  orr     r0, r0, #MMU_ENABLE
+  orr     r0, r0, #SCTLR_MMU_ENABLE
+  orr     r0, r0, #SCLTR_AFE
   mcr     p15, 0, r0, c1, c0, 0
   isb
 
