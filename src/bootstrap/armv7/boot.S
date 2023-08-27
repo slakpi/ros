@@ -55,7 +55,16 @@ _start:
   mov     r0, r6
   bl      create_kernel_pages
 
-// Setup the MMU. The identity map in ttbr0 is going to allow us to get to the
+// Save off physical addresses needed for the kernel configuration struct.
+  adr     r3, kernel_start_rel
+  ldr     r4, kernel_start_rel
+  add     r3, r3, r4
+
+  adr     r4, kernel_pages_start_rel
+  ldr     r5, kernel_pages_start_rel
+  add     r4, r4, r5
+
+// Setup the MMU. The identity map in TTBR0 is going to allow us to get to the
 // next instruction after we switch on the MMU.
   adr     r0, kernel_id_pages_start_rel
   ldr     r1, kernel_id_pages_start_rel
@@ -73,8 +82,7 @@ _start:
   ldr     r0, =DACR_VALUE
   mcr     p15, 0, r0, c3, c0, 0
 
-  ldr     r3, =begin_virt_addressing
-  ldr     r4, =ros_kernel
+  ldr     r5, =begin_virt_addressing
 
   isb
   mrc     p15, 0, r0, c1, c0, 0
@@ -84,11 +92,12 @@ _start:
 
 // Jump using our first virtual address to switch the program counter over to
 // virtual addressing. Once the program counter is using virtual addresses,
-// clear ttbr0_el1, we no longer need the temporary identity map.
-  bx      r3
+// clear TTBR0, we no longer need the temporary identity map.
+  bx      r5
 begin_virt_addressing:
   mov     r0, #0
   mcr     p15, 0, r0, c2, c0, 0
+  isb
 
 // Real stack setup.
   ldr     r0, =__kernel_stack_start
@@ -96,33 +105,69 @@ begin_virt_addressing:
   mov     fp, sp
   sub     sp, sp, #(8 * 4)
 
-// Write kernel configuration struct.
+// Write kernel configuration struct. Provide all addresses as physical.
+//
+//   +------------------------------+ 0
+//   | Virtual base address         |
+//   +------------------------------+ 4
+//   | Page size                    |
+//   +------------------------------+ 8
+//   | Physical blob address        |
+//   +------------------------------+ 12
+//   | Physical kernel address      |
+//   +------------------------------+ 16
+//   | Kernel size                  |
+//   +------------------------------+ 20
+//   | Physical L1 table address    |
+//   +------------------------------+ 24
+//   | L1 table size                |
+//   +------------------------------+ 28
+//   | / / / / / Padding / / / / /  |
+//   +------------------------------+ 32
   ldr     r2, =__virtual_start
-  str     r2, [fp, #-28]
+  str     r2, [fp, #-32]
+
   ldr     r1, =__page_size
-  str     r1, [fp, #-24]
-  add     r1, r6, r2
-  str     r1, [fp, #-20]
-  ldr     r1, =__kernel_start
-  str     r1, [fp, #-16]
+  str     r1, [fp, #-28]
+
+  str     r6, [fp, #-24]
+
+  str     r3, [fp, #-20]
+
   ldr     r1, =__kernel_size
-  str     r1, [fp, #-12]
-  mov     r1, #0
+  str     r1, [fp, #-16]
+
+  str     r4, [fp, #-12]
+
+  ldr     r1, =__kernel_pages_size
   str     r1, [fp, #-8]
+
   mov     r1, #0
   str     r1, [fp, #-4]
 
-//TODO: Don't call into Rustland yet. Rustland assumes the MMU has been
-//      bootstrapped.
 // Restore the entry arguments and transfer control to the kernel stub. The stub
 // should not return. If it does, we will end up halting below.
-//  sub     r0, fp, #28
-//  bl      ros_kernel
+  sub     r0, fp, #32
+  bl      ros_kernel
 
 start_cpu_halt:
   b       start_cpu_halt
 
 
+/*----------------------------------------------------------------------------*/
+/// The ARMv7 toolchain does not support the ADRP pseudo-instruction that allows
+/// getting the 4 KiB page, PC-relative address of a label within +/- 4 GiB. ADR
+/// only allows getting the PC-relative address of a label within +/- 1 MiB.
+///
+/// We create these "relative" labels marking address that are offsets to the
+/// symbols we need. We can use ADR to get the PC-relative address of the label,
+/// then add the value at the label to get the PC-relative address of the actual
+/// label we're interested in.
+///
+/// Once the MMU has been enabled, these are no longer necessary since the LDR
+/// instruction can be used to get the virtual address of the label.
+kernel_start_rel:
+  .word __kernel_start - kernel_start_rel
 kernel_stack_start_rel:
   .word __kernel_stack_start - kernel_stack_start_rel
 kernel_id_pages_start_rel:

@@ -3,12 +3,30 @@
 #include "abi.h"
 #include "mmu.h"
 
+/// 1 MiB section virtual address layout:
+///
 ///  +-----+----------+--------------------+
 ///  | / / |    L1    |       Offset       |
 ///  +-----+----------+--------------------+
 ///  31   30         20                    0
+///
+/// 4 KiB page virtual address layout:
+///
+///  +-----+----------+--------+-----------+
+///  | / / |    L1    |   L2   |  Offset   |
+///  +-----+----------+--------+-----------+
+///  31   30         20       12           0
+///
+/// L1_TABLE_SHIFT below is still 12 bits even though we discard the top 2 bits
+/// for the 3:1 split between TTBR0 and TTBR1. This means L1_TABLE_ENTRY_CNT is
+/// still 4,096 entries and we include the top 2 bits in the table index. This
+/// is different from AArch64 which completely discards the top 16 bits when
+/// indexing the L1 table.
+///
+/// With a 3:1 split, the TTBR1 entries range from 0xC00-0xFFF covering the top
+/// 1 GiB of the address space.
 #define PAGE_SHIFT         12
-#define L1_TABLE_SHIFT     10
+#define L1_TABLE_SHIFT     12
 #define L2_TABLE_SHIFT     8
 #define SECTION_SHIFT      (PAGE_SHIFT + L2_TABLE_SHIFT)
 #define SECTION_SIZE       (1 << SECTION_SHIFT)
@@ -176,6 +194,8 @@ map_block_loop:
   mov     pc, lr
 
 
+/*----------------------------------------------------------------------------*/
+/// See boot.S.
 kernel_id_pages_start_rel:
   .word __kernel_id_pages_start - kernel_id_pages_start_rel
 kernel_id_pages_end_rel:

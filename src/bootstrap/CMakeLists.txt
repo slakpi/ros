@@ -53,13 +53,15 @@ add_custom_command(
 add_custom_target(kernel_img ALL DEPENDS ${image_out})
 
 #-------------------------------------------------------------------------------
-# Dump the kernel assembly.
+# Dump the kernel assembly. `dummy_asm_out` is a hack that specifies a file that
+# is never created. This forces CMake to run the custom command every time.
 #-------------------------------------------------------------------------------
 set(asm_out ${CMAKE_CURRENT_BINARY_DIR}/asm.txt)
+set(dummy_asm_out ${CMAKE_CURRENT_BINARY_DIR}/__asm.txt)
 add_custom_command(
-  OUTPUT ${asm_out}
+  OUTPUT ${asm_out} ${dummy_asm_out}
   COMMAND ${CMAKE_OBJDUMP} -D $<TARGET_FILE:kernel> >${asm_out}
   DEPENDS kernel_img
   COMMENT "Dumping kernel assembly...")
 
-add_custom_target(kernel_img_with_asm DEPENDS ${asm_out})
+add_custom_target(kernel_img_with_asm DEPENDS ${dummy_asm_out})

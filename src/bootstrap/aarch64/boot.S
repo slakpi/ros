@@ -106,7 +106,11 @@ _el1_entry:
   mov     x0, x19           // blob address to x0
   bl      create_kernel_pages
 
-// Setup the MMU. The identity map in ttbr0_el1 is going to allow us to get to
+// Save off physical addresses needed for the kernel configuration struct.
+  adrp    x21, __kernel_start
+  adrp    x22, __kernel_pages_start
+
+// Setup the MMU. The identity map in TTBR0_EL1 is going to allow us to get to
 // the next instruction after we switch on the MMU.
   adrp    x9, __kernel_id_pages_start
   msr     ttbr0_el1, x9
@@ -121,7 +125,6 @@ _el1_entry:
   msr     mair_el1, x0
 
   ldr     x20, =begin_virt_addressing
-  ldr     x21, =ros_kernel
 
   isb
   mrs     x9, sctlr_el1
@@ -131,40 +134,55 @@ _el1_entry:
 
 // Jump using our first virtual address to switch the program counter over to
 // virtual addressing. Once the program counter is using virtual addresses,
-// clear ttbr0_el1, we no longer need the temporary identity map.
+// clear TTBR0_EL1, we no longer need the temporary identity map.
   br      x20
 begin_virt_addressing:
   mov     x9, #0
   msr     ttbr0_el1, x9
+  isb
 
 // Real stack setup.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
   mov     x29, sp
-  sub     sp, sp, #(10 * 8)
+  sub     sp, sp, #(8 * 8)
 
 // Write kernel configuration struct. Provide all addresses as physical.
+//
+//   +------------------------------+ 0
+//   | Virtual base address         |
+//   +------------------------------+ 8
+//   | Page size                    |
+//   +------------------------------+ 16
+//   | Physical blob address        |
+//   +------------------------------+ 24
+//   | Physical kernel address      |
+//   +------------------------------+ 32
+//   | Kernel size                  |
+//   +------------------------------+ 40
+//   | Physical L1 table address    |
+//   +------------------------------+ 48
+//   | L1 table size                |
+//   +------------------------------+ 56
+//   | / / / / / Padding / / / / /  |
+//   +------------------------------+ 64
   ldr     x11, =__virtual_start
   ldr     x10, =__page_size
   stp     x11, x10, [x29, #-64]
 
-  mov     x9, x19
-  ldr     x10, =__kernel_start
-  sub     x10, x10, x11
-  stp     x9, x10, [x29, #-48]
+  stp     x19, x21, [x29, #-48]
 
   ldr     x9, =__kernel_size
-  ldr     x10, =__kernel_pages_start
-  sub     x10, x10, x11
-  stp     x9, x10, [x29, #-32]
+  stp     x9, x22, [x29, #-32]
 
   ldr     x9, =__kernel_pages_size
-  str     x9, [x29, #-16]
+  mov     x10, #0
+  stp     x9, x10, [x29, #-16]
 
 // Transfer control to the kernel stub. The stub should not return. If it does,
 // we will end up halting below.
   sub     x0, x29, #64
-  br      x21
+  bl      ros_kernel
 
 el1_cpu_halt:
   b       el1_cpu_halt
