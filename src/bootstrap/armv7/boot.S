@@ -1,6 +1,7 @@
 //! ARMv7a Bootstrap
  
 #include "abi.h"
+#include "mmu.h"
 
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
@@ -31,16 +32,18 @@ _start:
   cmp     r0, #0
   bne     start_cpu_halt
 
-// Setup the stack pointer for the kernel.
-  ldr     r0, =__kernel_stack_start
-  mov     sp, r0
+// Temporary stack setup before turning on the MMU.
+  adr     r0, kernel_stack_start_rel
+  ldr     r1, kernel_stack_start_rel
+  add     sp, r0, r1
   mov     fp, sp
-  sub     sp, sp, #(8 * 4)
 
 // Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
-  ldr     r0, =__bss_start
+  adr     r0, bss_start_rel
+  ldr     r1, bss_start_rel
+  add     r0, r0, r1
   mov     r1, #0
-  ldr     r2, =__bss_end
+  ldr     r2, =__bss_size
   bl      memset
 
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
@@ -51,6 +54,47 @@ _start:
   mov     r1, r0
   mov     r0, r6
   bl      create_kernel_pages
+
+// Setup the MMU. The identity map in ttbr0 is going to allow us to get to the
+// next instruction after we switch on the MMU.
+  adr     r0, kernel_id_pages_start_rel
+  ldr     r1, kernel_id_pages_start_rel
+  add     r0, r0, r1
+  mcr     p15, 0, r0, c2, c0, 0
+
+  adr     r0, kernel_pages_start_rel
+  ldr     r1, kernel_pages_start_rel
+  add     r0, r0, r1
+  mcr     p15, 0, r0, c2, c0, 1
+
+  ldr     r0, =TTBCR_VALUE
+  mcr     p15, 0, r0, c2, c0, 2
+
+  ldr     r0, =DACR_VALUE
+  mcr     p15, 0, r0, c3, c0, 0
+
+  ldr     r3, =begin_virt_addressing
+  ldr     r4, =ros_kernel
+
+  isb
+  mrc     p15, 0, r0, c1, c0, 0
+  orr     r0, r0, #MMU_ENABLE
+  mcr     p15, 0, r0, c1, c0, 0
+  isb
+
+// Jump using our first virtual address to switch the program counter over to
+// virtual addressing. Once the program counter is using virtual addresses,
+// clear ttbr0_el1, we no longer need the temporary identity map.
+  bx      r3
+begin_virt_addressing:
+  mov     r0, #0
+  mcr     p15, 0, r0, c2, c0, 0
+
+// Real stack setup.
+  ldr     r0, =__kernel_stack_start
+  mov     sp, r0
+  mov     fp, sp
+  sub     sp, sp, #(8 * 4)
 
 // Write kernel configuration struct.
   ldr     r2, =__virtual_start
@@ -77,3 +121,13 @@ _start:
 
 start_cpu_halt:
   b       start_cpu_halt
+
+
+kernel_stack_start_rel:
+  .word __kernel_stack_start - kernel_stack_start_rel
+kernel_id_pages_start_rel:
+  .word __kernel_id_pages_start - kernel_id_pages_start_rel
+kernel_pages_start_rel:
+  .word __kernel_pages_start - kernel_pages_start_rel
+bss_start_rel:
+  .word __bss_start - bss_start_rel

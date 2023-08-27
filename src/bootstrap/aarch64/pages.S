@@ -183,8 +183,7 @@ create_table_entry:
 
 
 /*----------------------------------------------------------------------------*/
-/// Map a block of addresses within the first 1 GiB of the physical address
-/// space into the virtual address space.
+/// Map a block of 2 MiB sections to a L2 translation table.
 ///
 /// # Parameters
 ///

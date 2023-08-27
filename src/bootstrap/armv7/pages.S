@@ -8,7 +8,7 @@
 ///  +-----+----------+--------------------+
 ///  31   30         20                    0
 #define PAGE_SHIFT         12
-#define L1_TABLE_SHIFT     12
+#define L1_TABLE_SHIFT     10
 #define L2_TABLE_SHIFT     8
 #define SECTION_SHIFT      (PAGE_SHIFT + L2_TABLE_SHIFT)
 #define SECTION_SIZE       (1 << SECTION_SHIFT)
@@ -43,17 +43,23 @@ create_kernel_pages:
   mov     r5, r0
 
 // Align the size of the kernel area on a section.
-  ldr     r0, =__kernel_id_pages_end
+  adr     r0, kernel_id_pages_end_rel
+  ldr     r1, kernel_id_pages_end_rel
+  add     r0, r0, r1
   bl      section_align_size
   mov     r6, r0
 
 // Clear the page tables.
-  ldr     r0, =__kernel_pages_start
+  adr     r0, kernel_pages_start_rel
+  ldr     r1, kernel_pages_start_rel
+  add     r0, r0, r1
   mov     r1, #0
   ldr     r2, =__kernel_pages_size
   bl      memset
 
-  ldr     r0, =__kernel_id_pages_start
+  adr     r0, kernel_id_pages_start_rel
+  ldr     r1, kernel_id_pages_start_rel
+  add     r0, r0, r1
   mov     r1, #0
   ldr     r2, =__kernel_id_pages_size
   bl      memset
@@ -61,7 +67,9 @@ create_kernel_pages:
 // Map the kernel area as RW normal memory.
 // TODO: The code should probably be separate from the stack and page tables to
 //       prevent the code from being re-written.
-  ldr     r0, =__kernel_pages_start
+  adr     r0, kernel_pages_start_rel
+  ldr     r1, kernel_pages_start_rel
+  add     r0, r0, r1
   mov     r1, #0
   ldr     r2, =__virtual_start
   add     r3, r2, r6
@@ -71,7 +79,9 @@ create_kernel_pages:
   bl      map_block
   pop     {r7}
 
-  ldr     r0, =__kernel_id_pages_start
+  adr     r0, kernel_id_pages_start_rel
+  ldr     r1, kernel_id_pages_start_rel
+  add     r0, r0, r1
   mov     r1, #0
   mov     r2, #0
   add     r3, r2, r6
@@ -87,7 +97,9 @@ create_kernel_pages:
   cmp     r5, #0
   beq     skip_dtb_mapping
 
-  ldr     r0, =__kernel_pages_start
+  adr     r0, kernel_pages_start_rel
+  ldr     r0, kernel_pages_start_rel
+  add     r0, r0, r1
   mov     r1, #0
   add     r1, r1, r4
   ldr     r2, =__virtual_start
@@ -130,8 +142,7 @@ section_align_size:
 
 
 /*----------------------------------------------------------------------------*/
-/// Map a block of addresses within the first 1 GiB of the physical address
-/// space into the virtual address space.
+/// Map a block of 1 MiB sections to the L1 translation table.
 ///
 /// # Parameters
 ///
@@ -145,7 +156,7 @@ map_block:
   push {r4, r5}
 
   ldr     r4, [sp, #8]
-  ldr     r5, =(L1_TABLE_ENTRY_CNT - 1)
+  mov     r5, #L1_TABLE_ENTRY_CNT - 1
 
   lsr     r2, r2, #SECTION_SHIFT
   and     r2, r2, r5
@@ -163,3 +174,13 @@ map_block_loop:
   pop     {r4, r5}
   // no fn_exit required.
   mov     pc, lr
+
+
+kernel_id_pages_start_rel:
+  .word __kernel_id_pages_start - kernel_id_pages_start_rel
+kernel_id_pages_end_rel:
+  .word __kernel_id_pages_end - kernel_id_pages_end_rel
+kernel_pages_start_rel:
+  .word __kernel_pages_start - kernel_pages_start_rel
+kernel_pages_end_rel:
+  .word __kernel_pages_end - kernel_pages_end_rel

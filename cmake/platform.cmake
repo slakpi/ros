@@ -13,12 +13,16 @@ endfunction()
 # Add architecture-agnostic options for the assembler to the specified target.
 #-------------------------------------------------------------------------------
 function(target_arch_agnostic_asm_options target)
+  set(opts "")
+
   if(CMAKE_ASM_COMPILER_ID STREQUAL "GNU")
     # -nostdlib: Do not link the standard library.
     # -nostartfiles: Do not use the standard library startup files.
     # -z noexecstack: Prevents executing code in a stack.
-    target_link_options(${target} PRIVATE -nostdlib -nostartfiles -z noexecstack)
+    list(APPEND opts -nostdlib -nostartfiles -z noexecstack)
   endif()
+
+  target_link_options(${target} PRIVATE ${opts})
 endfunction()
 
 #-------------------------------------------------------------------------------
@@ -27,18 +31,22 @@ endfunction()
 function(target_arch_asm_options target)
   get_cpu_model(cpu)
 
+  set(opts "")
+
   if(CMAKE_ASM_COMPILER_ID STREQUAL "GNU")
     if(DEFINED cpu)
-      target_compile_options(${target} PRIVATE -mcpu=${cpu})
+      list(APPEND opts -mcpu=${cpu})
     endif()
 
     # The GNU ARM toolchain only supports software floating-point and does not
     # enable SIMD by default. The GNU AArch64 toolchain does, however, use
     # hardware floating-point and SIMD by default.
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-      target_compile_options(${target} PRIVATE -march=armv8-a+nofp+nosimd)
+      list(APPEND opts -march=armv8-a+nofp+nosimd)
     endif()
   endif()
+
+  target_compile_options(${target} PRIVATE ${opts})
 endfunction()
 
 #-------------------------------------------------------------------------------
