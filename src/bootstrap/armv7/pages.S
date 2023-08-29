@@ -116,7 +116,7 @@ create_kernel_pages:
   beq     skip_dtb_mapping
 
   adr     r0, kernel_pages_start_rel
-  ldr     r0, kernel_pages_start_rel
+  ldr     r1, kernel_pages_start_rel
   add     r0, r0, r1
   mov     r1, #0
   add     r1, r1, r4
