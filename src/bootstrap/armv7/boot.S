@@ -3,9 +3,12 @@
 #include "abi.h"
 #include "mmu.h"
 
-// SCTLR flags. See B4.1.130.
+// SCTLR flags. See B4.1.130. Enable the MMU, expect exception vectors at the
+// low address (0x00000000), and enable the Access Flag.
 #define SCTLR_MMU_ENABLE 1
-#define SCLTR_AFE        (1 << 29)
+#define SCTLR_V          (0 << 13)
+#define SCTLR_AFE        (1 << 29)
+#define SCTLR_FLAGS      (SCTLR_MMU_ENABLE | SCTLR_AFE | SCTLR_V)
 
 // DACR setup. See B4.1.43. Only using domain 0 in client mode (access
 // permissions are checked).
@@ -94,8 +97,8 @@ _start:
 
   isb
   mrc     p15, 0, r0, c1, c0, 0
-  orr     r0, r0, #SCTLR_MMU_ENABLE
-  orr     r0, r0, #SCLTR_AFE
+  ldr     r1, =SCTLR_FLAGS
+  orr     r0, r0, r1
   mcr     p15, 0, r0, c1, c0, 0
   isb
 

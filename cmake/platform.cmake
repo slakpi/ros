@@ -44,13 +44,17 @@ function(target_arch_asm_options target)
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
       list(APPEND opts -march=armv8-a+nofp+nosimd)
     endif()
+
+    # Turn on position-independent code.
+    list(APPEND opts -fPIC)
   endif()
 
   target_compile_options(${target} PRIVATE ${opts})
 endfunction()
 
 #-------------------------------------------------------------------------------
-# Build a list of Rust architecture options.
+# Build a list of Rust architecture options. Rust's default relocation model is
+# position independent.
 #-------------------------------------------------------------------------------
 function(rust_arch_options opts)
   get_cpu_model(cpu)
