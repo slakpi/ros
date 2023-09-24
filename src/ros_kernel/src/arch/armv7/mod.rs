@@ -1,10 +1,10 @@
-//! ARMv7a Initialization
+//! ARMv7a Architecture
 
 pub mod debug;
-
-mod exceptions;
-mod mm;
-mod peripherals;
+pub mod exceptions;
+pub mod mm;
+pub mod peripherals;
+pub mod task;
 
 use crate::peripherals::memory;
 use crate::support::bits;
@@ -40,6 +40,9 @@ static mut PAGE_SHIFT: usize = 0;
 /// Kernel virtual address base.
 static mut VIRTUAL_BASE: usize = 0;
 
+/// Max physical address.
+static mut MAX_PHYSICAL_ADDRESS: usize = 0;
+
 /// ARMv7a platform configuration.
 ///
 /// # Parameters
@@ -70,6 +73,7 @@ pub fn init(config: usize) {
     PAGE_SIZE = config.page_size;
     PAGE_SHIFT = bits::floor_log2(config.page_size);
     VIRTUAL_BASE = config.virtual_base;
+    MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
   }
 
   exceptions::init();
@@ -128,4 +132,19 @@ pub fn get_page_shift() -> usize {
 ///         and sound.
 pub fn get_kernel_virtual_base() -> usize {
   unsafe { VIRTUAL_BASE }
+}
+
+/// Get the maximum physical address allowed.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+///
+/// # Returns
+///
+/// Returns the bitwise NOT of the kernel base address.
+pub fn get_max_physical_address() -> usize {
+  unsafe { MAX_PHYSICAL_ADDRESS }
 }

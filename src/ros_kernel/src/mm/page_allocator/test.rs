@@ -165,7 +165,7 @@ fn test_metadata_init(context: &mut test::TestContext) {
 ///   ...etc...
 fn test_metadata_front_load(context: &mut test::TestContext) {
   let (mut allocator, avail) = make_allocator(TEST_PAGE_SIZE);
-  let (virt_addr, _) = get_addrs();
+  let (base_addr, _) = get_addrs();
 
   allocator.init_metadata(&avail);
 
@@ -174,17 +174,17 @@ fn test_metadata_front_load(context: &mut test::TestContext) {
     &allocator,
     &AllocatorState {
       levels: [
-        &[make_block_addr(virt_addr, 2, 0)],
-        &[make_block_addr(virt_addr, 2, 1)],
-        &[make_block_addr(virt_addr, 2, 2)],
-        &[make_block_addr(virt_addr, 2, 3)],
-        &[make_block_addr(virt_addr, 2, 4)],
-        &[make_block_addr(virt_addr, 2, 5)],
-        &[make_block_addr(virt_addr, 2, 6)],
-        &[make_block_addr(virt_addr, 2, 7)],
-        &[make_block_addr(virt_addr, 2, 8)],
-        &[make_block_addr(virt_addr, 2, 9)],
-        &[make_block_addr(virt_addr, 2, 10)],
+        &[make_block_addr(base_addr, 2, 0)],
+        &[make_block_addr(base_addr, 2, 1)],
+        &[make_block_addr(base_addr, 2, 2)],
+        &[make_block_addr(base_addr, 2, 3)],
+        &[make_block_addr(base_addr, 2, 4)],
+        &[make_block_addr(base_addr, 2, 5)],
+        &[make_block_addr(base_addr, 2, 6)],
+        &[make_block_addr(base_addr, 2, 7)],
+        &[make_block_addr(base_addr, 2, 8)],
+        &[make_block_addr(base_addr, 2, 9)],
+        &[make_block_addr(base_addr, 2, 10)],
       ],
     },
   );
@@ -224,7 +224,7 @@ fn test_metadata_front_load(context: &mut test::TestContext) {
 ///  ...etc...
 fn test_metadata_end_load(context: &mut test::TestContext) {
   let (mut allocator, avail) = make_allocator(0);
-  let (virt_addr, _) = get_addrs();
+  let (base_addr, _) = get_addrs();
 
   allocator.init_metadata(&avail);
 
@@ -233,17 +233,17 @@ fn test_metadata_end_load(context: &mut test::TestContext) {
     &allocator,
     &AllocatorState {
       levels: [
-        &[make_block_addr(virt_addr, 2047, 0)],
-        &[make_block_addr(virt_addr, 1023, 1)],
-        &[make_block_addr(virt_addr, 511, 2)],
-        &[make_block_addr(virt_addr, 255, 3)],
-        &[make_block_addr(virt_addr, 127, 4)],
-        &[make_block_addr(virt_addr, 63, 5)],
-        &[make_block_addr(virt_addr, 31, 6)],
-        &[make_block_addr(virt_addr, 15, 7)],
-        &[make_block_addr(virt_addr, 7, 8)],
-        &[make_block_addr(virt_addr, 3, 9)],
-        &[make_block_addr(virt_addr, 1, 10)],
+        &[make_block_addr(base_addr, 2047, 0)],
+        &[make_block_addr(base_addr, 1023, 1)],
+        &[make_block_addr(base_addr, 511, 2)],
+        &[make_block_addr(base_addr, 255, 3)],
+        &[make_block_addr(base_addr, 127, 4)],
+        &[make_block_addr(base_addr, 63, 5)],
+        &[make_block_addr(base_addr, 31, 6)],
+        &[make_block_addr(base_addr, 15, 7)],
+        &[make_block_addr(base_addr, 7, 8)],
+        &[make_block_addr(base_addr, 3, 9)],
+        &[make_block_addr(base_addr, 1, 10)],
       ],
     },
   )
@@ -255,8 +255,8 @@ fn test_metadata_end_load(context: &mut test::TestContext) {
 ///
 /// * `context` - The test context.
 fn test_available_regions(context: &mut test::TestContext) {
-  let (virt_addr, meta_addr) = get_addrs();
-  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let (base_addr, meta_addr) = get_addrs();
+  let virt_base = arch::get_kernel_virtual_base();
   let meta = meta_addr as *mut u8;
 
   // Set up the available memory to have two holes:
@@ -290,42 +290,42 @@ fn test_available_regions(context: &mut test::TestContext) {
     &AllocatorState {
       levels: [
         &[
-          make_block_addr(virt_addr, 2, 0),
-          make_block_addr(virt_addr, 2047, 0),
+          make_block_addr(base_addr, 2, 0),
+          make_block_addr(base_addr, 2047, 0),
         ],
         &[
-          make_block_addr(virt_addr, 2, 1),
-          make_block_addr(virt_addr, 1023, 1),
+          make_block_addr(base_addr, 2, 1),
+          make_block_addr(base_addr, 1023, 1),
         ],
         &[
-          make_block_addr(virt_addr, 2, 2),
-          make_block_addr(virt_addr, 511, 2),
+          make_block_addr(base_addr, 2, 2),
+          make_block_addr(base_addr, 511, 2),
         ],
         &[
-          make_block_addr(virt_addr, 2, 3),
-          make_block_addr(virt_addr, 255, 3),
+          make_block_addr(base_addr, 2, 3),
+          make_block_addr(base_addr, 255, 3),
         ],
         &[
-          make_block_addr(virt_addr, 2, 4),
-          make_block_addr(virt_addr, 127, 4),
+          make_block_addr(base_addr, 2, 4),
+          make_block_addr(base_addr, 127, 4),
         ],
         &[
-          make_block_addr(virt_addr, 2, 5),
-          make_block_addr(virt_addr, 63, 5),
+          make_block_addr(base_addr, 2, 5),
+          make_block_addr(base_addr, 63, 5),
         ],
         &[
-          make_block_addr(virt_addr, 2, 6),
-          make_block_addr(virt_addr, 31, 6),
+          make_block_addr(base_addr, 2, 6),
+          make_block_addr(base_addr, 31, 6),
         ],
         &[
-          make_block_addr(virt_addr, 2, 7),
-          make_block_addr(virt_addr, 15, 7),
+          make_block_addr(base_addr, 2, 7),
+          make_block_addr(base_addr, 15, 7),
         ],
         &[
-          make_block_addr(virt_addr, 2, 8),
-          make_block_addr(virt_addr, 7, 8),
+          make_block_addr(base_addr, 2, 8),
+          make_block_addr(base_addr, 7, 8),
         ],
-        &[make_block_addr(virt_addr, 3, 9)],
+        &[make_block_addr(base_addr, 3, 9)],
         &[],
       ],
     },
@@ -338,8 +338,7 @@ fn test_available_regions(context: &mut test::TestContext) {
 ///
 /// * `context` - The test context.
 fn test_construction_errors(context: &mut test::TestContext) {
-  let (virt_addr, meta_addr) = get_addrs();
-  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let (base_addr, meta_addr) = get_addrs();
   let meta = meta_addr as *mut u8;
 
   let good_avail = memory::MemoryConfig::new_with_ranges(&[range::Range {
@@ -354,7 +353,7 @@ fn test_construction_errors(context: &mut test::TestContext) {
   check_not_none!(context, allocator);
 
   // Use a base address that aligns down to 0.
-  let allocator = PageAllocator::new(TEST_PAGE_SIZE - 1, TOTAL_MEM_SIZE, meta, &good_avail);
+  let allocator = PageAllocator::new(0, TOTAL_MEM_SIZE, meta, &good_avail);
   check_none!(context, allocator);
 
   // Use a memory size that aligns done to a size less than a page.
@@ -396,8 +395,7 @@ fn test_allocation(context: &mut test::TestContext) {
     let exp_count = 1 << level;
     let mask = (TEST_PAGE_SIZE << level) - 1;
     let (mut allocator, avail) = make_allocator(0);
-    let (virt_addr, _) = get_addrs();
-    let base_addr = virt_addr - arch::get_kernel_virtual_base();
+    let (base_addr, _) = get_addrs();
 
     allocator.init_metadata(&avail);
 
@@ -435,8 +433,7 @@ fn test_allocation(context: &mut test::TestContext) {
 /// beginning and verifies blocks coalesce as they are freed.
 fn test_free(context: &mut test::TestContext) {
   let (mut allocator, avail) = make_allocator(0);
-  let (virt_addr, _) = get_addrs();
-  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let (base_addr, _) = get_addrs();
 
   allocator.init_metadata(&avail);
 
@@ -561,10 +558,11 @@ fn make_expected_levels() -> [BlockLevel; EXPECTED_BLOCK_LEVELS] {
 }
 
 fn get_addrs() -> (usize, usize) {
-  let virt_addr = unsafe { TEST_MEM.mem.as_ptr() as usize };
-  let meta_addr = virt_addr + TEST_MEM_SIZE;
+  let virt_base = arch::get_kernel_virtual_base();
+  let phys_addr = unsafe { TEST_MEM.mem.as_ptr() as usize } - virt_base;
+  let meta_addr = phys_addr + TEST_MEM_SIZE;
 
-  (virt_addr, meta_addr)
+  (phys_addr, virt_base + meta_addr)
 }
 
 fn make_block_addr(base_addr: usize, block: usize, level: usize) -> usize {
@@ -574,8 +572,7 @@ fn make_block_addr(base_addr: usize, block: usize, level: usize) -> usize {
 
 fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::MemoryConfig) {
   let (levels, meta_size) = PageAllocator::make_levels(TOTAL_MEM_SIZE);
-  let (virt_addr, meta_addr) = get_addrs();
-  let base_addr = virt_addr - arch::get_kernel_virtual_base();
+  let (base_addr, meta_addr) = get_addrs();
 
   unsafe { TEST_MEM.mem.fill(0xcc) };
 
@@ -586,7 +583,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
 
   (
     PageAllocator {
-      base: virt_addr,
+      base: base_addr,
       size: TOTAL_MEM_SIZE,
       levels,
       flags: unsafe { slice::from_raw_parts_mut(meta_addr as *mut usize, meta_size >> WORD_SHIFT) },

@@ -1,8 +1,9 @@
 //! ARMv7a Memory Management
 
+use super::task;
 use crate::peripherals::memory;
 
-/// Initialize memory.
+/// Initialize kernel memory map.
 ///
 /// # Parameters
 ///
@@ -58,20 +59,23 @@ pub fn direct_map_memory(
   pages_end
 }
 
-/// Map a range of physical addresses to the kernel's virtual address space.
-/// This is a generalized version of `direct_map_memory` where `virt` != `base`.
-/// A physical address Ap maps the the virtual address
-/// Av = virtual base + (Ap - base + virt).
+/// Map a range of physical addresses to a task's virtual address space.
 ///
 /// # Parameters
 ///
-/// * `virtual_base` - The kernel segment base address.
-/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `virtual_base` - The task's virtual base address.
+/// * `pages_start` - The address of the task's Level 1 page table.
 /// * `pages_end` - The start of available memory for new pages.
 /// * `virt` - Base of the virtual address range.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
+///
+/// # Description
+///
+/// This is a generalized version of `direct_map_memory` where `virt` != `base`.
+/// A physical address Ap maps the the virtual address
+/// Av = virtual base + (Ap - base + virt).
 ///
 /// # Returns
 ///
@@ -86,4 +90,39 @@ pub fn map_memory(
   device: bool,
 ) -> usize {
   pages_end
+}
+
+/// Maps a page into the kernel's virtual address space.
+///
+/// # Parameters
+///
+/// * `task` - The kernel task receiving the mapping.
+/// * `virtual_base` - The kernel segment base address.
+/// * `page` - The physical address of the page to map.
+///
+/// # Description
+///
+/// TODO
+/// 
+/// # Returns
+///
+/// The virtual address of the mapped page.
+pub fn kernel_map_page_local(_: &mut task::Task, virtual_base: usize, page: usize) -> usize {
+  debug_assert!(false);
+  0
+}
+
+/// Unmaps a page from the kernel's virtual address space.
+///
+/// # Parameters
+///
+/// * `task` - The kernel task receiving the mapping.
+/// * `virtual_base` - The kernel segment base address.
+/// * `page` - The physical address of the page to map.
+///
+/// # Description
+///
+/// TODO
+pub fn kernel_unmap_page_local(_: &mut task::Task, virtual_base: usize, page: usize) {
+  debug_assert!(false);
 }

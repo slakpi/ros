@@ -43,8 +43,13 @@ impl BlockNode {
   ///
   /// # Parameters
   ///
-  /// * `next` - A node's next pointer.
-  /// * `prev` - A node's previous pointer.
+  /// * `next` - The physical address of the next node.
+  /// * `prev` - The physical address of the previous node.
+  ///
+  /// # Description
+  ///
+  ///   NOTE: The checksum is meant for simple error detection. It is not meant
+  ///         for error correction or security.
   ///
   /// # Returns
   ///
@@ -53,27 +58,8 @@ impl BlockNode {
     BlockNode {
       next,
       prev,
-      checksum: Self::calc_checksum(next, prev),
+      checksum: bits::xor_checksum(&[next, prev]),
     }
-  }
-
-  /// Calculate a checksum for the given next and previous pointers.
-  ///
-  /// # Parameters
-  ///
-  /// * `next` - A node's next pointer.
-  /// * `prev` - A node's previous pointer.
-  ///
-  /// # Description
-  ///
-  /// The checksum is meant for simple error detection. It is not meant for
-  /// error correction or security.
-  ///
-  /// # Returns
-  ///
-  /// A checksum.
-  fn calc_checksum(next: usize, prev: usize) -> usize {
-    bits::xor_checksum(&[next, prev])
   }
 }
 
@@ -143,12 +129,17 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `addr` - Pointer to the block.
+  /// * `addr` - Physical address of the block.
   ///
   /// # Description
   ///
   /// Verifies that the pointer is page-aligned and that the node's checksum is
   /// correct.
+  ///
+  ///   NOTE: `get_block_node` and `unget_block_node` are wrappers for
+  ///         `kernel_map_page_local` and `kernel_unmap_page_local`. Use of
+  ///         `get_block_node` and `unget_block_node` must adhere to the same
+  ///         semantics.
   ///
   /// # Returns
   ///
@@ -161,19 +152,24 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `addr` - Pointer to the block.
+  /// * `addr` - Physical address of the block.
   ///
   /// # Description
   ///
   /// Verifies that the pointer is page-aligned and that the node's checksum is
   /// correct.
   ///
+  ///   NOTE: `get_block_node_mut` and `unget_block_node` are wrappers for
+  ///         `kernel_map_page_local` and `kernel_unmap_page_local`. Use of
+  ///         `get_block_node` and `unget_block_node` must adhere to the same
+  ///         semantics.
+  ///
   /// # Returns
   ///
   /// A mutable node reference.
   fn get_block_node_mut(addr: usize) -> &'static mut BlockNode {
     let node = Self::get_block_node_unchecked_mut(addr);
-    let checksum = BlockNode::calc_checksum(node.next, node.prev);
+    let checksum = bits::xor_checksum(&[node.next, node.prev]);
     assert!(node.checksum == checksum);
 
     node
@@ -183,21 +179,42 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Parameters
   ///
-  /// * `addr` - Pointer to the block.
+  /// * `addr` - Physical address of the block.
   ///
   /// # Description
   ///
   /// Verifies that the pointer is page-aligned, but does not verify the check-
   /// sum. Used when the node is not expected to be initialized.
   ///
+  ///   NOTE: `get_block_node_unchecked_mut` and `unget_block_node` are wrappers
+  ///         for `kernel_map_page_local` and `kernel_unmap_page_local`. Use of
+  ///         `get_block_node` and `unget_block_node` must adhere to the same
+  ///         semantics.
+  ///
   /// # Returns
   ///
-  /// A mutable, uninitialized node reference.
+  /// A mutable node reference assumed to be uninitialized.
   fn get_block_node_unchecked_mut(addr: usize) -> &'static mut BlockNode {
     let page_size = arch::get_page_size();
     assert!(bits::align_down(addr, page_size) == addr);
 
-    unsafe { &mut *(addr as *mut BlockNode) }
+    let page = super::kernel_map_page_local(addr);
+    unsafe { &mut *(page as *mut BlockNode) }
+  }
+
+  /// Release a block node.
+  ///
+  /// # Parameters
+  ///
+  /// * `block` - The block node to release.
+  ///
+  /// # Description
+  ///
+  ///   NOTE: `unget_block_node` is a wrapper `kernel_unmap_page_local`. Use of
+  ///         `unget_block_node` must adhere to the same semantics.
+  fn unget_block_node(block: *const BlockNode) {
+    let addr = block as usize;
+    super::kernel_unmap_page_local(addr);
   }
 
   /// Construct a new page allocator for a given contiguous memory area.
@@ -206,8 +223,8 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// * `base` - Base physical address of the memory area served.
   /// * `size` - Size of the memory area.
-  /// * `mem` - Pointer to a memory block available for metadata.
-  /// * `avail` - Available physical regions with the memory area.
+  /// * `mem` - Virtual address of a memory block available for metadata.
+  /// * `avail` - Available physical address regions with the memory area.
   ///
   /// # Description
   ///
@@ -219,42 +236,47 @@ impl<'memory> PageAllocator<'memory> {
   /// allocator's metadata is within the memory area, it too should be excluded
   /// from the available regions.
   ///
-  /// If the base memory address is not page-aligned, it will be aligned down.
-  /// If the size is not page-aligned, it too will be aligned down.
+  /// Assumes that the region `[base, base + size)` is the maximum available
+  /// range. If `base` is not page-aligned, it will be aligned up and the size
+  /// reduced accordingly. If `size` is not an integer multipe of the page size,
+  /// it will be reduced to an integer multiple.
   ///
   /// # Returns
   ///
   /// A new allocator, or None if:
   ///
   /// * `base` is 0 after alignment.
+  /// * `base` is not a valid physical address.
   /// * `size` is less than the page size after alignment.
   /// * `base + size` would overflow a pointer after alignment.
   /// * `mem` is null.
   /// * `avail` is empty.
   pub fn new(base: usize, size: usize, mem: *mut u8, avail: &memory::MemoryConfig) -> Option<Self> {
     let page_size = arch::get_page_size();
-    let virtual_base = arch::get_kernel_virtual_base();
+    let max_physical = arch::get_max_physical_address();
 
-    // Align the base and size down.
-    let base = bits::align_down(base, page_size);
-    let size = bits::align_down(size, page_size);
+    // Sanity check the inputs so that we can calculate an initial end address.
+    if base > max_physical {
+      return None;
+    }
+
+    if max_physical - base < (size - 1) {
+      return None;
+    }
+
+    let end = base + size - 1;
+
+    // Now update the base address for page-alignment.
+    let base = bits::align_up(base, page_size);
 
     if base == 0 {
       return None;
     }
 
+    // Now update the new size for page-alignment.
+    let size = bits::align_down(end - base + 1, page_size);
+
     if size < page_size {
-      return None;
-    }
-
-    // Ensure the base address is physical.
-    if base & virtual_base != 0 {
-      return None;
-    }
-
-    // Ensure that the size is not going to overflow a pointer. Note that we're
-    // use the virtual base address rather than usize::MAX.
-    if virtual_base - base < size {
       return None;
     }
 
@@ -269,7 +291,7 @@ impl<'memory> PageAllocator<'memory> {
     let (levels, alloc_size) = Self::make_levels(size);
 
     let mut allocator = PageAllocator {
-      base: virtual_base + base,
+      base,
       size,
       levels,
       flags: unsafe { slice::from_raw_parts_mut(mem as *mut usize, alloc_size >> WORD_SHIFT) },
@@ -309,10 +331,9 @@ impl<'memory> PageAllocator<'memory> {
         continue;
       }
 
-      let virtual_base = arch::get_kernel_virtual_base();
       let block = self.split_free_block(level, min_level);
       let pages = 1 << min_level;
-      return Some((block - virtual_base, pages));
+      return Some((block, pages));
     }
 
     // No blocks available.
@@ -343,26 +364,25 @@ impl<'memory> PageAllocator<'memory> {
     assert!(base & (pages - 1) == 0);
 
     let page_shift = arch::get_page_shift();
-    let virtual_base = arch::get_kernel_virtual_base();
-    let mut base_addr = base + virtual_base;
+    let mut base = base;
 
     for level in min_level..BLOCK_LEVELS {
-      let (index, bit_idx) = self.get_flag_index_and_bit(base_addr, level);
+      let (index, bit_idx) = self.get_flag_index_and_bit(base, level);
 
       // The allocator does not protect against double-free, so the assumption
       // here is that the buddy block is in use if the bit is zero and we cannot
       // coalesce the two.
       if self.flags[index] & (1 << bit_idx) == 0 {
-        self.add_to_list(level, base_addr);
+        self.add_to_list(level, base);
         break;
       }
 
       // If the bit is not zero, get the buddy block address using XOR. Remove
       // the buddy from the list at this level, then update the base address to
       // the minimum of the two.
-      let buddy_addr = base_addr ^ ((1 << level) << page_shift);
+      let buddy_addr = base ^ ((1 << level) << page_shift);
       self.remove_from_list(level, buddy_addr);
-      base_addr = cmp::min(base_addr, buddy_addr);
+      base = cmp::min(base, buddy_addr);
     }
   }
 
@@ -374,18 +394,20 @@ impl<'memory> PageAllocator<'memory> {
   fn init_metadata(&mut self, avail: &memory::MemoryConfig) {
     let page_shift = arch::get_page_shift();
     let page_size = arch::get_page_size();
-    let virtual_base = arch::get_kernel_virtual_base();
+    let max_physical = arch::get_max_physical_address();
 
     self.flags.fill(0);
 
     for range in avail.get_ranges() {
-      // If the range has an invalid base, skip it.
-      if range.base & virtual_base != 0 {
+      if range.base > max_physical {
         continue;
       }
 
-      // If the range has an invalid size, skip it.
-      if virtual_base - range.base < range.size {
+      if range.size < page_size {
+        continue;
+      }
+
+      if max_physical - range.base < (range.size - 1) {
         continue;
       }
 
@@ -393,11 +415,11 @@ impl<'memory> PageAllocator<'memory> {
       // checks in Self::new() that adding the memory area size to the memory
       // area base is safe. Now check if the range is fully enclosed within the
       // memory area. If not, skip it.
-      let end = range.base + range.size;
+      let end = range.base + (range.size - 1);
       let mut addr = range.base;
       let mut remaining = range.size;
 
-      if (addr + virtual_base) < self.base || (end + virtual_base) > (self.base + self.size) {
+      if (addr < self.base) || (end > self.base + (self.size - 1)) {
         continue;
       }
 
@@ -430,7 +452,7 @@ impl<'memory> PageAllocator<'memory> {
         let size = blocks << page_shift;
 
         // Add the block to the level's available list.
-        self.add_to_list(level, addr + virtual_base);
+        self.add_to_list(level, addr);
 
         addr += size;
         remaining -= size;
@@ -438,11 +460,11 @@ impl<'memory> PageAllocator<'memory> {
     }
   }
 
-  /// Get the flag index and bit for a given virtual address at a given level.
+  /// Get the flag index and bit for a given physical address at a given level.
   ///
   /// # Parameters
   ///
-  /// * `block_addr` - The virtual block address.
+  /// * `block_addr` - The physical block address.
   /// * `level` - The block level.
   ///
   /// # Description
@@ -461,7 +483,7 @@ impl<'memory> PageAllocator<'memory> {
     let block_pair = block_num >> 1;
     let index = self.levels[level].offset + (block_pair >> INDEX_SHIFT);
     let bit = block_pair & WORD_MASK;
-    
+
     (index, bit)
   }
 
@@ -547,7 +569,12 @@ impl<'memory> PageAllocator<'memory> {
       *block = BlockNode::new(head_addr, head.prev);
       *head = BlockNode::new(head.next, block_addr);
       *prev = BlockNode::new(block_addr, prev.prev);
+
+      Self::unget_block_node(prev);
+      Self::unget_block_node(head);
     }
+
+    Self::unget_block_node(block);
 
     self.flags[index] ^= 1 << bit_idx;
   }
@@ -593,13 +620,20 @@ impl<'memory> PageAllocator<'memory> {
       if head.next == head_addr {
         self.levels[level].head = 0;
       }
+
+      Self::unget_block_node(head);
     } else {
       let prev = Self::get_block_node_mut(block.prev);
       let next = Self::get_block_node_mut(block.next);
 
       *prev = BlockNode::new(prev.prev, block.next);
       *next = BlockNode::new(block.prev, next.next);
+
+      Self::unget_block_node(next);
+      Self::unget_block_node(prev);
     }
+
+    Self::unget_block_node(block);
 
     self.flags[index] ^= 1 << bit_idx;
   }
