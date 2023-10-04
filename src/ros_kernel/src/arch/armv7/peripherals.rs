@@ -18,7 +18,7 @@ use crate::peripherals::soc;
 /// kernel's address space to the physical address. Peripheral devices will use
 /// virtual addresses to reference hardware.
 ///
-///     TODO: I have no idea how 0x7e000000 will be mapped into the kernel's
+///     TODO: I have no idea how 0x7e00_0000 will be mapped into the kernel's
 ///           virtual address space. ¯\_(ツ)_/¯
 ///
 /// # Returns

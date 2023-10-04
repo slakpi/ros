@@ -19,9 +19,9 @@ use crate::peripherals::soc;
 /// kernel's address space to the physical address. Peripheral devices will use
 /// virtual addresses to reference hardware.
 ///
-/// For example, the BCM2710 uses 0x7e000000 as the base address for
+/// For example, the BCM2710 uses 0x7e00_0000 as the base address for
 /// peripherals. The Raspberry Pi 3 maps this address to the ARM CPU address
-/// 0x3f000000. The page tables will map 0xffff_8000_7e00_0000 => 0x3f000000.
+/// 0x3f00_0000. The page tables will map 0xffff_8000_7e00_0000 => 0x3f00_0000.
 ///
 /// # Returns
 ///

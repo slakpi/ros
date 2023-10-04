@@ -58,8 +58,8 @@
 
 /*----------------------------------------------------------------------------*/
 /// Move the exception vector table. ARMv7a does not use a register to store the
-/// exception addresses, so it must be moved manually to 0x00000000 or
-/// 0xffff0000.
+/// exception addresses, so it must be moved manually to 0x0000_0000 or
+/// 0xffff_0000.
 ///
 /// # Parameters
 ///

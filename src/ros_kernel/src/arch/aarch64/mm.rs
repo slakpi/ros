@@ -102,7 +102,7 @@ pub fn init(
 ///     |                 |
 ///     +-----------------+ 0xffff_0000_0000_0000
 ///     | / / / / / / / / |
-///     | / / / / / / / / | 16,776,704 TiB of unused address space
+///     |  / / / / / / /  | 16,776,704 TiB of unused address space
 ///     | / / / / / / / / |
 ///     +-----------------+ 0x0000_ffff_ffff_ffff
 ///     |                 |

@@ -4,7 +4,7 @@
 #include "mmu.h"
 
 // SCTLR flags. See B4.1.130. Enable the MMU, expect exception vectors at the
-// low address (0x00000000), and enable the Access Flag.
+// low address (0x0000_0000), and enable the Access Flag.
 #define SCTLR_MMU_ENABLE 1
 #define SCTLR_V          (0 << 13)
 #define SCTLR_AFE        (1 << 29)

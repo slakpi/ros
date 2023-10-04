@@ -100,7 +100,7 @@ pub fn init(config: usize) {
   //
   //   TODO: Remove this once the Mini UART is able to configure itself using
   //         the DTB.
-  base::set_peripheral_base_addr(config.virtual_base + 0x7e000000);
+  base::set_peripheral_base_addr(config.virtual_base + 0x7e00_0000);
   mini_uart::init();
 
   debug_print!("=== ROS (AArch64) ===\n");

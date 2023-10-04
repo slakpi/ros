@@ -18,9 +18,9 @@ pub const CHECKSUM_SEED: usize = 0x09a52af1c62bd04b;
 /// The number of bits set to 1 in the number.
 pub const fn ones(n: usize) -> usize {
   let mut n = n;
-  n -= (n >> 1) & 0x5555555555555555;
-  n = ((n >> 2) & 0x3333333333333333) + (n & 0x3333333333333333);
-  n = ((n >> 4) + n) & 0x0f0f0f0f0f0f0f0f;
+  n -= (n >> 1) & 0x5555_5555_5555_5555;
+  n = ((n >> 2) & 0x3333_3333_3333_3333) + (n & 0x3333_3333_3333_3333);
+  n = ((n >> 4) + n) & 0x0f0f_0f0f_0f0f_0f0f;
   n += n >> 8;
   n += n >> 16;
   n += n >> 32;
@@ -92,11 +92,11 @@ pub const fn ceil_log2(n: usize) -> usize {
 /// The odd bits moved to the lower 32-bits.
 pub const fn compact_odd_bits(n: usize) -> usize {
   let mut n = n;
-  n = ((n & 0x4444444444444444) >> 1) | (n & 0x1111111111111111);
-  n = ((n & 0x3030303030303030) >> 2) | (n & 0x0303030303030303);
-  n = ((n & 0x0f000f000f000f00) >> 4) | (n & 0x000f000f000f000f);
-  n = ((n & 0x00ff000000ff0000) >> 8) | (n & 0x000000ff000000ff);
-  n = ((n & 0x0000ffff00000000) >> 16) | (n & 0x000000000000ffff);
+  n = ((n & 0x4444_4444_4444_4444) >> 1) | (n & 0x1111_1111_1111_1111);
+  n = ((n & 0x3030_3030_3030_3030) >> 2) | (n & 0x0303_0303_0303_0303);
+  n = ((n & 0x0f00_0f00_0f00_0f00) >> 4) | (n & 0x000f_000f_000f_000f);
+  n = ((n & 0x00ff_0000_00ff_0000) >> 8) | (n & 0x0000_00ff_0000_00ff);
+  n = ((n & 0x0000_ffff_0000_0000) >> 16) | (n & 0x0000_0000_0000_ffff);
   n
 }
 

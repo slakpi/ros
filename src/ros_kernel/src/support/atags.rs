@@ -3,15 +3,15 @@
 /// @details http://www.simtec.co.uk/products/SWLINUX/files/booting_article.html#appendix_tag_reference
 
 const ATAG_NONE: u32 = 0;
-const ATAG_CORE: u32 = 0x54410001;
-const ATAG_MEM: u32 = 0x54410002;
-const _ATAG_VIDEOTEXT: u32 = 0x54410003;
-const _ATAG_RAMDISK: u32 = 0x54410004;
-const _ATAG_INITRD2: u32 = 0x54410005;
-const _ATAG_SERIAL: u32 = 0x54410006;
-const _ATAG_REVISION: u32 = 0x54410007;
-const _ATAG_VIDEOLFB: u32 = 0x54410008;
-const _ATAG_CMDLINE: u32 = 0x54410009;
+const ATAG_CORE: u32 = 0x5441_0001;
+const ATAG_MEM: u32 = 0x5441_0002;
+const _ATAG_VIDEOTEXT: u32 = 0x5441_0003;
+const _ATAG_RAMDISK: u32 = 0x5441_0004;
+const _ATAG_INITRD2: u32 = 0x5441_0005;
+const _ATAG_SERIAL: u32 = 0x5441_0006;
+const _ATAG_REVISION: u32 = 0x5441_0007;
+const _ATAG_VIDEOLFB: u32 = 0x5441_0008;
+const _ATAG_CMDLINE: u32 = 0x5441_0009;
 
 pub enum AtagError {
   InvalidAtagList,
