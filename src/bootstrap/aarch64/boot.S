@@ -104,7 +104,7 @@ _el1_entry:
 
   mov     x1, x0            // dtb_quick_check return value to x1
   mov     x0, x19           // blob address to x0
-  bl      create_kernel_pages
+  bl      mmu_create_kernel_pages
 
 // Save off physical addresses needed for the kernel configuration struct.
   adrp    x21, __kernel_start

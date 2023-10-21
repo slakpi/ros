@@ -4,6 +4,10 @@ include(raspberrypi)
 # Validate the target platform.
 #-------------------------------------------------------------------------------
 function(validate_platform)
+  if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "(aarch64|armv7)")
+    message(FATAL_ERROR "Invalid target platform.")
+  endif()
+
   if(DEFINED RPI_VERSION)
     validate_rpi_version()
   endif()
@@ -139,5 +143,16 @@ function(get_kernel_virtual_base_address addr)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
     # The canonical 3:1 split kernel segment is the top 1 GiB.
     set(${addr} 0xc0000000 PARENT_SCOPE)
+  endif()
+endfunction()
+
+#-------------------------------------------------------------------------------
+# Get the kernel stack page count. Defaults to 256 pages.
+#-------------------------------------------------------------------------------
+function(get_kernel_stack_pages pages)
+  if (DEFINED KERNEL_STACK_PAGES)
+    set(${pages} ${KERNEL_STACK_PAGES} PARENT_SCOPE)
+  else()
+    set(${pages} 256 PARENT_SCOPE)
   endif()
 endfunction()

@@ -55,11 +55,11 @@ SECTIONS
   
   __bss_size = __bss_end - __bss_start;
 
-  // Reserve 1 MiB for the kernel stack. Note the reversal of start and end.
+  // Reserve space for the kernel stack. Note the reversal of start and end.
   .data.stack :
   {
     __kernel_stack_end = .;
-    . += (256 * __page_size);
+    . += (KERNEL_STACK_PAGES * __page_size);
     __kernel_stack_start = .;
   }
 

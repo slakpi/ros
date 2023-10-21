@@ -3,10 +3,15 @@
 #if !defined MMU_H
 #define MMU_H
 
-// TTBCR value. See B4.1.153. A value of 2 disables extended addresses, enables
-// TTBR1 translation, and enables TTBR0 translation. If the top 2 bits of the
-// virtual address are 0, TTBR0 is used. Otherwise, TTBR1 is used.
-#define TTBCR_VALUE 0x2
+// TTBCR value. See B4.1.153 and B3.6.4. The EAE bit enables the long descriptor
+// extension. A value of 2 for TTBCR.T1SZ sets up the MMU to use TTBR1 when the
+// top two bits of a virtual address are BOTH 1. TTBR0 is used otherwise. A
+// value of 0 for TTBCR.A1 tells the MMU that TTBR0 defines address space IDs.
+#define TTBCR_EAE   (0b1 << 31)
+#define TTBCR_A1    (0x0 << 22)
+#define TTBCR_T1SZ  (0b10 << 16)
+#define TTBCR_T0SZ  (0x0 << 0)
+#define TTBCR_VALUE (TTBCR_EAE | TTBCR_A1 | TTBCR_T1SZ | TTBCR_T0SZ)
 
 // Page descriptor flags. See B3.5.1. The Access Flag Enable bit should be set
 // to 1 in SCTLR to use the 2-bit access control model where AP[2] (bit 15)

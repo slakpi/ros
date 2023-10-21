@@ -38,8 +38,8 @@
 ///
 /// Maps the kernel and, as necessary, the DTB into 2 MiB sections. The kernel
 /// will re-map the pages after determining the memory layout.
-.global create_kernel_pages
-create_kernel_pages:
+.global mmu_create_kernel_pages
+mmu_create_kernel_pages:
   fn_entry
   stp     x19, x20, [sp, #-16]!
   stp     x21, x22, [sp, #-16]!
@@ -80,8 +80,9 @@ create_kernel_pages:
   mov     x23, x0
 
 // Map the kernel area as RW normal memory.
-// TODO: The code should probably be separate from the stack and page tables to
-//       prevent the code from being re-written.
+//
+//   TODO: The code should probably be separate from the stack and page tables
+//         to prevent the code from being re-written.
   mov     x0, x22
   mov     x1, #0
   ldr     x2, =__virtual_start

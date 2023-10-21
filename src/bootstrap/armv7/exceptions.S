@@ -64,8 +64,8 @@
 /// # Parameters
 ///
 /// * r0 - The new table address.
-.global move_exception_vectors
-move_exception_vectors:
+.global exp_move_exception_vectors
+exp_move_exception_vectors:
   // no fn_entry required
   push    {r4, r5, r6, r7, r8, r9}
 

@@ -5,14 +5,19 @@
 
 // SCTLR flags. See B4.1.130. Enable the MMU, expect exception vectors at the
 // low address (0x0000_0000), and enable the Access Flag.
+//
+//   TODO: Low vectors are deprecated behavior. Eventually SCTLR_V should be
+//         changed to expect the vectors at the high address, 0xffff_0000, and
+//         the physical vectors address should be mapped to the high address by
+//         the MMU.
 #define SCTLR_MMU_ENABLE 1
-#define SCTLR_V          (0 << 13)
-#define SCTLR_AFE        (1 << 29)
+#define SCTLR_V          (0b0 << 13)
+#define SCTLR_AFE        (0b1 << 29)
 #define SCTLR_FLAGS      (SCTLR_MMU_ENABLE | SCTLR_AFE | SCTLR_V)
 
 // DACR setup. See B4.1.43. Only using domain 0 in client mode (access
 // permissions are checked).
-#define DACR_VALUE 0x1
+#define DACR_VALUE 0b1
 
 // The linker script forces this section to reside at the kernel base address.
 .section ".text.boot"
@@ -57,6 +62,12 @@ _start:
   ldr     r2, =__bss_size
   bl      memset
 
+// Check for required CPU extensions. Halt the CPU if any of the required
+// extensions are not present.
+  bl      ext_has_long_descriptors
+  cmp     r0, #0
+  bne     start_cpu_halt
+
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
 // is a DTB, the DTB will be mapped into the bootstrap kernel pages.
   mov     r0, r6
@@ -64,7 +75,7 @@ _start:
 
   mov     r1, r0
   mov     r0, r6
-  bl      create_kernel_pages
+  bl      mmu_create_kernel_pages
 
 // Save off physical addresses needed for the kernel configuration struct.
   adr     r3, kernel_start_rel

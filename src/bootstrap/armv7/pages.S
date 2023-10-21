@@ -1,21 +1,24 @@
 //! ARMv7a Page Table Bootstrap
+//!
+//!   NOTE: Assumes that the kernel is running on a CPU that supports Large
+//!         Physical Address Extensions and long page table descriptors.
 
 #include "abi.h"
 #include "mmu.h"
 
-/// 1 MiB section virtual address layout:
+/// 2 MiB section virtual address layout with long page table descriptors:
 ///
-///   +----------------+--------------------+
-///   |       L1       |       Offset       |
-///   +----------------+--------------------+
-///   31              20                    0
+///   +----+----------+---------------------+
+///   | L1 |    L2    |       Offset        |
+///   +----+----------+---------------------+
+///   31  30         21                     0
 ///
-/// 4 KiB page virtual address layout:
+/// 4 KiB page virtual address layout with long page table descriptors:
 ///
-///   +----------------+--------+-----------+
-///   |       L1       |   L2   |  Offset   |
-///   +----------------+--------+-----------+
-///   31              20       12           0
+///   +----+----------+----------+----------+
+///   | L1 |    L2    |    L3    |  Offset  |
+///   +----+----------+----------+----------+
+///   31  30         21         12          0
 #define PAGE_SHIFT         12
 #define L1_TABLE_SHIFT     12
 #define L2_TABLE_SHIFT     8
@@ -40,8 +43,8 @@
 ///
 /// Maps the kernel and, as necessary, the DTB into 1 MiB sections. The kernel
 /// will re-map the pages after determining the memory layout.
-.global create_kernel_pages
-create_kernel_pages:
+.global mmu_create_kernel_pages
+mmu_create_kernel_pages:
   fn_entry
   push    {r4, r5, r6, r7}
 
@@ -75,8 +78,9 @@ create_kernel_pages:
   bl      memset
 
 // Map the kernel area as RW normal memory.
-// TODO: The code should probably be separate from the stack and page tables to
-//       prevent the code from being re-written.
+//
+//   TODO: The code should probably be separate from the stack and page tables
+//         to prevent the code from being re-written.
   adr     r0, kernel_pages_start_rel
   ldr     r1, kernel_pages_start_rel
   add     r0, r0, r1

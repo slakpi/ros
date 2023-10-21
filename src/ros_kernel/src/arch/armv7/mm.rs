@@ -1,16 +1,21 @@
 //! ARMv7a Memory Management
+//!
+//!   NOTE: Assumes that the kernel is running on a CPU that supports Large
+//!         Physical Address Extensions and long page table descriptors.
 
 use super::task;
 use core::ptr;
 
-const LEVEL_1_TABLE_SIZE: usize = 16384;
-const LEVEL_2_TABLE_SIZE: usize = 1024;
+const TABLE_SIZE: usize = 4096;
 const PAGE_SHIFT: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 const PAGE_MASK: usize = PAGE_SIZE - 1;
-const SECTION_SHIFT: usize = 20;
+const SECTION_SHIFT: usize = 21;
 const SECTION_SIZE: usize = 1 << SECTION_SHIFT;
 const SECTION_MASK: usize = SECTION_SIZE - 1;
+const BLOCK_SHIFT: usize = 30;
+const BLOCK_SIZE: usize = 1 << BLOCK_SHIFT;
+
 const TABLE_ADDR_MASK: usize = 0xffff_fc00;
 const TYPE_MASK: usize = 0x3;
 const MM_PAGE_TABLE_FLAG: usize = 0x1 << 0;
@@ -24,6 +29,14 @@ const HIGH_MEMORY: usize = 0x3800_0000;
 enum TableLevel {
   Level1,
   Level2,
+  Level3,
+}
+
+/// Page table structure for 4 KiB pages. The Level 1 table only has four real
+/// entries, but occupies an entire page for alignment.
+#[repr(C)]
+struct PageTable {
+  entries: [usize; 512],
 }
 
 /// Direct map a memory range into the kernel's virtual address space.
@@ -160,8 +173,9 @@ pub fn kernel_unmap_page_local(_: &mut task::Task) {
 /// The size covered by a single entry in bytes.
 fn get_table_entry_size(table_level: TableLevel) -> usize {
   match table_level {
-    TableLevel::Level1 => SECTION_SIZE,
-    TableLevel::Level2 => PAGE_SIZE,
+    TableLevel::Level1 => BLOCK_SIZE,
+    TableLevel::Level2 => SECTION_SIZE,
+    TableLevel::Level3 => PAGE_SIZE,
   }
 }
 
@@ -225,7 +239,7 @@ fn alloc_table_and_fill(
       ptr::write_bytes(next_addr as *mut u8, 0, LEVEL_2_TABLE_SIZE);
     }
 
-    desc = make_pointer_entry(next_addr);
+    // desc = make_pointer_entry(next_addr);
   }
 
   (
@@ -266,16 +280,28 @@ fn alloc_table_and_fill(
 /// the kernel does not need to be mapped into the translation tables for every
 /// process. The most-significant bit selects the register used for translation.
 ///
-/// ARMv7a provides two levels of address space translation.
+/// The "classic" ARM MMU supports two levels of address translation using
+/// 32-bit page table descriptors.
 ///
 ///     Level 1       ->  Level 2       
 ///     4096 Entries      256 Entries
 ///     Covers 4 GiB      Covers 1 MiB
 ///
-/// ARMv7a allows using Level 1 entries to map 1 MiB sections with no Level 2
-/// translation.
+/// With short page table descriptors, if the address space is split between
+/// user space and kernel space, the user address space cannot be larger than
+/// 2 GiB (even 2:2 split).
 ///
-/// Each Level 2 table is 1 KiB in size and must be aligned to 1 KiB.
+/// When an ARMv7a CPU implements the Large Physical Address Extensions, it
+/// supports the long page table descriptor format. Instead of the "classic"
+/// two-level translation tables, the MMU supports three levels of address
+/// translation using 64-bit page table descriptors.
+///
+///     Level 1       ->  Level 2       -> Level 3
+///     4 Entries         512 Entries      512 Entries
+///     Covers 4 GiB      Covers 1 GiB     Covers 2 MiB
+///
+/// Additionally, LPAE allows configuring the MMU to increase the size of the
+/// user address space making a 3:1 split possible.
 ///
 /// # Returns
 ///
