@@ -7,11 +7,6 @@ extern "C" {
 }
 
 /// ARMv7a exception vector initialization.
-///
-/// # Description
-///
-/// Expects the exception vector table to be located at 0x0000_0000 which is
-/// mapped to the kernel's virtual base address.
 pub fn init() {
   unsafe { move_exception_vectors(super::get_kernel_virtual_base()) };
 }

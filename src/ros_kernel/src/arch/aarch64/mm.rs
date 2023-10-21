@@ -1,8 +1,7 @@
 //! AArch64 Memory Management
 
 use super::task;
-use crate::peripherals::memory;
-use core::cmp;
+use core::{cmp, ptr};
 
 const TABLE_SIZE: usize = 4096;
 const PAGE_SHIFT: usize = 12;
@@ -16,6 +15,7 @@ const LEVEL_2_SHIFT: usize = PAGE_SHIFT + (2 * INDEX_SHIFT);
 const LEVEL_3_SHIFT: usize = PAGE_SHIFT + INDEX_SHIFT;
 const LEVEL_4_SHIFT: usize = PAGE_SHIFT;
 const ADDR_MASK: usize = ((1 << 48) - 1) & !PAGE_MASK;
+const TYPE_MASK: usize = 0x3;
 const MM_PAGE_TABLE_FLAG: usize = 0x3 << 0;
 const MM_BLOCK_FLAG: usize = 0x1 << 0;
 const MM_NORMAL_FLAG: usize = 0x1 << 2;
@@ -38,101 +38,16 @@ struct PageTable {
   entries: [usize; 512],
 }
 
-/// Initialize kernel memory map.
-///
-/// # Parameters
-///
-/// * `virtual_base` - The kernel segment base address.
-/// * `pages_start` - The address of the kernel's Level 1 page table.
-/// * `pages_end` - The start of available memory for new pages.
-/// * `mem_layout` - The physical memory layout.
-///
-/// # Description
-///
-/// Directly maps physical memory ranges into the kernel's virtual address
-/// space.
-///
-/// # Returns
-///
-/// The new end of the page table area.
-pub fn init(
-  virtual_base: usize,
-  pages_start: usize,
-  pages_end: usize,
-  mem_layout: &memory::MemoryConfig,
-) -> usize {
-  let mut pages_end = pages_end;
-
-  for range in mem_layout.get_ranges() {
-    pages_end = direct_map_memory(
-      virtual_base,
-      pages_start,
-      pages_end,
-      range.base,
-      range.size,
-      false,
-    );
-  }
-
-  pages_end
-}
-
 /// Direct map a memory range into the kernel's virtual address space.
 ///
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
-/// * `pages_end` - The start of available memory for new pages.
+/// * `pages_end` - The start of available memory for new page tables.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
-///
-/// # Details
-///
-///     TODO: For now, memory management will just assume 4 KiB pages. The
-///           bootstrap code will have already configured TCR_EL1 with 4 KiB
-///           granules.
-///
-/// The canonical 64-bit virtual address space layout for a process looks like:
-///
-///     +-----------------+ 0xffff_ffff_ffff_ffff
-///     |                 |
-///     | Kernel Segment  | 256 TiB
-///     |                 |
-///     +-----------------+ 0xffff_0000_0000_0000
-///     | / / / / / / / / |
-///     |  / / / / / / /  | 16,776,704 TiB of unused address space
-///     | / / / / / / / / |
-///     +-----------------+ 0x0000_ffff_ffff_ffff
-///     |                 |
-///     | User Segment    | 256 TiB
-///     |                 |
-///     +-----------------+ 0x0000_0000_0000_0000
-///
-/// AArch64 provides two independent registers for address translation so that
-/// the kernel does not need to be mapped into the translation tables for every
-/// process. The most-significant bit selects the register used for translation.
-///
-/// AArch64 provides four levels of address space translation. With 4 KiB pages,
-/// the page tables can address 256 TiB of memory:
-///
-///     Level 1   ->    Level 2   ->    Level 3   ->    Level 4
-///     Covers          Covers          Covers          Covers
-///     256 TiB         512 GiB         1 GiB           2 MiB
-///
-/// Each page table itself is 4 KiB (512 entries, each 64-bits).
-///
-/// AArch64 allows skipping lower levels of translation. Each Level 2 entry can
-/// point to a Level 3 table OR a 1 GiB block of memory. Each Level 3 entry can
-/// point to a Level 4 table OR a 2 MiB block of memory.
-///
-/// Currently, a single kernel is not expected to deal with anywhere near 256
-/// TiB of physical memory, so it is feasible to directly map the entire
-/// physical address space into the kernel segment. A physical address Ap maps
-/// to the virtual address Av = virtual base + Ap.
-///
-/// This mapping is separate from allocating pages to the kernel.
 ///
 /// # Returns
 ///
@@ -172,8 +87,6 @@ pub fn direct_map_memory(
 /// # Description
 ///
 /// This is a generalized version of `direct_map_memory` where `virt` != `base`.
-/// A physical address Ap maps the the virtual address
-/// Av = virtual base + (Ap - base + virt).
 ///
 /// # Returns
 ///
@@ -209,10 +122,8 @@ pub fn map_memory(
 ///
 /// # Description
 ///
-/// The kernel's page table is not modified by this function. All physical
-/// memory is mapped in to the kernel's address space, so this function only
-/// needs to return the virtual address of the page.
-/// 
+/// The kernel's page table is not modified by this function.
+///
 /// # Returns
 ///
 /// The virtual address of the mapped page.
@@ -225,15 +136,11 @@ pub fn kernel_map_page_local(_: &mut task::Task, virtual_base: usize, page: usiz
 /// # Parameters
 ///
 /// * `task` - The kernel task receiving the mapping.
-/// * `virtual_base` - The kernel segment base address.
-/// * `page` - The physical address of the page to map.
 ///
 /// # Description
 ///
-/// The kernel's page table is not modified by this function. All physical
-/// memory is mapped in to the kernel's address space, so this function does not
-/// need to do anything.
-pub fn kernel_unmap_page_local(_: &mut task::Task, virtual_base: usize, page: usize) {}
+/// The kernel's page table is not modified by this function.
+pub fn kernel_unmap_page_local(_: &mut task::Task) {}
 
 /// Given a table level, return the next table level down in the translation
 /// hierarchy.
@@ -299,19 +206,6 @@ fn get_descriptor_index(virt_addr: usize, table_level: TableLevel) -> usize {
     TableLevel::Level3 => (virt_addr >> LEVEL_3_SHIFT) & INDEX_MASK,
     TableLevel::Level4 => (virt_addr >> LEVEL_4_SHIFT) & INDEX_MASK,
   }
-}
-
-/// Check if a descriptor is valid. Bit 0 is the validity marker.
-///
-/// # Parameters
-///
-/// * `desc` - The descriptor.
-///
-/// # Returns
-///
-/// True if the descriptor is valid, false otherwise.
-fn is_descriptor_valid(desc: usize) -> bool {
-  (desc & 0x1) != 0
 }
 
 /// Get the physical address for either the next table or memory block from a
@@ -395,9 +289,18 @@ fn alloc_table_and_fill(
   let mut desc = desc;
   let mut pages_end = pages_end;
 
-  if !is_descriptor_valid(desc) {
+  // TODO: It is probably fine to overwrite a section descriptor. If the memory
+  //       configuration is overwriting itself, then we probably have something
+  //       wrong and a memory trap is the right outcome.
+  if desc & TYPE_MASK != MM_PAGE_TABLE_FLAG {
     next_addr = pages_end;
     pages_end += TABLE_SIZE;
+
+    // Zero out the table. Any entry in the table with 0 in bit 0 is invalid.
+    unsafe {
+      ptr::write_bytes(next_addr as *mut u8, 0, TABLE_SIZE);
+    }
+
     desc = make_pointer_entry(next_addr);
   }
 
@@ -484,6 +387,27 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 ///
 /// # Details
 ///
+///     TODO: For now, memory management will just assume 4 KiB pages. The
+///           bootstrap code will have already configured the MMU and provided
+///           the page size in the kernel configuration struct.
+///
+/// AArch64 provides two independent registers for address translation so that
+/// the kernel does not need to be mapped into the translation tables for every
+/// process. The most-significant bit selects the register used for translation.
+///
+/// AArch64 provides four levels of address space translation. With 4 KiB pages,
+/// the page tables can address 256 TiB of memory:
+///
+///     Level 1   ->    Level 2   ->    Level 3   ->    Level 4
+///     Covers          Covers          Covers          Covers
+///     256 TiB         512 GiB         1 GiB           2 MiB
+///
+/// Each page table itself is 4 KiB (512 entries, each 64-bits).
+///
+/// AArch64 allows skipping lower levels of translation. Each Level 2 entry can
+/// point to a Level 3 table OR a 1 GiB block of memory. Each Level 3 entry can
+/// point to a Level 4 table OR a 2 MiB block of memory.
+///
 /// The following cases need to be considered:
 ///
 /// 1. The range size is greater than or equal to the entry size at this
@@ -560,11 +484,7 @@ fn fill_table(
   let mut pages_end = pages_end;
   let table = unsafe { &mut *((virtual_base + table_addr) as *mut PageTable) };
 
-  loop {
-    if size < PAGE_SIZE {
-      break;
-    }
-
+  while size >= PAGE_SIZE {
     let idx = get_descriptor_index(virtual_base + virt, table_level);
     let mut fill_size = entry_size;
 

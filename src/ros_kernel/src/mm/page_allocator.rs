@@ -204,17 +204,12 @@ impl<'memory> PageAllocator<'memory> {
 
   /// Release a block node.
   ///
-  /// # Parameters
-  ///
-  /// * `block` - The block node to release.
-  ///
   /// # Description
   ///
   ///   NOTE: `unget_block_node` is a wrapper `kernel_unmap_page_local`. Use of
   ///         `unget_block_node` must adhere to the same semantics.
-  fn unget_block_node(block: *const BlockNode) {
-    let addr = block as usize;
-    super::kernel_unmap_page_local(addr);
+  fn unget_block_node() {
+    super::kernel_unmap_page_local();
   }
 
   /// Construct a new page allocator for a given contiguous memory area.
@@ -570,11 +565,11 @@ impl<'memory> PageAllocator<'memory> {
       *head = BlockNode::new(head.next, block_addr);
       *prev = BlockNode::new(block_addr, prev.prev);
 
-      Self::unget_block_node(prev);
-      Self::unget_block_node(head);
+      Self::unget_block_node();
+      Self::unget_block_node();
     }
 
-    Self::unget_block_node(block);
+    Self::unget_block_node();
 
     self.flags[index] ^= 1 << bit_idx;
   }
@@ -621,7 +616,7 @@ impl<'memory> PageAllocator<'memory> {
         self.levels[level].head = 0;
       }
 
-      Self::unget_block_node(head);
+      Self::unget_block_node();
     } else {
       let prev = Self::get_block_node_mut(block.prev);
       let next = Self::get_block_node_mut(block.next);
@@ -629,11 +624,11 @@ impl<'memory> PageAllocator<'memory> {
       *prev = BlockNode::new(prev.prev, block.next);
       *next = BlockNode::new(block.prev, next.next);
 
-      Self::unget_block_node(next);
-      Self::unget_block_node(prev);
+      Self::unget_block_node();
+      Self::unget_block_node();
     }
 
-    Self::unget_block_node(block);
+    Self::unget_block_node();
 
     self.flags[index] ^= 1 << bit_idx;
   }

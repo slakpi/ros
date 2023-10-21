@@ -1,3 +1,6 @@
+//! ARMv7a Task Structure
+
+/// ARMv7a CPU register context.
 struct CpuContext {
   r4: usize,
   r5: usize,
@@ -10,9 +13,16 @@ struct CpuContext {
   pc: usize, // r14, the link register
 }
 
+/// ARMv7a thread task.
+/// TODO: Not sure if a fixed-size array as part of the task structure is going
+///       to be the final form, but this is all hidden behind architecture
+///       abstraction anyway. The mechanics of using the Level 2 page table as
+///       a local mapping stack won't change.
 pub struct Task {
   task_id: usize,
   cpu_context: CpuContext,
+  local_mappings: [usize; 1024],
+  local_map_count: usize,
 }
 
 impl Task {
@@ -30,6 +40,8 @@ impl Task {
         sp: 0,
         pc: 0,
       },
+      local_mappings: [0; 1024],
+      local_map_count: 0,
     }
   }
 }

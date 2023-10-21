@@ -56,6 +56,8 @@ static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 ///
 ///   NOTE: Must only be called once while the kernel is single-threaded.
 ///
+///   NOTE: Assumes 4 KiB pages.
+///
 /// Initializes the interrupt table, determines the physical memory layout,
 /// initializes the kernel page tables, and builds a list of exclusions to the
 /// physical memory layout.
@@ -100,7 +102,7 @@ pub fn init(config: usize) {
   //
   //   TODO: Remove this once the Mini UART is able to configure itself using
   //         the DTB.
-  base::set_peripheral_base_addr(config.virtual_base + 0x7e00_0000);
+  base::set_peripheral_base_addr(config.virtual_base + 0x3f00_0000);
   mini_uart::init();
 
   debug_print!("=== ROS (AArch64) ===\n");
@@ -216,7 +218,7 @@ fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
 /// The new end of the kernel page tables.
 fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
-  let pages_end = mm::init(
+  let pages_end = init_kernel_memory_map(
     get_kernel_virtual_base(),
     pages_start,
     pages_end,
@@ -256,4 +258,64 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
   unsafe {
     EXCL_LAYOUT = excl_layout;
   }
+}
+
+/// Initialize kernel memory map.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `pages_start` - The address of the kernel's Level 1 page table.
+/// * `pages_end` - The start of available memory for new page tables.
+/// * `mem_layout` - The physical memory layout.
+///
+/// # Description
+///
+/// Directly maps all physical memory ranges into the kernel's virtual address
+/// space.
+///
+/// The canonical 64-bit virtual address space layout:
+///
+///     +-----------------+ 0xffff_ffff_ffff_ffff
+///     |                 |
+///     | Kernel Segment  | 256 TiB
+///     |                 |
+///     +-----------------+ 0xffff_0000_0000_0000
+///     |  / / / / / / /  |
+///     | / / / / / / / / |
+///     |  / / / / / / /  | 16,776,704 TiB of unused address space
+///     | / / / / / / / / |
+///     |  / / / / / / /  |
+///     +-----------------+ 0x0000_ffff_ffff_ffff
+///     |                 |
+///     | User Segment    | 256 TiB
+///     |                 |
+///     +-----------------+ 0x0000_0000_0000_0000
+///
+/// This layout allows mapping up to 256 TiB of physical memory into the
+/// kernel's address space using a fixed linear mapping.
+///
+/// # Returns
+///
+/// The new end of the page table area.
+fn init_kernel_memory_map(
+  virtual_base: usize,
+  pages_start: usize,
+  pages_end: usize,
+  mem_layout: &memory::MemoryConfig,
+) -> usize {
+  let mut pages_end = pages_end;
+
+  for range in mem_layout.get_ranges() {
+    pages_end = mm::direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      range.base,
+      range.size,
+      false,
+    );
+  }
+
+  pages_end
 }

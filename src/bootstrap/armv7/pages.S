@@ -5,26 +5,17 @@
 
 /// 1 MiB section virtual address layout:
 ///
-///  +-----+----------+--------------------+
-///  | / / |    L1    |       Offset       |
-///  +-----+----------+--------------------+
-///  31   30         20                    0
+///   +----------------+--------------------+
+///   |       L1       |       Offset       |
+///   +----------------+--------------------+
+///   31              20                    0
 ///
 /// 4 KiB page virtual address layout:
 ///
-///  +-----+----------+--------+-----------+
-///  | / / |    L1    |   L2   |  Offset   |
-///  +-----+----------+--------+-----------+
-///  31   30         20       12           0
-///
-/// L1_TABLE_SHIFT below is still 12 bits even though we discard the top 2 bits
-/// for the 3:1 split between TTBR0 and TTBR1. This means L1_TABLE_ENTRY_CNT is
-/// still 4,096 entries and we include the top 2 bits in the table index. This
-/// is different from AArch64 which completely discards the top 16 bits when
-/// indexing the L1 table.
-///
-/// With a 3:1 split, the TTBR1 entries range from 0xC00-0xFFF covering the top
-/// 1 GiB of the address space.
+///   +----------------+--------+-----------+
+///   |       L1       |   L2   |  Offset   |
+///   +----------------+--------+-----------+
+///   31              20       12           0
 #define PAGE_SHIFT         12
 #define L1_TABLE_SHIFT     12
 #define L2_TABLE_SHIFT     8
@@ -35,6 +26,7 @@
 
 #define L2_SHIFT PAGE_SHIFT
 #deifne L1_SHIFT (L2_SHIFT + L2_TABLE_SHIFT)
+
 
 /*----------------------------------------------------------------------------*/
 /// Create the bootstrap kernel pages.
