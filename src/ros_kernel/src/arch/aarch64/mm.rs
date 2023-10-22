@@ -296,9 +296,9 @@ fn alloc_table_and_fill(
     next_addr = pages_end;
     pages_end += TABLE_SIZE;
 
-    // Zero out the table. Any entry in the table with 0 in bit 0 is invalid.
     unsafe {
-      ptr::write_bytes(next_addr as *mut u8, 0, TABLE_SIZE);
+      // Zero out the table. Any entry in the table with 0 in bit 0 is invalid.
+      ptr::write_bytes((virtual_base + next_addr) as *mut u8, 0, TABLE_SIZE);
     }
 
     desc = make_pointer_entry(next_addr);

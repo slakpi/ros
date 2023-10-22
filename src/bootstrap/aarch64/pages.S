@@ -144,7 +144,7 @@ section_align_size:
 
 
 /*----------------------------------------------------------------------------*/
-/// Create L1 and L2 page tables for the first 1 GiB of the virtual address
+/// Initialize L1 and L2 page tables for the first 1 GiB of the physical address
 /// space.
 ///
 /// # Parameters
@@ -176,15 +176,28 @@ init_tables:
 /// * x0 - The base address of the L1 or L2 table.
 /// * x1 - The base address of the virtual address space.
 /// * x2 - The shift specifying the L1 or L2 table.
+///
+/// # Returns
+///
+/// The address of the next page after the table.
 create_table_entry:
   // no fn_entry required.
 
+  // Shift the virtual address down and mask it with the entry count to get the
+  // entry index.
   lsr     x9, x1, x2
   and     x9, x9, #TABLE_ENTRY_CNT - 1
+
+  // Get the pointer to the table at the next page. Assume the address is page-
+  // aligned, so the offset bits are already zero.
   ldr     x10, =__page_size
   add     x10, x0, x10
+
+  // Create the entry.
   orr     x10, x10, #MM_TYPE_PAGE_TABLE	
   str     x10, [x0, x9, lsl #3]
+
+  // Return the address of the next page table.
   ldr     x10, =__page_size
   add     x0, x0, x10
 

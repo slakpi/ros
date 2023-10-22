@@ -147,6 +147,30 @@ function(get_kernel_virtual_base_address addr)
 endfunction()
 
 #-------------------------------------------------------------------------------
+# Get the kernel page size. Defaults to 4 KiB.
+#-------------------------------------------------------------------------------
+function(get_kernel_page_size kib)
+  if(DEFINED KERNEL_PAGE_SIZE)
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+      if((NOT KERNEL_PAGE_SIZE EQUAL 4) AND (NOT KERNEL_PAGE_SIZE EQUAL 16) AND
+         (NOT KERNEL_PAGE_SIZE EQUAL 64))
+         message(FATAL_ERROR "Invalid page size for AArch64")
+      else()
+        set(${kib} ${KERNEL_PAGE_SIZE} PARENT_SCOPE)
+      endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
+      if((NOT KERNEL_PAGE_SIZE EQUAL 4) AND (NOT KERNEL_PAGE_SIZE EQUAL 64))
+        message(FATAL_ERROR "Invalid page size for ARMv7a")
+      else()
+        set(${kib} ${KERNEL_PAGE_SIZE} PARENT_SCOPE)
+      endif()
+    endif()
+  else()
+    set(${kib} 4 PARENT_SCOPE)
+  endif()
+endfunction()
+
+#-------------------------------------------------------------------------------
 # Get the kernel stack page count. Defaults to 256 pages.
 #-------------------------------------------------------------------------------
 function(get_kernel_stack_pages pages)

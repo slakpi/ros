@@ -10,6 +10,7 @@ include(platform)
 get_kernel_base_address(kernel_base)
 get_kernel_virtual_base_address(kernel_virtual_base)
 get_kernel_stack_pages(kernel_stack_pages)
+get_kernel_page_size(kernel_page_size)
 set(ld_in ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/boot.ld.in)
 set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/boot.ld)
 add_custom_command(
@@ -17,6 +18,7 @@ add_custom_command(
   COMMAND ${CMAKE_C_COMPILER} -DVIRT_BASE=${kernel_virtual_base}
                               -DKERNEL_BASE=${kernel_base}
                               -DKERNEL_STACK_PAGES=${kernel_stack_pages}
+                              -DKERNEL_PAGE_SIZE=${kernel_page_size}
                               -E -P -x c ${ld_in} >${ld_out}
   DEPENDS ${ld_in}
   COMMENT "Making linker script...")

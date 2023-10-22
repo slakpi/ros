@@ -33,10 +33,12 @@ enum TableLevel {
 }
 
 /// Page table structure for 4 KiB pages. The Level 1 table only has four real
-/// entries, but occupies an entire page for alignment.
+/// entries, but occupies an entire page for alignment. Note that the array uses
+/// 64-bit entries explicitly rather than pointer-sized entries. Long page table
+/// descriptors are 64-bit even with the pointer size is 32-bit.
 #[repr(C)]
 struct PageTable {
-  entries: [usize; 512],
+  entries: [u64; 512],
 }
 
 /// Direct map a memory range into the kernel's virtual address space.
@@ -231,12 +233,12 @@ fn alloc_table_and_fill(
   //       wrong and a memory trap is the right outcome.
   if desc & TYPE_MASK != MM_PAGE_TABLE_FLAG {
     next_addr = pages_end;
-    pages_end += LEVEL_2_TABLE_SIZE;
+    pages_end += TABLE_SIZE;
 
-    // Zero out the table. Any entry in the table with bits 0 and 1 set to 0 is
-    // invalid.
     unsafe {
-      ptr::write_bytes(next_addr as *mut u8, 0, LEVEL_2_TABLE_SIZE);
+      // Zero out the table. Any entry in the table with bits 0 and 1 set to 0
+      // is invalid.
+      ptr::write_bytes((virtual_base + next_addr) as *mut u8, 0, TABLE_SIZE);
     }
 
     // desc = make_pointer_entry(next_addr);
