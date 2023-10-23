@@ -64,22 +64,30 @@ SECTIONS
 
   __kernel_size = __kernel_stack_start - __kernel_start;
 
-  // Reserve three pages for the kernel's bootstrap virtual page table.
+  // The L1 table must be aligned on a 16 KiB boundary.
+  . = ALIGN(16 * 1024);
+
+  // Reserve 16 KiB for the kernel's bootstrap virtual page table. The L1 table
+  // has 4,096 32-bit entries to cover 4 GiB with 1 MiB sections when not using
+  // Large Physical Address Extensions. A L2 table will not be necessary for
+  // bootstrapping the kernel.
   .data.pages :
   {
     __kernel_pages_start = .;
-    . += (3 * __page_size);
+    . += (16 * 1024);
     __kernel_pages_end = .;
   }
 
   __kernel_pages_size = __kernel_pages_end - __kernel_pages_start;
 
-  // Reserve three pages for the kernel's bootstrap identity page map. Refer to
-  // bootstrap/aarch64/boot.ld.in.
+  // See above.
+  . = ALIGN(16 * 1024);
+
+  // See above. Refer to bootstrap/aarch64/boot.ld.in regarding identity pages.
   .data.id_pages :
   {
     __kernel_id_pages_start = .;
-    . += (3 * __page_size);
+    . += (16 * 1024);
     __kernel_id_pages_end = .;
   }
 

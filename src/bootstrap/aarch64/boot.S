@@ -160,9 +160,9 @@ begin_virt_addressing:
 //   +------------------------------+ 32
 //   | Kernel size                  |
 //   +------------------------------+ 40
-//   | Physical L1 table address    |
+//   | Physical page tables address |
 //   +------------------------------+ 48
-//   | L1 table size                |
+//   | Page table area size         |
 //   +------------------------------+ 56
 //   | / / / / / Padding / / / / /  |
 //   +------------------------------+ 64

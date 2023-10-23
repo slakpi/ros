@@ -62,12 +62,6 @@ _start:
   ldr     r2, =__bss_size
   bl      memset
 
-// Check for required CPU extensions. Halt the CPU if any of the required
-// extensions are not present.
-  bl      ext_has_long_descriptors
-  cmp     r0, #0
-  bne     start_cpu_halt
-
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
 // is a DTB, the DTB will be mapped into the bootstrap kernel pages.
   mov     r0, r6
@@ -141,9 +135,9 @@ begin_virt_addressing:
 //   +------------------------------+ 16
 //   | Kernel size                  |
 //   +------------------------------+ 20
-//   | Physical L1 table address    |
+//   | Physical page tables address |
 //   +------------------------------+ 24
-//   | L1 table size                |
+//   | Page table area size         |
 //   +------------------------------+ 28
 //   | / / / / / Padding / / / / /  |
 //   +------------------------------+ 32
