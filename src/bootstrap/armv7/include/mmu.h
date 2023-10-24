@@ -6,11 +6,6 @@
 // TTBCR value. See B4.1.153. A value of 1 disables extended addresses, enables
 // TTBR1 translation, and enables TTBR0 translation. If the top bit of the
 // virtual address is 0, TTBR0 is used. Otherwise, TTBR1 is used.
-//
-//   NOTE: Using the top bit gives the address space a 2:2 split rather than the
-//         canonical 3:1 split. A 3:1 split is not possible without Large
-//         Physical Address Extensions. The kernel can change this later if LPAE
-//         are present on the CPU.
 #define TTBCR_VALUE 0x1
 
 // Page descriptor flags. See B3.5.1. The Access Flag Enable bit should be set
@@ -30,6 +25,5 @@
 #define MMU_NORMAL_RW_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_NORMAL_CB | MM_ACCESS_FLAG)
 #define MMU_DEVICE_RO_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RO | MM_DEVICE_CB | MM_ACCESS_FLAG)
 #define MMU_DEVICE_RW_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_DEVICE_CB | MM_ACCESS_FLAG)
-
 
 #endif

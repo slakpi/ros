@@ -9,7 +9,7 @@ function(validate_platform)
   endif()
 
   if(DEFINED RPI_VERSION)
-    validate_rpi_version()
+    rpi_validate_platform()
   endif()
 endfunction()
 
@@ -99,7 +99,7 @@ endfunction()
 #-------------------------------------------------------------------------------
 function(get_cpu_model cpu)
   if(DEFINED RPI_VERSION)
-    get_rpi_cpu_model(tmp)
+    rpi_get_cpu_model(tmp)
   endif()
 
   set(${cpu} ${tmp} PARENT_SCOPE)
@@ -110,7 +110,7 @@ endfunction()
 #-------------------------------------------------------------------------------
 function(get_kernel_image_file file)
   if(DEFINED RPI_VERSION)
-    get_rpi_kernel_image_file(tmp)
+    rpi_get_kernel_image_file(tmp)
   else()
     message(WARNING "Defaulting to `kernel.img`.")
     set(tmp kernel.img PARENT_SCOPE)
@@ -124,7 +124,7 @@ endfunction()
 #-------------------------------------------------------------------------------
 function(get_kernel_base_address addr)
   if(DEFINED RPI_VERSION)
-    get_rpi_kernel_base_address(tmp)
+    rpi_get_kernel_base_address(tmp)
   else()
     message(WARNING "Defaulting to kernel base address of 0x0.")
     set(tmp 0x0)
@@ -136,14 +136,28 @@ endfunction()
 #-------------------------------------------------------------------------------
 # Get the kernel virtual base address for the platform.
 #-------------------------------------------------------------------------------
-function(get_kernel_virtual_base_address addr)
-  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    # The canonical 64-bit kernel segment is the top 256 TiB
-    set(${addr} 0xffff000000000000 PARENT_SCOPE)
-  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-    # The canonical 3:1 split kernel segment is the top 1 GiB.
-    set(${addr} 0xc0000000 PARENT_SCOPE)
+function(get_kernel_virtual_base_address addr split)
+  if(DEFINED RPI_VERSION)
+    rpi_get_kernel_virtual_base_address(tmp_addr tmp_split)
+  else()
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+      set(tmp 0xffff000000000000)
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
+      if(NOT DEFINED KERNEL_VMSPLIT)
+        message(FATAL_ERROR "KERNEL_VMSPLIT not defined.")
+      elseif(KERNEL_VMSPLIT EQUAL 3)
+        set(tmp_addr 0xc0000000)
+      elseif(KERNEL_VMSPLIT EQUAL 2)
+        set(tmp_addr 0x80000000)
+      else()
+        message(FATAL_ERROR "Invalid KERNEL_VMSPLIT.")
+      endif()
+      set(tmp_split ${KERNEL_VMSPLIT})
+    endif()
   endif()
+
+  set(${addr} ${tmp_addr} PARENT_SCOPE)
+  set(${split} ${tmp_split} PARENT_SCOPE)
 endfunction()
 
 #-------------------------------------------------------------------------------

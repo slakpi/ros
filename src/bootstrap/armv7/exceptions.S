@@ -57,33 +57,22 @@
 
 
 /*----------------------------------------------------------------------------*/
-/// Move the exception vector table. ARMv7a does not use a register to store the
-/// exception addresses, so it must be moved manually to 0x0000_0000 or
-/// 0xffff_0000.
+/// Default exception trap stub.
 ///
-/// # Parameters
-///
-/// * r0 - The new table address.
-.global exp_move_exception_vectors
-exp_move_exception_vectors:
-  // no fn_entry required
-  push    {r4, r5, r6, r7, r8, r9}
-
-  mov     r1, r0
-  ldr     r0, =vectors
-
-  ldmia   r0!,{r2, r3, r4, r5, r6, r7, r8, r9}
-  stmia   r1!,{r2, r3, r4, r5, r6, r7, r8, r9}
-  ldmia   r0!,{r2, r3, r4, r5, r6, r7, r8}
-  stmia   r1!,{r2, r3, r4, r5, r6, r7, r8}
-
-  pop     {r4, r5, r6, r7, r8, r9}
-  // no fn_exit required
-  mov     pc, lr
+/// TODO: Handle exceptions by type.
+_trap_exception:
+  kernel_entry
+  bl      trap_exception    // Transfer to Rustland
+  // For now just halt.
+  // kernel_exit
+halt:
+  b       halt
 
 
 /*----------------------------------------------------------------------------*/
-/// Exception vector table.
+/// Exception vector table. This page will be mapped to the high vectors page
+/// at 0xffff_0000 once the MMU is up and running.
+.section ".data.vectors"
 .global vectors
 vectors:
   ldr     pc, _trap_exception_addr  // Reset
@@ -100,16 +89,3 @@ vectors:
 /// Relocation
 _trap_exception_addr:
   .word _trap_exception
-
-
-/*----------------------------------------------------------------------------*/
-/// Default exception trap stub.
-///
-/// TODO: Handle exceptions by type.
-_trap_exception:
-  kernel_entry
-  bl      trap_exception    // Transfer to Rustland
-  // For now just halt.
-  // kernel_exit
-halt:
-  b       halt

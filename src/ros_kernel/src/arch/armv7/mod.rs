@@ -7,7 +7,7 @@ pub mod peripherals;
 pub mod task;
 
 use crate::peripherals::memory;
-use crate::support::bits;
+use crate::support::{bits, dtb};
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -84,11 +84,11 @@ pub fn init(config: usize) {
   // `init_memory_layout()` will panic. If the blob is an ATAG list, there is no
   // need to include it in the exclusion list as it will be part of the kernel
   // area exclusion.
-  // let blob_addr = config.virtual_base + config.blob;
-  // let blob_size = dtb::DtbReader::check_dtb(blob_addr)
-  //   .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
+  let blob_addr = config.virtual_base + config.blob;
+  let blob_size = dtb::DtbReader::check_dtb(blob_addr)
+    .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
-  // let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
+  let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
   // Initialize the real SoC memory layout.
   // pages_end = init_soc(config.kernel_pages_start, pages_end, blob_addr);
@@ -102,7 +102,7 @@ pub fn init(config: usize) {
 
   // debug_print!("=== ROS (ARM) ===\n");
 
-  exceptions::init();
+  pages_end = init_memory_layout(config.kernel_pages_start, pages_end, blob_addr);
 }
 
 /// Get the physical memory layout.
@@ -194,7 +194,35 @@ fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   //   pages_end,
   //   &soc_layout,
   // )
-  0
+
+  pages_end
+}
+
+/// Initialize the physical memory layout.
+///
+/// # Parameters
+///
+/// * `pages_start` - The start of the kernel's page tables.
+/// * `pages_end` - The end of the kernel's page tables.
+/// * `blob_addr` - The ATAGs or DTB blob address.
+///
+/// # Returns
+///
+/// The new end of the kernel page tables.
+fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+  // let pages_end = init_kernel_memory_map(
+  //   get_kernel_virtual_base(),
+  //   pages_start,
+  //   pages_end,
+  //   &mem_layout,
+  // );
+
+  unsafe {
+    MEM_LAYOUT = mem_layout;
+  }
+
+  pages_end
 }
 
 /// Initialize kernel memory map.

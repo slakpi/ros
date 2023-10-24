@@ -2,18 +2,18 @@
 # Validate the Raspberry Pi version specified on the command line for the
 # target platform.
 #
-# AArch64 - Raspberry Pi 3 & 4
-# ARMv7a  - Raspberry Pi 2, 3, & 4
+# AArch64 - Raspberry Pi 2 (rev 1.2), 3 & 4
+# ARMv7a  - Raspberry Pi 2, 2 (rev 1.2), 3 & 4
 #
 # For the Raspberry Pi Zero 2W, use version 3.
 #-------------------------------------------------------------------------------
-function(validate_rpi_version)
+function(rpi_validate_platform)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    if(NOT (RPI_VERSION MATCHES "^(3|4)$"))
+    if(NOT (RPI_VERSION MATCHES "^(2_2|3|4)$"))
       message(FATAL_ERROR "Invalid Raspberry Pi version for AArch64.")
     endif()
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-    if(NOT (RPI_VERSION MATCHES "^(2|3|4)$"))
+    if(NOT (RPI_VERSION MATCHES "^(2|2_2|3|4)$"))
       message(FATAL_ERROR "Invalid Raspberry Pi version for ARMv7.")
     endif()
   else()
@@ -24,16 +24,16 @@ endfunction()
 #-------------------------------------------------------------------------------
 # Get the CPU model for the Raspberry Pi version specified on the command line.
 #
-#   Raspberry Pi      CPU Model
-#   -------------------------------
-#   2                 Cortex A7
-#   3 or Zero 2W      Cortex A53
-#   4                 Cortex A72
+#   Raspberry Pi                 CPU Model
+#   ---------------------------------------
+#   2                            Cortex A7
+#   2 (rev 1.2), 3, Zero 2W      Cortex A53
+#   4                            Cortex A72
 #-------------------------------------------------------------------------------
-function(get_rpi_cpu_model cpu)
+function(rpi_get_cpu_model cpu)
   if(RPI_VERSION STREQUAL "4")
     set(${cpu} "cortex-a72" PARENT_SCOPE)
-  elseif(RPI_VERSION STREQUAL "3")
+  elseif(RPI_VERSION MATCHES "^(2_2|3)$")
     set(${cpu} "cortex-a53" PARENT_SCOPE)
   elseif(RPI_VERSION STREQUAL "2")
     set(${cpu} "cortex-a7" PARENT_SCOPE)
@@ -46,22 +46,22 @@ endfunction()
 #
 # ARMv7a:
 #
-#   Raspberry Pi      Kernel Name
-#   -------------------------------
-#   2 or 3            kernel7.img
-#   4                 kernel7l.img
+#   Raspberry Pi                 Kernel Name
+#   -----------------------------------------
+#   2, 2 (rev 1.2), 3, Zero 2W   kernel7.img
+#   4                            kernel7l.img
 #
 # AArch64:
 #
-#   Raspberry Pi      Kernel Name
-#   -------------------------------
-#   3 or 4            kernel8.img
+#   Raspberry Pi                 Kernel Name
+#   -----------------------------------------
+#   2 (rev 1.2), 3, 4            kernel8.img
 #-------------------------------------------------------------------------------
-function(get_rpi_kernel_image_file file)
+function(rpi_get_kernel_image_file file)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(${file} kernel8.img PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-    if(RPI_VERSION MATCHES "^(2|3)$")
+    if(RPI_VERSION MATCHES "^(2|2_2|3)$")
       set(${file} kernel7.img PARENT_SCOPE)
     elseif(RPI_VERSION STREQUAL "4")
       set(${file} kernel7l.img PARENT_SCOPE)
@@ -75,7 +75,7 @@ endfunction()
 # the Raspberry Pi bootloader expects the kernel at 0x8000, however QEMU expects
 # it at 0x10000.
 #-------------------------------------------------------------------------------
-function(get_rpi_kernel_base_address addr)
+function(rpi_get_kernel_base_address addr)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(${addr} 0x80000 PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
@@ -83,6 +83,26 @@ function(get_rpi_kernel_base_address addr)
       set(${addr} 0x10000 PARENT_SCOPE)
     else()
       set(${addr} 0x8000 PARENT_SCOPE)
+    endif()
+  endif()
+endfunction()
+
+#-------------------------------------------------------------------------------
+# Get the kernel virtual base address for the Raspberry Pi version specified on
+# the command line.
+#-------------------------------------------------------------------------------
+function(rpi_get_kernel_virtual_base_address addr split)
+  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(${addr} 0xffff000000000000 PARENT_SCOPE)
+  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
+    if(RPI_VERSION MATCHES "^(2_2|3|4)$")
+      # The Cortex A53 and later support LPAE; use a 3:1 split.
+      set(${addr} 0xc0000000 PARENT_SCOPE)
+      set(${split} 3 PARENT_SCOPE)
+    elseif(RPI_VERSION STREQUAL "2")
+      # The Cortex A7 does not support LPAE; use a 2:2 split.
+      set(${addr} 0x80000000 PARENT_SCOPE)
+      set(${split} 2 PARENT_SCOPE)
     endif()
   endif()
 endfunction()
