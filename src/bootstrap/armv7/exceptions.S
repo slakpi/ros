@@ -5,6 +5,13 @@
 
 
 /*----------------------------------------------------------------------------*/
+/// Adds `label` as a vector to the vector table.
+.macro ventry label
+  b       \label
+.endm
+
+
+/*----------------------------------------------------------------------------*/
 /// Exception handler prologue.
 ///
 /// # Description
@@ -75,17 +82,17 @@ halt:
 .section ".data.vectors"
 .global vectors
 vectors:
-  ldr     pc, _trap_exception_addr  // Reset
-  ldr     pc, _trap_exception_addr  // Undefined instruction
-  ldr     pc, _trap_exception_addr  // Supervisor call
-  ldr     pc, _trap_exception_addr  // Prefetch abort
-  ldr     pc, _trap_exception_addr  // Data abort
-  nop                               // Not used
-  ldr     pc, _trap_exception_addr  // IRQ
-  ldr     pc, _trap_exception_addr  // FIQ
+  ventry  _trap_exception  // Reset
+  ventry  _trap_exception  // Undefined instruction
+  ventry  _trap_exception  // Supervisor call
+  ventry  _trap_exception  // Prefetch abort
+  ventry  _trap_exception  // Data abort
+  nop                      // Not used
+  ventry  _trap_exception  // IRQ
+  ventry  _trap_exception  // FIQ
 
 
 /*----------------------------------------------------------------------------*/
 /// Relocation
-_trap_exception_addr:
-  .word _trap_exception
+// _trap_exception_addr:
+//   .word _trap_exception

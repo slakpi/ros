@@ -88,7 +88,7 @@ mmu_create_kernel_pages:
 
   mov     r0, r10
   mov     r1, r0
-  add     r1, r1, #L1_TABLE_SIZE  
+  add     r1, r1, #L1_TABLE_SIZE
   mov     r2, r7
   ldr     r3, =__virtual_start
   bl      map_vectors
@@ -109,7 +109,7 @@ mmu_create_kernel_pages:
   ldr     r2, =__virtual_start
   add     r3, r2, r6
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RW_FLAGS
+  ldr     r7, =MMU_L1_NORMAL_RW_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -119,7 +119,7 @@ mmu_create_kernel_pages:
   mov     r2, #0
   add     r3, r2, r6
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RW_FLAGS
+  ldr     r7, =MMU_L1_NORMAL_RW_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -137,7 +137,7 @@ mmu_create_kernel_pages:
   add     r2, r2, r4
   add     r3, r2, r5
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RO_FLAGS
+  ldr     r7, =MMU_L1_NORMAL_RO_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -179,7 +179,6 @@ section_align_size:
 /// * r0 - The base address of the L1 table.
 /// * r1 - The base address of the L2 table for the top 1 MiB.
 /// * r2 - The base address of the exception vectors.
-/// * r3 - The base virtual address.
 map_vectors:
   // no fn_entry required.
   push    {r4, r5}
@@ -190,9 +189,8 @@ map_vectors:
 
   // Write the L1 descriptor. The L2 table address is assumed to be aligned on a
   // 1 KiB boundary.
-  ldr     r5, =(MM_TYPE_PAGE_TABLE | MM_ACCESS_RO | MM_NORMAL_CB | MM_ACCESS_FLAG)
+  ldr     r5, =MMU_PAGE_PAGE_TABLE_FLAGS
   orr     r5, r5, r1
-  add     r5, r5, r3
   str     r5, [r0, r4]
 
   // Entry 240 covers the page at 0xffff_0000.
@@ -200,9 +198,8 @@ map_vectors:
 
   // Write the L2 descriptor. The exception vectors are assumed to be aligned on
   // a page.
-  ldr     r5, =MMU_NORMAL_RO_FLAGS
+  ldr     r5, =MMU_L2_NORMAL_RO_PAGE_FLAGS
   orr     r5, r5, r2
-  add     r5, r5, r3
   str     r5, [r1, r4]
 
   pop     {r4, r5}

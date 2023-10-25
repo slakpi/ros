@@ -24,12 +24,6 @@ fn panic(info: &PanicInfo) -> ! {
 /// Does not return.
 #[no_mangle]
 extern "C" fn ros_kernel(config: usize) -> ! {
-  let addr: usize = 0xffff_fffc;
-  unsafe {
-    let ptr = addr as *mut u32;
-    *ptr = 0;
-  }
-
   // Initialize the architecture. At a minimum, this gives the kernel access to
   // all available memory and configures some method of debug output.
   arch::init(config);
