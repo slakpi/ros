@@ -63,14 +63,25 @@ SECTIONS
   }
 
   // Reserve a page for the kernel exception vectors.
-  .data.vectors :
+  .text.vectors :
   {
     __kernel_exception_vectors_start = .;
 
-    KEEP(*(.data.vectors))
+    KEEP(*(.text.vectors))
 
     . = ALIGN(__page_size);
     __kernel_exception_vectors_end = .;
+  }
+
+  // Reserve a page for the kernel exception stubs.
+  .text.stubs :
+  {
+    __kernel_exception_stubs_start = .;
+
+    KEEP(*(.text.stubs))
+
+    . = ALIGN(__page_size);
+    __kernel_exception_stubs_end = .;
   }
 
   __kernel_size = __kernel_stack_start - __kernel_start;

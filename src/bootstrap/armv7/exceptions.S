@@ -7,7 +7,7 @@
 /*----------------------------------------------------------------------------*/
 /// Adds `label` as a vector to the vector table.
 .macro ventry label
-  b       \label
+  ldr     pc, \label
 .endm
 
 
@@ -64,9 +64,30 @@
 
 
 /*----------------------------------------------------------------------------*/
+/// Exception vector table. This page will be mapped to the high vectors page
+/// at 0xffff_0000 once the MMU is up and running.
+.section ".text.vectors"
+.global vectors
+vectors:
+  ventry  _trap_exception_addr  // Reset
+  ventry  _trap_exception_addr  // Undefined instruction
+  ventry  _trap_exception_addr  // Supervisor call
+  ventry  _trap_exception_addr  // Prefetch abort
+  ventry  _trap_exception_addr  // Data abort
+  nop                           // Not used
+  ventry  _trap_exception_addr  // IRQ
+  ventry  _trap_exception_addr  // FIQ
+
+
+_trap_exception_addr:
+  .word _trap_exception
+
+
+/*----------------------------------------------------------------------------*/
 /// Default exception trap stub.
 ///
 /// TODO: Handle exceptions by type.
+.section ".text.stubs"
 _trap_exception:
   kernel_entry
   bl      trap_exception    // Transfer to Rustland
@@ -74,25 +95,3 @@ _trap_exception:
   // kernel_exit
 halt:
   b       halt
-
-
-/*----------------------------------------------------------------------------*/
-/// Exception vector table. This page will be mapped to the high vectors page
-/// at 0xffff_0000 once the MMU is up and running.
-.section ".data.vectors"
-.global vectors
-vectors:
-  ventry  _trap_exception  // Reset
-  ventry  _trap_exception  // Undefined instruction
-  ventry  _trap_exception  // Supervisor call
-  ventry  _trap_exception  // Prefetch abort
-  ventry  _trap_exception  // Data abort
-  nop                      // Not used
-  ventry  _trap_exception  // IRQ
-  ventry  _trap_exception  // FIQ
-
-
-/*----------------------------------------------------------------------------*/
-/// Relocation
-// _trap_exception_addr:
-//   .word _trap_exception

@@ -196,10 +196,18 @@ map_vectors:
   // Entry 240 covers the page at 0xffff_0000.
   ldr     r4, =0x3c0
 
-  // Write the L2 descriptor. The exception vectors are assumed to be aligned on
-  // a page.
+  // Write the vectors L2 descriptor. The exception vectors are assumed to be
+  // aligned on a page.
   ldr     r5, =MMU_L2_NORMAL_RO_PAGE_FLAGS
   orr     r5, r5, r2
+  str     r5, [r1, r4]
+
+  // Write the stubs L2 descriptor.
+  ldr     r5, =MMU_L2_NORMAL_RO_PAGE_FLAGS
+  ldr     r3, =__page_size
+  add     r2, r2, r3
+  orr     r5, r5, r2
+  add     r4, r4, #4
   str     r5, [r1, r4]
 
   pop     {r4, r5}
