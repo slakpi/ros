@@ -92,9 +92,6 @@ pub fn init(config: usize) {
 
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
-  // Initialize the exception vectors.
-  exceptions::init();
-
   // Initialize the real SoC memory layout.
   pages_end = init_soc(config.kernel_pages_start, pages_end, blob_addr);
 

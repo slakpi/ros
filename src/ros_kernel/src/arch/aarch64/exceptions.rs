@@ -1,18 +1,6 @@
 //! AArch64 Exception Management
 
 use crate::debug_print;
-use core::arch::asm;
-
-/// AArch64 exception vector initialization.
-pub fn init() {
-  unsafe {
-    #[rustfmt::skip]
-    asm!(
-      "adr    x9, vectors",
-      "msr    vbar_el1, x9",
-    );
-  }
-}
 
 /// AArch64 exception trap.
 ///

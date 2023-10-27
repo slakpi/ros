@@ -141,6 +141,10 @@ begin_virt_addressing:
   msr     ttbr0_el1, x9
   isb
 
+// Setup the exception vectors.
+  adr     x9, vectors
+  msr     vbar_el1, x9
+ 
 // Real stack setup.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
