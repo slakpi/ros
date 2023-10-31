@@ -33,7 +33,7 @@
 /// The mapping will use LPAE and long page table descriptors. The bootstrap
 /// should have already set the TTBR0/TTBR1 split. This code only needs to know
 /// the virtual base address to choose the correct L1 table entry.
-.global mmu_create_kernel_pages_lpae
-mmu_create_kernel_pages_lpae:
+.global mmu_create_kernel_pages_long
+mmu_create_kernel_pages_long:
   fn_entry
   fn_exit

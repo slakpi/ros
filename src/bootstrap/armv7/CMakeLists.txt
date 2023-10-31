@@ -5,6 +5,8 @@ add_executable(
   kernel boot.S
          dtb.S
          exceptions.S
-         pages_lpae.S
+         extensions.S
+         pages_long.S
+         pages_short.S
          pages.S)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)

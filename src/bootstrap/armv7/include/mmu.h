@@ -8,6 +8,10 @@
 // virtual address is 0, TTBR0 is used. Otherwise, TTBR1 is used.
 #define TTBCR_VALUE 0x1
 
+// The Extended Address Enable bit can be set if the CPU support Large Physical
+// address Extensions and a 3:1 split is configured.
+#define TTBCR_EAE   (0b1 << 31)
+
 // Page descriptor flags. See B3.5.1. The Access Flag Enable bit should be set
 // to 1 in SCTLR to use the 2-bit access control model where AP[2] (bit 15)
 // disables writing and A[1] (bit 11) enables unpriviledged access. AP[0] (bit

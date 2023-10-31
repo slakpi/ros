@@ -87,7 +87,7 @@ _start:
   add     r0, r0, r1
   mcr     p15, 0, r0, c2, c0, 1
 
-  ldr     r0, =TTBCR_VALUE
+  bl      make_ttbcr_value
   mcr     p15, 0, r0, c2, c0, 2
 
   ldr     r0, =DACR_VALUE
@@ -164,6 +164,26 @@ begin_virt_addressing:
 
 start_cpu_halt:
   b       start_cpu_halt
+
+
+/*----------------------------------------------------------------------------*/
+/// Setup the TTBCR flags for the MMU.
+///
+/// # Returns
+///
+/// A TTBCR that enables the appropriate table registers and extended addressing
+/// as appropriate.
+///
+///   NOTE: Currently only configures TTBCR without using extended addressing.
+make_ttbcr_value:
+  fn_entry
+
+  ldr     r1, =TTBCR_VALUE
+
+make_ttbcr_value_exit:
+  mov     r0, r1
+
+  fn_exit
 
 
 /*----------------------------------------------------------------------------*/
