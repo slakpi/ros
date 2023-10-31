@@ -89,20 +89,34 @@ endfunction()
 
 #-------------------------------------------------------------------------------
 # Get the kernel virtual base address for the Raspberry Pi version specified on
-# the command line.
+# the command line. KERNEL_VMSPLIT can override the default 3:1 split for CPUs
+# that support LPAE and force a 2:2 split. However, KERNEL_VMSPLIT cannot force
+# a 3:1 split on CPUs that do not support LPAE.
 #-------------------------------------------------------------------------------
-function(rpi_get_kernel_virtual_base_address addr split)
+function(rpi_get_kernel_virtual_base_address addr)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(${addr} 0xffff000000000000 PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-    if(RPI_VERSION MATCHES "^(2_2|3|4)$")
-      # The Cortex A53 and later support LPAE; use a 3:1 split.
+    if (DEFINED KERNEL_VMSPLIT)
+      set(kernel_vmsplit ${KERNEL_VMSPLIT})
+    else()
+      if(RPI_VERSION MATCHES "^(2_2|3|4)$")
+        # The Cortex A53 and later support LPAE; default to a 3:1 split.
+        set(kernel_vmsplit 3)
+      elseif(RPI_VERSION STREQUAL "2")
+        # The Cortex A7 does not support LPAE; default to a 2:2 split.
+        set(kernel_vmsplit 2)
+      endif()
+    endif()
+
+    if(RPI_VERSION STREQUAL "2" AND kernel_vmsplit EQUAL 3)
+      message(FATAL_ERROR "Cortex A7 does not support a 3:1 split.")
+    elseif(kernel_vmsplit EQUAL 3)
       set(${addr} 0xc0000000 PARENT_SCOPE)
-      set(${split} 3 PARENT_SCOPE)
-    elseif(RPI_VERSION STREQUAL "2")
-      # The Cortex A7 does not support LPAE; use a 2:2 split.
+    elseif(kernel_vmsplit EQUAL 2)
       set(${addr} 0x80000000 PARENT_SCOPE)
-      set(${split} 2 PARENT_SCOPE)
+    else()
+      message(FATAL_ERROR "Invalid virtual memory split.")
     endif()
   endif()
 endfunction()

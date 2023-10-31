@@ -134,30 +134,28 @@ function(get_kernel_base_address addr)
 endfunction()
 
 #-------------------------------------------------------------------------------
-# Get the kernel virtual base address for the platform.
+# Get the kernel virtual base address for the platform. If KERNEL_VMSPLIT is not
+# defined, a 2:2 split is the default. No error checking is done here to prevent
+# specifying a split that the target CPU does not support.
 #-------------------------------------------------------------------------------
-function(get_kernel_virtual_base_address addr split)
+function(get_kernel_virtual_base_address addr)
   if(DEFINED RPI_VERSION)
-    rpi_get_kernel_virtual_base_address(tmp_addr tmp_split)
+    rpi_get_kernel_virtual_base_address(tmp_addr)
   else()
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
       set(tmp 0xffff000000000000)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-      if(NOT DEFINED KERNEL_VMSPLIT)
-        message(FATAL_ERROR "KERNEL_VMSPLIT not defined.")
-      elseif(KERNEL_VMSPLIT EQUAL 3)
+      if(KERNEL_VMSPLIT EQUAL 3)
         set(tmp_addr 0xc0000000)
-      elseif(KERNEL_VMSPLIT EQUAL 2)
+      elseif(KERNEL_VMSPLIT EQUAL 2 OR NOT DEFINED KERNEL_VMSPLIT)
         set(tmp_addr 0x80000000)
       else()
-        message(FATAL_ERROR "Invalid KERNEL_VMSPLIT.")
+        message(FATAL_ERROR "Invalid virtual memory split.")
       endif()
-      set(tmp_split ${KERNEL_VMSPLIT})
     endif()
   endif()
 
   set(${addr} ${tmp_addr} PARENT_SCOPE)
-  set(${split} ${tmp_split} PARENT_SCOPE)
 endfunction()
 
 #-------------------------------------------------------------------------------

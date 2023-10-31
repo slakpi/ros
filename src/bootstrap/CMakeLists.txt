@@ -1,22 +1,25 @@
 include(platform)
 
 #-------------------------------------------------------------------------------
+# Get the platform build configuration.
+#-------------------------------------------------------------------------------
+get_kernel_base_address(kernel_base)
+get_kernel_virtual_base_address(kernel_virtual_base)
+get_kernel_stack_pages(kernel_stack_pages)
+get_kernel_page_size(kernel_page_size)
+
+#-------------------------------------------------------------------------------
 # Generate the linker script by using the C pre-processor to replace literal
 # definitions in the `boot.ld.in` file.
 #   -E    Pre-process only.
 #   -P    Inhibit line markers (not calling on C source code)
 #   -x c  Treat as C source code.
 #-------------------------------------------------------------------------------
-get_kernel_base_address(kernel_base)
-get_kernel_virtual_base_address(kernel_virtual_base kernel_vmsplit)
-get_kernel_stack_pages(kernel_stack_pages)
-get_kernel_page_size(kernel_page_size)
 set(ld_in ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/boot.ld.in)
 set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/boot.ld)
 add_custom_command(
   OUTPUT ${ld_out}
   COMMAND ${CMAKE_C_COMPILER} -DKERNEL_VIRTUAL_BASE=${kernel_virtual_base}
-                              -DKERNEL_VMSPLIT=${kernel_vmsplit}
                               -DKERNEL_BASE=${kernel_base}
                               -DKERNEL_STACK_PAGES=${kernel_stack_pages}
                               -DKERNEL_PAGE_SIZE=${kernel_page_size}
