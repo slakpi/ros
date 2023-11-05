@@ -174,7 +174,7 @@ impl<'mem> DtbMemoryScanner<'mem> {
       // from the DTB.
       let max_size = (usize::MAX as u64) - base;
       let size = cmp::min(size, max_size);
-      self.config.insert_range(range::Range {
+      _ = self.config.insert_range(range::Range {
         base: base as usize,
         size: size as usize,
       });

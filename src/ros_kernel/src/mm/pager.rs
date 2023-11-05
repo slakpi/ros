@@ -52,13 +52,15 @@ pub fn init() {
     let ptr = (meta_range.base + virtual_base) as *mut u8;
 
     let mut avail = memory::MemoryConfig::new();
-    avail.insert_range(*r);
-
-    for e in excl_layout.get_ranges() {
-      avail.exclude_range(e, page_size);
+    if !avail.insert_range(*r) {
+      continue;
     }
 
-    avail.exclude_range(&meta_range, page_size);
+    for e in excl_layout.get_ranges() {
+      avail.exclude_range(e);
+    }
+
+    avail.exclude_range(&meta_range);
 
     // Create the allocator.
     unsafe {

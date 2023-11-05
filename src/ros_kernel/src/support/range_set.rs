@@ -3,6 +3,7 @@
 use super::range::{Range, RangeOrder};
 
 /// Fixed-size, ordered set of Ranges.
+#[derive(Copy, Clone)]
 pub struct RangeSet<const SET_SIZE: usize> {
   ranges: [Range; SET_SIZE],
   count: usize,
@@ -29,12 +30,14 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   ///
   /// # Returns
   ///
-  /// A new RangeSet.
+  /// A new RangeSet. The new set only includes valid, mutually exclusive ranges
+  /// and may be empty. The new set will include, at most, the first `SET_SIZE`
+  /// ranges from the range list.
   pub fn new_with_ranges(ranges: &[Range]) -> Self {
     let mut set = Self::new();
 
     for range in ranges {
-      set.insert_range(*range);
+      _ = set.insert_range(*range);
     }
 
     set.trim_ranges();
@@ -69,15 +72,27 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
     &self.ranges[0..self.count]
   }
 
-  /// Insert a new range in to the set ordered by base. Ranges with the same
-  /// base are ordered from first to last inserted.
+  /// Insert a new range in to the set ordered by base.
   ///
   /// # Parameters
   ///
   /// * `range` - The new range to add to the set.
-  pub fn insert_range(&mut self, range: Range) {
+  ///
+  /// # Description
+  ///
+  /// Ranges with the same base are ordered from first to last inserted. Ranges
+  /// with a size of zero or a size that would overflow are ignored.
+  ///
+  /// # Returns
+  ///
+  /// True if able to insert the new range, false otherwise.
+  pub fn insert_range(&mut self, range: Range) -> bool {
     if self.count >= SET_SIZE {
-      return;
+      return false;
+    }
+
+    if range.size == 0 || (usize::MAX - range.size) + 1 < range.base {
+      return false;
     }
 
     let mut ins = self.count;
@@ -92,6 +107,8 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
     self.ranges.copy_within(ins..self.count, ins + 1);
     self.ranges[ins] = range;
     self.count += 1;
+
+    true
   }
 
   /// Exclude a range from the set.
@@ -99,32 +116,25 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   /// # Parameters
   ///
   /// * `excl` - The range to exclude.
-  /// * `align` - The alignment to use for the exclusion.
-  pub fn exclude_range(&mut self, excl: &Range, align: usize) {
-    if excl.size == 0 {
-      return;
-    }
-
+  pub fn exclude_range(&mut self, excl: &Range) {
     let mut i = 0usize;
 
     while i < self.count {
-      let split = self.ranges[i].split_range(excl, align);
-      let mut a_none = false;
-      let mut b_none = false;
+      let Ok(split) = self.ranges[i].split_range(excl) else {
+        return;
+      };
 
       // If the first element is valid, the current range can simply be
       // replaced.
       if let Some(a) = split.0 {
         self.ranges[i] = a;
-      } else {
-        a_none = true;
       }
 
       // If the second element is valid, but the first is not, simply replace
       // the current range. Otherwise, insert the new range after the current
       // range. If inserting, increment the index an extra time.
       if let Some(b) = split.1 {
-        if a_none {
+        if split.0.is_none() {
           self.ranges[i] = b;
         } else if self.count < SET_SIZE {
           self.ranges.copy_within(i..self.count, i + 1);
@@ -132,15 +142,13 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
           self.count += 1;
           i += 1;
         } else {
-          debug_assert!(false, "Could not split range; set is full.");
+          assert!(false, "Could not split range; set is full.");
         }
-      } else {
-        b_none = true;
       }
 
       // If neither element is valid, remove the current range. Do not increment
       // the index yet.
-      if a_none && b_none {
+      if split.0.is_none() && split.1.is_none() {
         self.ranges.copy_within((i + 1)..self.count, i);
         self.count -= 1;
         continue;
@@ -183,15 +191,19 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
     let mut i = 0usize;
 
     while i < self.count - 1 {
-      match self.ranges[i].cmp(&self.ranges[i + 1]) {
+      // Just unwrap the comparison. The interface ensures the ranges within the
+      // set are valid.
+      match self.ranges[i].cmp(&self.ranges[i + 1]).unwrap() {
         RangeOrder::Equal | RangeOrder::Contains => {
           // This range contains the next range, remove the next range.
           self.ranges.copy_within((i + 2)..self.count, i + 1);
         }
+
         RangeOrder::ContainedBy => {
           // The next range contains this range, remove this range.
           self.ranges.copy_within((i + 1)..self.count, i);
         }
+
         RangeOrder::Less | RangeOrder::Greater => {
           // This range overlaps the next. Union the ranges and remove the
           // extraneous range. Given that we know the ranges are sorted and
@@ -200,6 +212,7 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
             (self.ranges[i + 1].base + self.ranges[i + 1].size) - self.ranges[i].base;
           self.ranges.copy_within((i + 2)..self.count, i + 1);
         }
+
         // No overlap, move ahead.
         _ => i += 1,
       }

@@ -1,7 +1,5 @@
 //! Range data structure.
 
-use super::bits;
-
 /// Range ordering.
 ///
 /// * `MutuallyExclusiveLess` - Two ranges are mutually exclusive and the LHS
@@ -39,45 +37,49 @@ impl Range {
   ///
   /// # Returns
   ///
-  /// A range ordering.
-  pub fn cmp(&self, other: &Range) -> RangeOrder {
-    let my_end = self.base + self.size;
-    let their_end = other.base + other.size;
+  /// A range ordering or Err if the ranges are invalid.
+  pub fn cmp(&self, other: &Range) -> Result<RangeOrder, ()> {
+    if self.size == 0 || other.size == 0 {
+      return Err(());
+    }
+
+    let my_end = self.base + (self.size - 1);
+    let their_end = other.base + (other.size - 1);
 
     if self.base == other.base && self.size == other.size {
       // self  |---------------|
       // other |---------------|
-      return RangeOrder::Equal;
-    } else if my_end <= other.base {
+      return Ok(RangeOrder::Equal);
+    } else if my_end < other.base {
       // self  |-----|
       // other        |---------------|
       // Includes the case where other's base = self's end as the ends are not
       // inclusive.
-      return RangeOrder::MutuallyExclusiveLess;
-    } else if their_end <= self.base {
+      return Ok(RangeOrder::MutuallyExclusiveLess);
+    } else if their_end < self.base {
       // self                   |-----|
       // other |---------------|
       // Includes the case where self's base = other's end as the ends are not
       // inclusive.
-      return RangeOrder::MutuallyExclusiveGreater;
+      return Ok(RangeOrder::MutuallyExclusiveGreater);
     } else if self.base <= other.base && my_end >= their_end {
       // self  |---------------|
       // other  |-----|
       // Includes the case where the bases are exactly equal.
-      return RangeOrder::Contains;
+      return Ok(RangeOrder::Contains);
     } else if other.base <= self.base && their_end >= my_end {
       // self           |-----|
       // other |---------------|
       // Includes the case where the ends are exactly equal.
-      return RangeOrder::ContainedBy;
+      return Ok(RangeOrder::ContainedBy);
     } else if self.base < other.base {
       // self  |-----|
       // other    |---------------|
-      return RangeOrder::Less;
+      return Ok(RangeOrder::Less);
     } else {
       // self               |-----|
       // other |---------------|
-      return RangeOrder::Greater;
+      return Ok(RangeOrder::Greater);
     }
   }
 
@@ -86,7 +88,6 @@ impl Range {
   /// # Parameters
   ///
   /// * `excl` - The range to exclude.
-  /// * `align` - The alignment value to use.
   ///
   /// # Details
   ///
@@ -96,15 +97,15 @@ impl Range {
   /// * If the exclusion range fully encompasses the range, returns None for
   ///   both elements of the tuple.
   ///
-  /// * If the down page-aligned base, EE, of the exclusion range is greater
-  ///   than the range base, returns a new range in the first element of the
-  ///   tuple with the original base and a new size calculated using EE as the
+  /// * If the base of the exclusion range is greater than the range base,
+  ///   returns a new range in the first element of the tuple with the original
+  ///   base and a new size calculated using the exclusion range base as the
   ///   end. Otherwise, returns None in the first element of the tuple.
   ///
-  ///   If the up page-aligned end, EB, of the exclusion range is less than the
-  ///   range end, returns a new range in the second element of the tuple with
-  ///   EB as the base a new size calculated using the original end. Otherwise,
-  ///   returns None in the second element of the tuple.
+  ///   If the end of the exclusion range is less than the range end, returns a
+  ///   new range in the second element of the tuple with the exclusion range
+  ///   base as the base with a new size calculated using the original end.
+  ///   Otherwise, returns None in the second element of the tuple.
   ///
   /// The last case handles the exclusion range being fully encompassed by the
   /// range as well as the exclusion range overlapping either end of the range
@@ -113,61 +114,69 @@ impl Range {
   /// # Returns
   ///
   /// A tuple with the resulting range(s) of the split. See details.
-  pub fn split_range(&self, excl: &Range, align: usize) -> (Option<Range>, Option<Range>) {
-    let my_end = self.base + self.size;
-    let excl_end = excl.base + excl.size;
-    let order = self.cmp(excl);
+  pub fn split_range(&self, excl: &Range) -> Result<(Option<Range>, Option<Range>), ()> {
+    let order = self.cmp(excl)?;
 
     match order {
       // There is no overlap between this range and the exclusion range. Simply
       // return this range.
       RangeOrder::MutuallyExclusiveLess | RangeOrder::MutuallyExclusiveGreater => {
-        return (Some(*self), None);
+        return Ok((Some(*self), None));
       }
+
       // This range is either exactly equal to or fully contained by the
       // exclusion range. This range is complete excluded.
       RangeOrder::Equal | RangeOrder::ContainedBy => {
-        return (None, None);
+        return Ok((None, None));
       }
+
       _ => {}
     }
 
-    let ee = bits::align_down(excl.base, align);
-    let eb = bits::align_up(excl_end, align);
+    let my_end = self.base + (self.size - 1);
+    let excl_end = excl.base + (excl.size - 1);
 
+    // The following two cases are mutually exclusive in the comparison result.
+    //
     // self |---------------|
     // excl              |-----|
     //      |------------|
     //            a
-
+    //
     // self    |---------------|
     // excl |-----|
     //            |------------|
     //                  b
-
+    //
+    // However, if the exclusion range is fully contained, the result is the
+    // same as performing both of the above:
+    //
     // self |---------------|
     // excl     |-----|
     //      |---|     |-----|
     //        a          b
+    let a = match order {
+      RangeOrder::Less | RangeOrder::Contains => {
+        Some(Range {
+          base: self.base,
+          size: excl.base - self.base,
+        })
+      }
 
-    let a = if ee > self.base {
-      Some(Range {
-        base: self.base,
-        size: ee - self.base,
-      })
-    } else {
-      None
+      _ => None
     };
 
-    let b = if eb < my_end {
-      Some(Range {
-        base: eb,
-        size: my_end - eb,
-      })
-    } else {
-      None
+    let b = match order {
+      RangeOrder::Greater | RangeOrder::Contains => {
+        Some(Range {
+          base: excl_end,
+          size: my_end - excl_end,
+        })
+      }
+
+      _ => None
     };
 
-    (a, b)
+    Ok((a, b))
   }
 }

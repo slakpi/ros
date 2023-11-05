@@ -7,7 +7,10 @@ pub mod peripherals;
 pub mod task;
 
 use crate::peripherals::memory;
-use crate::support::{bits, dtb};
+use crate::support::{bits, dtb, range};
+
+/// Reserve the upper 128 MiB of the kernel segment for the high memory area.
+const HIGH_MEM_SIZE: usize = 128 * 1024 * 1024;
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -170,7 +173,7 @@ pub fn get_kernel_virtual_base() -> usize {
 ///
 /// # Returns
 ///
-/// Returns the bitwise NOT of the kernel base address.
+/// Returns the maximum physical address.
 pub fn get_max_physical_address() -> usize {
   unsafe { MAX_PHYSICAL_ADDRESS }
 }
@@ -210,13 +213,18 @@ fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
 ///
 /// The new end of the kernel page tables.
 fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
-  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
-  // let pages_end = init_kernel_memory_map(
-  //   get_kernel_virtual_base(),
-  //   pages_start,
-  //   pages_end,
-  //   &mem_layout,
-  // );
+  // Get the physical memory layout from the blob, then exclude kernel segment.
+  // No physical memory beyond the split can be used.
+  let mut mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+  let virt_base = get_kernel_virtual_base();
+  let excl = range::Range {
+    base: virt_base,
+    size: usize::MAX - virt_base + 1,
+  };
+
+  mem_layout.exclude_range(&excl);
+
+  let pages_end = init_kernel_memory_map(virt_base, pages_start, pages_end, &mem_layout);
 
   unsafe {
     MEM_LAYOUT = mem_layout;
@@ -236,54 +244,58 @@ fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) ->
 ///
 /// # Description
 ///
-/// The canonical 32-bit 3:1 virtual address space layout:
+/// The canonical 32-bit 2:2 and 3:1 virtual address space layouts suppored by
+/// the kernel:
 ///
-///   +-----------------+ 0xffff_ffff
-///   |                 |
-///   | Kernel Segment  | 1 GiB
-///   |                 |
-///   +-----------------+ 0xc000_0000
-///   |                 |
-///   |                 |
-///   |                 |
-///   |                 |
-///   | User Segment    | 3 GiB
-///   |                 |
-///   |                 |
-///   |                 |
-///   |                 |
-///   +-----------------+ 0x0000_0000
+///   +-----------------+ 0xffff_ffff       +-----------------+ 0xffff_ffff
+///   |                 |                   |                 |
+///   |                 |                   | Kernel Segment  | 1 GiB
+///   | Kernel Segment  | 2 GiB             |                 |
+///   |                 |                   +-----------------+ 0xc000_0000
+///   |                 |                   |                 |
+///   +-----------------+ 0x8000_0000       |                 |
+///   |                 |                   |                 |
+///   |                 |                   | User Segment    | 3 GiB
+///   | User Segment    | 2 GiB             |                 |
+///   |                 |                   |                 |
+///   |                 |                   |                 |
+///   +-----------------+ 0x0000_0000       +-----------------+ 0x0000_0000
 ///
-/// This, of course, means the user processes are limited to accessing 3 GiB of
-/// physical memory regardless of the actual amount of physical memory.
-///
-/// Furthermore, the kernel segment can only directly map at most 1 GiB of
-/// physical memory. The canonical way to handle this is to directly map up to
-/// 896 MiB of "low memory" into the kernel segment, then use the remaining
-/// 128 MiB of "high memory" for things and stuff.
-///
-/// Refer to `kernel_map_page_local()` and `kernel_unmap_page_local()` for a
-/// description of the temporary mappings area.
+/// Not all ARMv7a CPUs support the Large Physical Address Extensions required
+/// for the 3:1 split. For example, the Cortex A7 in the original Raspberry Pi
+/// 2's SoC does not support LPAE while the Cortex A53 in the second revision of
+/// the Raspberry Pi 2 does.
 ///
 /// Kernel segment layout:
 ///
 ///   +-----------------+ 0xffff_ffff    -+
 ///   | / / / / / / / / |                 |
+///   |.................| 0xffff_2000     |
+///   | Exception Stubs |                 |
 ///   |.................| 0xffff_1000     |
 ///   | Vectors         |                 |
-///   |.................| 0xffff_0000     |
-///   |                 |                 +- High Memory
-///   | ???             |                 |
+///   |.................| 0xffff_0000     +- High Memory
+///   |                 |                 |
+///   | Driver Mappings |                 |
 ///   |                 |                 |
 ///   |.................| 0xf800_1000     |
 ///   | Temp Mappings   |                 |
 ///   +-----------------+ 0xf800_0000    -+
 ///   |                 |                 |
+///  ...               ...                |
 ///   |                 |                 |
-///   | Fixed Mappings  | 896 MiB         +- Low Memory
+///   | Fixed Mappings  |                 +- Low Memory
 ///   |                 |                 |
-///   |                 |                 |
-///   +-----------------+ 0xc000_0000    -+
+///  ...               ...                |
+///   |                 | 0xc000_0000 or  |
+///   +-----------------+ 0x8000_0000    -+
+///
+/// The kernel's high memory area occupies the top 128 MiB of the kernel
+/// segment. The temp mappings area is reserved for thread-local temporary
+/// mappings through `kernel_map_local`. The driver mappings area is reserved
+/// for long-term mapping of memory areas that are not mapped in low memory. The
+/// exception vectors and stubs areas are simply mappings from the pages in the
+/// kernel that contain the vectors and stubs to the high vectors area.
 ///
 /// # Returns
 ///
@@ -294,5 +306,31 @@ fn init_kernel_memory_map(
   pages_end: usize,
   mem_layout: &memory::MemoryConfig,
 ) -> usize {
+  // Mask off the physical address range that cannot be mapped into the kernel
+  // segment. The amount of physical memory that can be mapped into the kernel
+  // segment is the size of the kernel segment minus the high memory area size.
+  let base = usize::MAX - virtual_base - HIGH_MEM_SIZE + 1;
+  let size = usize::MAX - base + 1;
+  let high_mem = range::Range {
+    base,
+    size,
+  };
+
+  let mut low_mem = *mem_layout;
+  low_mem.exclude_range(&high_mem);
+
+  let mut pages_end = pages_end;
+
+  for range in low_mem.get_ranges() {
+    pages_end = mm::direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      range.base,
+      range.size,
+      false,
+    );
+  }
+
   pages_end
 }
