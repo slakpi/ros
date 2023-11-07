@@ -147,7 +147,7 @@ skip_dtb_mapping:
 ///
 /// The section-aligned size.
 section_align_size:
-  // no fn_entry required.
+// no fn_entry required.
 
   mov     x9, #SECTION_SIZE - 1
   add     x0, x0, x9
@@ -156,7 +156,7 @@ section_align_size:
   neg     x9, x9
   and     x0, x0, x9
 
-  // no fn_exit required.
+// no fn_exit required.
   ret
 
 
@@ -198,27 +198,27 @@ init_tables:
 ///
 /// The address of the next page after the table.
 create_table_entry:
-  // no fn_entry required.
+// no fn_entry required.
 
-  // Shift the virtual address down and mask it with the entry count to get the
-  // entry index.
+// Shift the virtual address down and mask it with the entry count to get the
+// entry index.
   lsr     x9, x1, x2
   and     x9, x9, #TABLE_ENTRY_CNT - 1
 
-  // Get the pointer to the table at the next page. Assume the address is page-
-  // aligned, so the offset bits are already zero.
+// Get the pointer to the table at the next page. Assume the address is page-
+// aligned, so the offset bits are already zero.
   ldr     x10, =__page_size
   add     x10, x0, x10
 
-  // Create the entry.
+// Create the entry.
   orr     x10, x10, #MM_TYPE_PAGE_TABLE	
   str     x10, [x0, x9, lsl #3]
 
-  // Return the address of the next page table.
+// Return the address of the next page table.
   ldr     x10, =__page_size
   add     x0, x0, x10
 
-  // no fn_exit required.
+// no fn_exit required.
   ret
 
 
@@ -233,7 +233,7 @@ create_table_entry:
 /// * x3 - The last virtual address.
 /// * x4 - The entry flags.
 map_block:
-  // no fn_entry required.
+// no fn_entry required.
 
   lsr     x2, x2, #SECTION_SHIFT
   and     x2, x2, #TABLE_ENTRY_CNT - 1
@@ -248,5 +248,5 @@ map_block_loop:
   cmp     x2, x3
   b.ls    map_block_loop
 
-  // no fn_exit required.
+// no fn_exit required.
   ret

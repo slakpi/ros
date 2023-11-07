@@ -15,7 +15,7 @@
 /// The total size of the DTB or 0 if the blob is not a DTB.
 .global dtb_quick_check
 dtb_quick_check:
-  // no fn_entry required.
+// no fn_entry required.
 
   mov     x9, x0
   mov     x0, #0
@@ -31,5 +31,5 @@ dtb_quick_check:
   rev     w0, w0
 
 quick_dtb_check_exit:
-  // no fn_exit required.
+// no fn_exit required.
   ret

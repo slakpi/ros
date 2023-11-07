@@ -188,15 +188,15 @@ start_cpu_halt:
 validate_vmsplit:
   fn_entry
 
-  // A 2/2 split is OK regardless of LPAE support.
+// A 2/2 split is OK regardless of LPAE support.
   cmp     r0, #2
   beq     vmsplit_ok
 
-  // If not a 2/2 or 3/1 split, report an error.
+// If not a 2/2 or 3/1 split, report an error.
   cmp     r0, #3
   bne     vmsplit_error
 
-  // If a 3/1 split and no LPAE support, report an error.
+// If a 3/1 split and no LPAE support, report an error.
   bl      ext_has_long_descriptor_support
   cmp     r0, #0
   bne     vmsplit_error

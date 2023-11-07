@@ -78,11 +78,11 @@
 /// A TTBCR value appropriate for short page descriptors.
 .global mmu_make_ttbcr_value_short
 mmu_make_ttbcr_value_short:
-  // no fn_entry required.
+// no fn_entry required.
 
   ldr     r0, =TTBCR_VALUE
 
-  // no fn_exit required.
+// no fn_exit required.
   mov     pc, lr
 
 
@@ -214,7 +214,7 @@ skip_dtb_mapping:
 ///
 /// The section-aligned size.
 section_align_size:
-  // no fn_entry required.
+// no fn_entry required.
   ldr     r1, =SECTION_SIZE
   sub     r1, r1, #1
   add     r0, r0, r1
@@ -223,7 +223,7 @@ section_align_size:
   neg     r1, r1
   and     r0, r0, r1
 
-  // no fn_exit required.
+// no fn_exit required.
   mov     pc, lr
 
 
@@ -236,29 +236,29 @@ section_align_size:
 /// * r1 - The base address of the L2 table for the top 1 MiB.
 /// * r2 - The base address of the exception vectors.
 map_vectors:
-  // no fn_entry required.
+// no fn_entry required.
   push    {r4, r5}
 
-  // Entry 4095 is the last entry in the L1 table and covers the top 1 MiB of
-  // the virtual address space.
+// Entry 4095 is the last entry in the L1 table and covers the top 1 MiB of the
+// virtual address space.
   ldr     r4, =0x3ffc
 
-  // Write the L1 descriptor. The L2 table address is assumed to be aligned on a
-  // 1 KiB boundary.
+// Write the L1 descriptor. The L2 table address is assumed to be aligned on a
+// 1 KiB boundary.
   ldr     r5, =MMU_PAGE_PAGE_TABLE_FLAGS
   orr     r5, r5, r1
   str     r5, [r0, r4]
 
-  // Entry 240 covers the page at 0xffff_0000.
+// Entry 240 covers the page at 0xffff_0000.
   ldr     r4, =0x3c0
 
-  // Write the vectors L2 descriptor. The exception vectors are assumed to be
-  // aligned on a page.
+// Write the vectors L2 descriptor. The exception vectors are assumed to be
+// aligned on a page.
   ldr     r5, =MMU_L2_NORMAL_RO_PAGE_FLAGS
   orr     r5, r5, r2
   str     r5, [r1, r4]
 
-  // Write the stubs L2 descriptor.
+// Write the stubs L2 descriptor.
   ldr     r5, =MMU_L2_NORMAL_RO_PAGE_FLAGS
   ldr     r3, =__page_size
   add     r2, r2, r3
@@ -267,7 +267,7 @@ map_vectors:
   str     r5, [r1, r4]
 
   pop     {r4, r5}
-  // no fn_exit required.
+// no fn_exit required.
   mov     pc, lr
 
 
@@ -282,7 +282,7 @@ map_vectors:
 /// * r3 - The last virtual address.
 /// * stack - The entry flags.
 map_block:
-  // no fn_entry required.
+// no fn_entry required.
   push {r4, r5}
 
   ldr     r4, [sp, #8]
@@ -302,7 +302,7 @@ map_block_loop:
   bls     map_block_loop
 
   pop     {r4, r5}
-  // no fn_exit required.
+// no fn_exit required.
   mov     pc, lr
 
 
