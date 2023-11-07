@@ -138,12 +138,12 @@ endfunction()
 # defined, a 2:2 split is the default. No error checking is done here to prevent
 # specifying a split that the target CPU does not support.
 #-------------------------------------------------------------------------------
-function(get_kernel_virtual_base_address addr)
+function(get_kernel_virtual_base_address addr split)
   if(DEFINED RPI_VERSION)
-    rpi_get_kernel_virtual_base_address(tmp_addr)
+    rpi_get_kernel_virtual_base_address(tmp_addr tmp_split)
   else()
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-      set(tmp 0xffff000000000000)
+      set(tmp_addr 0xffff000000000000)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
       if(KERNEL_VMSPLIT EQUAL 3)
         set(tmp_addr 0xc0000000)
@@ -153,9 +153,12 @@ function(get_kernel_virtual_base_address addr)
         message(FATAL_ERROR "Invalid virtual memory split.")
       endif()
     endif()
+
+    set(tmp_split ${KERNEL_VMSPLIT})
   endif()
 
   set(${addr} ${tmp_addr} PARENT_SCOPE)
+  set(${split} ${tmp_split} PARENT_SCOPE)
 endfunction()
 
 #-------------------------------------------------------------------------------

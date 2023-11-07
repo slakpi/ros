@@ -1,6 +1,7 @@
 //! ARMv7a Linker Script
 
 __page_size = (KERNEL_PAGE_SIZE * 1024);
+__vmsplit = KERNEL_VMSPLIT;
 __virtual_start = KERNEL_VIRTUAL_BASE;
 __kernel_start = __virtual_start + KERNEL_BASE;
 

@@ -1,7 +1,6 @@
 //! ARMv7a Bootstrap
  
 #include "abi.h"
-#include "mmu.h"
 
 // SCTLR flags. See B4.1.130. Enable the MMU, expect exception vectors at the
 // high address (0xffff_0000), and enable the Access Flag.
@@ -57,14 +56,22 @@ _start:
   ldr     r2, =__bss_size
   bl      memset
 
+// Validate the CPU supports the compile-time split configuration. Halt the CPU
+// if it does not support the split.
+  ldr     r0, =__vmsplit
+  bl      validate_vmsplit
+  bne     start_cpu_halt
+
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
-// is a DTB, the DTB will be mapped into the bootstrap kernel pages.
+// is a DTB, the DTB will be mapped into the bootstrap kernel page tables.
   mov     r0, r6
   bl      dtb_quick_check
 
+// Create the bootstrap kernel page tables.
   mov     r1, r0
   mov     r0, r6
-  bl      mmu_create_kernel_pages
+  ldr     r2, =__vmsplit
+  bl      mmu_create_kernel_page_tables
 
 // Save off physical addresses needed for the kernel configuration struct.
   adr     r3, kernel_start_rel
@@ -87,7 +94,8 @@ _start:
   add     r0, r0, r1
   mcr     p15, 0, r0, c2, c0, 1
 
-  bl      make_ttbcr_value
+  ldr     r0, =__vmsplit
+  bl      mmu_make_ttbcr_value
   mcr     p15, 0, r0, c2, c0, 2
 
   ldr     r0, =DACR_VALUE
@@ -134,7 +142,7 @@ begin_virt_addressing:
 //   +------------------------------+ 24
 //   | Page table area size         |
 //   +------------------------------+ 28
-//   | / / / / / Padding / / / / /  |
+//   | Kernel Virtual Memory Split  |
 //   +------------------------------+ 32
   ldr     r2, =__virtual_start
   str     r2, [fp, #-32]
@@ -154,11 +162,11 @@ begin_virt_addressing:
   ldr     r1, =__kernel_pages_size
   str     r1, [fp, #-8]
 
-  mov     r1, #0
+  ldr     r1, =__vmsplit
   str     r1, [fp, #-4]
 
-// Restore the entry arguments and transfer control to the kernel stub. The stub
-// should not return. If it does, we will end up halting below.
+// Transfer control to the Rustland. The kernel should not return. If it does,
+// just halt the CPU.
   sub     r0, fp, #32
   bl      ros_kernel
 
@@ -167,22 +175,38 @@ start_cpu_halt:
 
 
 /*----------------------------------------------------------------------------*/
-/// Setup the TTBCR flags for the MMU.
+/// Verify that the CPU supports the compile-time virtual memory split
+/// configuration.
+///
+/// # Paramters
+///
+/// * r0 - The virtual memory split configured at compile-time.
 ///
 /// # Returns
 ///
-/// A TTBCR that enables the appropriate table registers and extended addressing
-/// as appropriate.
-///
-///   NOTE: Currently only configures TTBCR without using extended addressing.
-make_ttbcr_value:
+/// 0 if the configuration is supported, non-zero otherwise.
+validate_vmsplit:
   fn_entry
 
-  ldr     r1, =TTBCR_VALUE
+  // A 2/2 split is OK regardless of LPAE support.
+  cmp     r0, #2
+  beq     vmsplit_ok
 
-make_ttbcr_value_exit:
-  mov     r0, r1
+  // If not a 2/2 or 3/1 split, report an error.
+  cmp     r0, #3
+  bne     vmsplit_error
 
+  // If a 3/1 split and no LPAE support, report an error.
+  bl      ext_has_long_descriptor_support
+  cmp     r0, #0
+  bne     vmsplit_error
+
+vmsplit_ok:
+  mov     r0, #0
+  fn_exit
+
+vmsplit_error:
+  mov     r0, #1
   fn_exit
 
 

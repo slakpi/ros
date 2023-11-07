@@ -23,6 +23,7 @@ struct KernelConfig {
   kernel_size: usize,
   kernel_pages_start: usize,
   kernel_pages_size: usize,
+  kernel_vmsplit: usize,
 }
 
 /// Re-initialization guard.

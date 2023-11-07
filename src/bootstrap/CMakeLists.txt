@@ -4,7 +4,7 @@ include(platform)
 # Get the platform build configuration.
 #-------------------------------------------------------------------------------
 get_kernel_base_address(kernel_base)
-get_kernel_virtual_base_address(kernel_virtual_base)
+get_kernel_virtual_base_address(kernel_virtual_base kernel_vmsplit)
 get_kernel_stack_pages(kernel_stack_pages)
 get_kernel_page_size(kernel_page_size)
 
@@ -20,6 +20,7 @@ set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/boot.ld)
 add_custom_command(
   OUTPUT ${ld_out}
   COMMAND ${CMAKE_C_COMPILER} -DKERNEL_VIRTUAL_BASE=${kernel_virtual_base}
+                              -DKERNEL_VMSPLIT=${kernel_vmsplit}
                               -DKERNEL_BASE=${kernel_base}
                               -DKERNEL_STACK_PAGES=${kernel_stack_pages}
                               -DKERNEL_PAGE_SIZE=${kernel_page_size}

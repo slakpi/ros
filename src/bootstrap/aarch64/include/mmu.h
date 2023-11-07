@@ -37,21 +37,4 @@
 #define MAIR_EL1_VALUE                                                                             \
   ((MT_DEVICE_nGnRnE_FLAGS << (8 * MT_DEVICE_nGnRnE)) | (MT_NORMAL_NC_FLAGS << (8 * MT_NORMAL_NC)))
 
-// Page descriptor flags. See D8.3.2. Note: Bits 58:55 are reserved for
-// software use. Bit 6 is zero to deny access to EL0. Memory is RW if bit 7 is
-// 0, RO otherwise.
-#define MM_TYPE_PAGE_TABLE 0x3
-#define MM_TYPE_PAGE       0x3
-#define MM_TYPE_BLOCK      0x1
-#define MM_ACCESS_FLAG     (1 << 10)
-#define MM_ACCESS_RW       (0b00 << 6)
-#define MM_ACCESS_RO       (0b10 << 6)
-
-#define MMU_NORMAL_RO_FLAGS (MM_TYPE_BLOCK | (MT_NORMAL_NC << 2) | MM_ACCESS_RO | MM_ACCESS_FLAG)
-#define MMU_NORMAL_RW_FLAGS (MM_TYPE_BLOCK | (MT_NORMAL_NC << 2) | MM_ACCESS_RW | MM_ACCESS_FLAG)
-#define MMU_DEVICE_RO_FLAGS                                                                        \
-  (MM_TYPE_BLOCK | (MT_DEVICE_nGnRnE << 2) | MM_ACCESS_RO | MM_ACCESS_FLAG)
-#define MMU_DEVICE_RW_FLAGS                                                                        \
-  (MM_TYPE_BLOCK | (MT_DEVICE_nGnRnE << 2) | MM_ACCESS_RW | MM_ACCESS_FLAG)
-
 #endif

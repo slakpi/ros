@@ -96,7 +96,7 @@ _el1_entry:
 
 // Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
 // kernel page tables. If the blob is a DTB, the DTB will be mapped into the
-// bootstrap kernel pages.
+// bootstrap kernel page tables.
   ldr     x9, =0xffffffff
   and     x19, x19, x9
   mov     x0, x19
@@ -104,7 +104,7 @@ _el1_entry:
 
   mov     x1, x0            // dtb_quick_check return value to x1
   mov     x0, x19           // blob address to x0
-  bl      mmu_create_kernel_pages
+  bl      mmu_create_kernel_page_tables
 
 // Save off physical addresses needed for the kernel configuration struct.
   adrp    x21, __kernel_start
@@ -183,8 +183,8 @@ begin_virt_addressing:
   mov     x10, #0
   stp     x9, x10, [x29, #-16]
 
-// Transfer control to the kernel stub. The stub should not return. If it does,
-// we will end up halting below.
+// Transfer control to the Rustland. The kernel should not return. If it does,
+// just halt the CPU.
   sub     x0, x29, #64
   bl      ros_kernel
 

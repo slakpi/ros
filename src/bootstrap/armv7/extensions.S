@@ -9,8 +9,8 @@
 /// # Returns
 ///
 /// 0 if the CPU supports long table table descriptors, non-zero otherwise.
-.global ext_has_long_descriptors
-ext_has_long_descriptors:
+.global ext_has_long_descriptor_support
+ext_has_long_descriptor_support:
   // no fn_entry required.
 
   mrc     p15, 0, r0, c0, c1, 4
