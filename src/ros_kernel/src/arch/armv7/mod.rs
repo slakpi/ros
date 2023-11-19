@@ -3,14 +3,16 @@
 pub mod debug;
 pub mod exceptions;
 pub mod mm;
-pub mod peripherals;
 pub mod task;
 
-use crate::peripherals::memory;
+use crate::peripherals::{memory, soc};
 use crate::support::{bits, dtb, range};
 
 /// Reserve the upper 128 MiB of the kernel segment for the high memory area.
 const HIGH_MEM_SIZE: usize = 128 * 1024 * 1024;
+
+/// Base address for long-term mappings made by drivers.
+const DRIVER_VIRTUAL_BASE: usize = 0xfff8_1000;
 
 /// Basic kernel configuration provided by the bootstrap code. All address are
 /// physical.
@@ -23,7 +25,6 @@ struct KernelConfig {
   kernel_size: usize,
   kernel_pages_start: usize,
   kernel_pages_size: usize,
-  kernel_vmsplit: usize,
 }
 
 /// Re-initialization guard.
@@ -85,28 +86,31 @@ pub fn init(config: usize) {
 
   // Calculate the blob address and its size. There is no need to do any real
   // error checking on the size. If the blob is not valid,
-  // `init_memory_layout()` will panic. If the blob is an ATAG list, there is no
-  // need to include it in the exclusion list as it will be part of the kernel
-  // area exclusion.
+  // `init_physical_memory_mappings()` will panic. If the blob is an ATAG list,
+  // there is no need to include it in the exclusion list as it will be part of
+  // the kernel area exclusion.
   let blob_addr = config.virtual_base + config.blob;
   let blob_size = dtb::DtbReader::check_dtb(blob_addr)
     .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
-  // Initialize the real SoC memory layout.
-  // pages_end = init_soc(config.kernel_pages_start, pages_end, blob_addr);
-
-  // Initialize the Mini UART.
+  // Initialize the SoC memory mappings.
   //
-  //   TODO: Remove this once the Mini UART is able to configure itself using
-  //         the DTB.
-  // base::set_peripheral_base_addr(config.virtual_base + 0x7e00_0000);
+  //   TODO: Eventually this can be replaced by drivers mapping memory on
+  //         demand. For now, just tell the peripherals they are mapped to the
+  //         beginning of the driver mapping area.
+  pages_end = init_soc_mappings(config.kernel_pages_start, pages_end, blob_addr);
+  // base::set_peripheral_base_addr(config.virtual_base + DRIVER_VIRTUAL_BASE);
   // mini_uart::init();
 
   // debug_print!("=== ROS (ARM) ===\n");
 
-  pages_end = init_memory_layout(config.kernel_pages_start, pages_end, blob_addr);
+  // Initialize the physical memory mappings.
+  pages_end = init_physical_memory_mappings(config.kernel_pages_start, pages_end, blob_addr);
+
+  // Initialize the page allocation exclusions.
+  init_exclusions(pages_end, config.blob, blob_size);
 }
 
 /// Get the physical memory layout.
@@ -187,17 +191,34 @@ pub fn get_max_physical_address() -> usize {
 /// * `pages_end` - The end of the kernel's page tables.
 /// * `blob_addr` - The ATAGs or DTB blob address.
 ///
+/// # Description
+///
+///   TODO: Eventually this will be replaced by the drivers mapping memory on
+///         demand.
+///
 /// # Returns
 ///
 /// The new end of the kernel page tables.
-fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
-  // let soc_layout = soc::get_soc_memory_layout(blob_addr).unwrap();
-  // peripherals::init(
-  //   get_kernel_virtual_base(),
-  //   pages_start,
-  //   pages_end,
-  //   &soc_layout,
-  // )
+fn init_soc_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+  let soc_layout = soc::get_soc_memory_layout(blob_addr).unwrap();
+  let virtual_base = get_kernel_virtual_base();
+  let page_size = get_page_size();
+  let mut pages_end = pages_end;
+  let mut driver_base = DRIVER_VIRTUAL_BASE;
+
+  for mapping in soc_layout.get_mappings() {
+    pages_end = mm::map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      driver_base,
+      mapping.cpu_base,
+      mapping.size,
+      true,
+    );
+
+    driver_base += bits::align_up(mapping.size, page_size);
+  }
 
   pages_end
 }
@@ -213,7 +234,7 @@ fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
 /// # Returns
 ///
 /// The new end of the kernel page tables.
-fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+fn init_physical_memory_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   // Get the physical memory layout from the blob, then exclude kernel segment.
   // No physical memory beyond the split can be used.
   let mut mem_layout = memory::get_memory_layout(blob_addr).unwrap();
@@ -232,6 +253,34 @@ fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) ->
   }
 
   pages_end
+}
+
+/// Initialize the physical memory exclusion list.
+///
+/// # Parameters
+///
+/// * `kernel_size` - The size of the kernel area.
+/// * `blob_addr` - The ATAG or DTB blob address.
+/// * `blob_size` - The ATAG or DTB blob size.
+///
+/// # Description
+///
+/// The kernel area is assumed to start at address 0.
+fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
+  let excl_layout = memory::MemoryConfig::new_with_ranges(&[
+    range::Range {
+      base: 0,
+      size: kernel_size,
+    },
+    range::Range {
+      base: blob_addr,
+      size: blob_size,
+    },
+  ]);
+
+  unsafe {
+    EXCL_LAYOUT = excl_layout;
+  }
 }
 
 /// Initialize kernel memory map.
@@ -298,6 +347,9 @@ fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) ->
 /// exception vectors and stubs areas are simply mappings from the pages in the
 /// kernel that contain the vectors and stubs to the high vectors area.
 ///
+///   TODO: What about kernel thread stacks? Presumably these could be part of
+///         the task structures allocated in the low memory area, maybe?
+///
 /// # Returns
 ///
 /// The new end of the page table area.
@@ -312,10 +364,7 @@ fn init_kernel_memory_map(
   // segment is the size of the kernel segment minus the high memory area size.
   let base = usize::MAX - virtual_base - HIGH_MEM_SIZE + 1;
   let size = usize::MAX - base + 1;
-  let high_mem = range::Range {
-    base,
-    size,
-  };
+  let high_mem = range::Range { base, size };
 
   let mut low_mem = *mem_layout;
   low_mem.exclude_range(&high_mem);

@@ -3,7 +3,6 @@
 pub mod debug;
 pub mod exceptions;
 pub mod mm;
-pub mod peripherals;
 pub mod task;
 
 use crate::debug_print;
@@ -83,29 +82,28 @@ pub fn init(config: usize) {
 
   // Calculate the blob address and its size. There is no need to do any real
   // error checking on the size. If the blob is not valid,
-  // `init_memory_layout()` will panic. If the blob is an ATAG list, there is no
-  // need to include it in the exclusion list as it will be part of the kernel
-  // area exclusion.
+  // `init_physical_memory_mappings()` will panic. If the blob is an ATAG list,
+  // there is no need to include it in the exclusion list as it will be part of
+  // the kernel area exclusion.
   let blob_addr = config.virtual_base + config.blob;
   let blob_size = dtb::DtbReader::check_dtb(blob_addr)
     .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
-  // Initialize the real SoC memory layout.
-  pages_end = init_soc(config.kernel_pages_start, pages_end, blob_addr);
-
-  // Initialize the Mini UART.
+  // Initialize the SoC memory mappings.
   //
-  //   TODO: Remove this once the Mini UART is able to configure itself using
-  //         the DTB.
+  //   TODO: Eventually this can be replaced by drivers mapping memory on
+  //         demand. For now, since we are just linearly mapping, use the
+  //         default location of the Broadcom SoC on a Raspberry Pi 2 and 3.
+  pages_end = init_soc_mappings(config.kernel_pages_start, pages_end, blob_addr);
   base::set_peripheral_base_addr(config.virtual_base + 0x3f00_0000);
   mini_uart::init();
 
   debug_print!("=== ROS (AArch64) ===\n");
 
-  // Now initialize the physical memory layout.
-  pages_end = init_memory_layout(config.kernel_pages_start, pages_end, blob_addr);
+  // Now initialize the physical memory mappings.
+  pages_end = init_physical_memory_mappings(config.kernel_pages_start, pages_end, blob_addr);
 
   // Initialize the page allocation exclusions.
   init_exclusions(pages_end, config.blob, blob_size);
@@ -189,17 +187,31 @@ pub fn get_max_physical_address() -> usize {
 /// * `pages_end` - The end of the kernel's page tables.
 /// * `blob_addr` - The ATAGs or DTB blob address.
 ///
+/// # Description
+///
+///   TODO: Eventually this will be replaced by the drivers mapping memory on
+///         demand.
+///
 /// # Returns
 ///
 /// The new end of the kernel page tables.
-fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+fn init_soc_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   let soc_layout = soc::get_soc_memory_layout(blob_addr).unwrap();
-  peripherals::init(
-    get_kernel_virtual_base(),
-    pages_start,
-    pages_end,
-    &soc_layout,
-  )
+  let virtual_base = get_kernel_virtual_base();
+  let mut pages_end = pages_end;
+
+  for mapping in soc_layout.get_mappings() {
+    pages_end = mm::direct_map_memory(
+      virtual_base,
+      pages_start,
+      pages_end,
+      mapping.cpu_base,
+      mapping.size,
+      true,
+    );
+  }
+
+  pages_end
 }
 
 /// Initialize the physical memory layout.
@@ -213,7 +225,7 @@ fn init_soc(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
 /// # Returns
 ///
 /// The new end of the kernel page tables.
-fn init_memory_layout(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
+fn init_physical_memory_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
   let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
   let pages_end = init_kernel_memory_map(
     get_kernel_virtual_base(),

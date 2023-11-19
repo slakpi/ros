@@ -1,14 +1,14 @@
 //! ARMv7a Architecture Extesions
 
 #define ID_MMFR0_VMSA_MASK 0xf
-#define VMSAv7_WITH_LONG_DESCRIPTORS 0b0101
+#define VMSAv7_WITH_LONG_DESCRIPTORS 5
 
 /*----------------------------------------------------------------------------*/
 /// Check for long page table descriptor support.
 ///
 /// # Returns
 ///
-/// 0 if the CPU supports long table table descriptors, non-zero otherwise.
+/// 0 if the CPU supports long page table descriptors, non-zero otherwise.
 .global ext_has_long_descriptor_support
 ext_has_long_descriptor_support:
 // no fn_entry required.

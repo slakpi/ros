@@ -156,25 +156,21 @@ impl Range {
     //      |---|     |-----|
     //        a          b
     let a = match order {
-      RangeOrder::Less | RangeOrder::Contains => {
-        Some(Range {
-          base: self.base,
-          size: excl.base - self.base,
-        })
-      }
+      RangeOrder::Less | RangeOrder::Contains => Some(Range {
+        base: self.base,
+        size: excl.base - self.base,
+      }),
 
-      _ => None
+      _ => None,
     };
 
     let b = match order {
-      RangeOrder::Greater | RangeOrder::Contains => {
-        Some(Range {
-          base: excl_end,
-          size: my_end - excl_end,
-        })
-      }
+      RangeOrder::Greater | RangeOrder::Contains => Some(Range {
+        base: excl_end,
+        size: my_end - excl_end,
+      }),
 
-      _ => None
+      _ => None,
     };
 
     Ok((a, b))

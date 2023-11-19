@@ -142,7 +142,7 @@ begin_virt_addressing:
 //   +------------------------------+ 24
 //   | Page table area size         |
 //   +------------------------------+ 28
-//   | Kernel Virtual Memory Split  |
+//   | / / / / / Padding / / / / /  |
 //   +------------------------------+ 32
   ldr     r2, =__virtual_start
   str     r2, [fp, #-32]
@@ -162,7 +162,7 @@ begin_virt_addressing:
   ldr     r1, =__kernel_pages_size
   str     r1, [fp, #-8]
 
-  ldr     r1, =__vmsplit
+  mov     r1, #0
   str     r1, [fp, #-4]
 
 // Transfer control to the Rustland. The kernel should not return. If it does,
