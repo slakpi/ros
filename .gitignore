@@ -3,3 +3,4 @@
 !.vscode/cmake-kits.json
 build
 **/.DS_Store
+.wt
