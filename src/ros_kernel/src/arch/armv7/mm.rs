@@ -412,9 +412,9 @@ fn make_pointer_entry(phys_addr: usize, use_lpae: bool) -> (usize, usize) {
 ///
 /// # Details
 ///
-///     TODO: For now, memory management will just assume 4 KiB pages. The
-///           bootstrap code will have already configured the MMU and provided
-///           the page size in the kernel configuration struct.
+///     TODO: For now, memory management will just assume 4 KiB pages. The start
+///           code will have already configured the MMU and provided the page
+///           size in the kernel configuration struct.
 ///
 /// ARMv7a provides two independent registers for address translation so that
 /// the kernel does not need to be mapped into the translation tables for every

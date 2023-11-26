@@ -90,10 +90,10 @@ SECTIONS
   // The L1 table must be aligned on a 16 KiB boundary.
   . = ALIGN(16 * 1024);
 
-  // Reserve 16 KiB for the kernel's bootstrap virtual page table. The L1 table
-  // has 4,096 32-bit entries to cover 4 GiB with 1 MiB sections when not using
-  // Large Physical Address Extensions. Reserve a single L2 page that will be
-  // used to map the exception vectors to the high vectors area.
+  // Reserve space for the kernel's initial page tables. The L1 table has 4,096
+  // 32-bit entries to cover 4 GiB with 1 MiB sections when not using Large
+  // Physical Address Extensions. Reserve a single L2 page that will be used to
+  // map the exception vectors to the high vectors area.
   .data.pages :
   {
     __kernel_pages_start = .;
@@ -107,7 +107,7 @@ SECTIONS
   // See above.
   . = ALIGN(16 * 1024);
 
-  // See above. Refer to bootstrap/aarch64/boot.ld.in regarding identity pages.
+  // See above. Refer to `start/aarch64/boot.ld.in` regarding identity pages.
   .data.id_pages :
   {
     __kernel_id_pages_start = .;

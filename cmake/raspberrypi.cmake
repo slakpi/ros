@@ -91,9 +91,9 @@ endfunction()
 # Get the kernel virtual base address for the Raspberry Pi version specified on
 # the command line.
 #
-#   NOTE: The ARMv7 bootstrap code uses short page descriptors for the 2:2 split
-#         and long page descriptors for the 3:1 split. This is entirely a
-#         temporary thing just to test setting up both types of tables.
+#   NOTE: The ARMv7 start code uses short page descriptors for the 2:2 split and
+#         long page descriptors for the 3:1 split. This is entirely a temporary
+#         thing just to test setting up both types of tables.
 #-------------------------------------------------------------------------------
 function(rpi_get_kernel_virtual_base_address addr split)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
@@ -102,7 +102,7 @@ function(rpi_get_kernel_virtual_base_address addr split)
     if (DEFINED KERNEL_VMSPLIT)
       # If KERNEL_VMSPLIT specifies anything other than a 3:1 or 2:2 split,
       # we'll catch it below. If the CPU does not support a 3:1 split, we'll
-      # catch it at runtime in the bootstrap code and halt.
+      # catch it at runtime in the start code and halt.
       set(tmp_split ${KERNEL_VMSPLIT})
     else()
       # The Cortex A7 used by the original Raspberry Pi 2 and the Cortex A53

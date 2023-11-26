@@ -1,4 +1,4 @@
-//! AArch64 Bootstrap
+//! AArch64 Start
 
 #include "abi.h"
 #include "mmu.h"
@@ -80,8 +80,8 @@ _el2_entry:
 ///
 /// # Description
 ///
-/// Runs once when the kernel drops from EL2 to EL1 during bootstrap. All
-/// subsequent exception level changes will be EL0 -> EL1 or EL1 -> EL0.
+/// Runs once when the kernel drops from EL2 to EL1 during start. All subsequent
+/// exception level changes will be EL0 -> EL1 or EL1 -> EL0.
 _el1_entry:
 // Temporary stack setup before turning on the MMU.
   adrp    x9, __kernel_stack_start
@@ -96,7 +96,7 @@ _el1_entry:
 
 // Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
 // kernel page tables. If the blob is a DTB, the DTB will be mapped into the
-// bootstrap kernel page tables.
+// initial kernel page tables.
   ldr     x9, =0xffffffff
   and     x19, x19, x9
   mov     x0, x19

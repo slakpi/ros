@@ -10,13 +10,13 @@ get_kernel_page_size(kernel_page_size)
 
 #-------------------------------------------------------------------------------
 # Generate the linker script by using the C pre-processor to replace literal
-# definitions in the `boot.ld.in` file.
+# definitions in the `start.ld.in` file.
 #   -E    Pre-process only.
 #   -P    Inhibit line markers (not calling on C source code)
 #   -x c  Treat as C source code.
 #-------------------------------------------------------------------------------
-set(ld_in ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/boot.ld.in)
-set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/boot.ld)
+set(ld_in ${CMAKE_CURRENT_LIST_DIR}/${CMAKE_SYSTEM_PROCESSOR}/start.ld.in)
+set(ld_out ${CMAKE_CURRENT_BINARY_DIR}/start.ld)
 add_custom_command(
   OUTPUT ${ld_out}
   COMMAND ${CMAKE_C_COMPILER} -DKERNEL_VIRTUAL_BASE=${kernel_virtual_base}

@@ -1,4 +1,4 @@
-//! ARMv7a Page Table Bootstrap
+//! ARMv7a Page Table Setup
 
 #include "abi.h"
 
@@ -33,7 +33,7 @@ mmu_make_ttbcr_value:
 
 
 /*----------------------------------------------------------------------------*/
-/// Create the bootstrap kernel page tables.
+/// Create the initial kernel page tables.
 ///
 /// # Parameters
 ///

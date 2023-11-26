@@ -1,4 +1,4 @@
-//! ARMv7a Bootstrap
+//! ARMv7a Start
  
 #include "abi.h"
 

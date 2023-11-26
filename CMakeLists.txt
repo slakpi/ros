@@ -10,6 +10,6 @@ validate_platform()
 rust_arch_target(Rust_CARGO_TARGET)
 add_subdirectory(cmake/corrosion)
 
-add_subdirectory(src/bootstrap)
 add_subdirectory(src/ros_kernel)
 add_subdirectory(src/ros_user)
+add_subdirectory(src/start)

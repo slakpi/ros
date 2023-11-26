@@ -1,4 +1,4 @@
-//! ARMv7a Page Table Bootstrap without Large Physical Address Extensions
+//! ARMv7a Page Table Setup without Large Physical Address Extensions
 
 #include "abi.h"
 
@@ -87,7 +87,7 @@ mmu_make_ttbcr_value_short:
 
 
 /*----------------------------------------------------------------------------*/
-/// Create the bootstrap kernel page tables using short descriptors.
+/// Create the initial kernel page tables using short descriptors.
 ///
 /// # Parameters
 ///

@@ -277,8 +277,8 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 /// # Details
 ///
 ///     TODO: For now, memory management will just assume 4 KiB pages. The
-///           bootstrap code will have already configured the MMU and provided
-///           the page size in the kernel configuration struct.
+///           start code will have already configured the MMU and provided the
+///           page size in the kernel configuration struct.
 ///
 /// AArch64 provides two independent registers for address translation so that
 /// the kernel does not need to be mapped into the translation tables for every

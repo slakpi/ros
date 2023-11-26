@@ -1,9 +1,12 @@
 #-------------------------------------------------------------------------------
-# AArch64 kernel bootstrap code.
+# ARMv7a kernel start code.
 #-------------------------------------------------------------------------------
 add_executable(
-  kernel boot.S
-         dtb.S
+  kernel dtb.S
          exceptions.S
-         pages.S)
+         extensions.S
+         pages_long.S
+         pages_short.S
+         pages.S
+         start.S)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)

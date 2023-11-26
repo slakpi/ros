@@ -17,7 +17,7 @@ fn panic(info: &PanicInfo) -> ! {
 /// # Parameters
 ///
 /// * `config` - Pointer to the kernel configuration struct provided by the
-///   bootstrap
+///   start code.
 ///
 /// # Returns
 ///

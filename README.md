@@ -4,27 +4,30 @@ ROS
 Introduction
 ------------
 
-ROS... Call it "Rust OS," "Raspberry Pi OS," "Randy OS," whatever. This project
-is an interpretation of several Raspberry Pi bare metal C programming tutorials
-written in Rust...with some ARM assembly and C bootstrapping, of course. See the
-`References` section for a list of tutorial links.
+ROS... Call it "Rust OS," "Raspberry Pi OS," "Randy OS," whatever. It is not a
+unique acronym among Rust kernel/OS projects. This project is an interpretation
+of several Raspberry Pi bare metal C programming tutorials written in Rust with
+some assembly start code, of course. See the `References` section for a list of
+tutorial links.
 
 Building
 --------
 
 ROS requires CMake 3.19 or higher and includes Corrosion as a submodule. The GCC
 and Rust ARM toolchains are required to do the actual compilation. ROS includes
-two CMake toolchain files to do most of the configuration for AArch64 or ARMv7.
+CMake toolchain files and scripts to do most of the configuration for AArch64 or
+ARMv7. The scripts also handle Raspberry Pi specific configuration.
 
-ROS is currently setup to support AArch64 for Raspberry Pi 3 and 4 boards, and
-ARMv7 for Raspberry Pi 2 boards. Typical CMake configuration commands are:
+ROS is currently setup to support AArch64 for Raspberry Pi 2 (rev. 1.2), 3, and
+4 boards; and ARMv7 for Raspberry Pi 2 (rev. 1.1) boards. Typical CMake
+configuration commands are:
 
     cmake -B build/aarch64 \
           -G Ninja \
           -DRPI_VERSION=3 \
           -DQEMU_BUILD=True \
           -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-none-elf.cmake \
-          -DTC_PATH=$HOME/.local/cross/gnu-aarch64-none-elf \
+          -DTC_PATH=$HOME/.local/cross \
           -DCMAKE_BUILD_TYPE=Debug .
 
 or:
@@ -34,12 +37,16 @@ or:
           -DRPI_VERSION=2 \
           -DQEMU_BUILD=True \
           -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
-          -DTC_PATH=$HOME/.local/cross/gnu-arm-none-eabi \
+          -DTC_PATH=$HOME/.local/cross \
           -DCMAKE_BUILD_TYPE=Debug .
 
-These assume Ninja as the build tool, the official ARM GCC toolchainsinstalled
-in the path specified for `TC_PATH`, and the appropriate Rust toolchain
-installed in a discoverable location.
+These assume:
+
+* Ninja as the build tool
+* The official ARM GCC toolchains are installed under:
+  * AArch64: `${TC_PATH}/gnu-aarch64-none-elf`
+  * ARM: `${TC_PATH}/gnu-arm-none-eabi`
+* The appropriate Rust toolchain installed in a discoverable location.
 
 `rustup` is highly recommended for installing the Rust toolchains. The AArch64
 build requires the `aarch64-unknown-none` Rust toolchain and the ARMv7 build
@@ -53,16 +60,29 @@ or:
 
     cmake --build build/armv7
 
-The build will create a file named `kernel` that is the executable and the raw
-kernel binary, either: `kernel7.img` (ARMv7) or `kernel8.img` (AArch64).
+The build will generate a kernel image appropriate to the platform. Currently:
+
+* AArch64: `kernel8.img`
+* ARMv7 (Raspberry Pi 4): `kernel7l.img`
+* ARMv7 (Raspberry Pi 2 or 3): `kernel7.img`
+* Unknown Platform: `kernel.img`
+
+Visual Studio Code
+------------------
+
+The `.vscode` directory contains a CMake configuration file for Visual Studio
+Code's CMake extensions. The README in that folder briefly explains how to setup
+a local `settings.json` file to simplify building ROS with Code.
 
 Running with QEMU
 -----------------
 
 The `QEMU_BUILD` variable must be set to `True` when building to run the kernel
-in QEMU. Technically, for AArch64 it doesn't matter. However, the QEMU profile
-for the Raspberry Pi 2 expects the kernel at 0x10000 rather than 0x8000 like the
-actual hardware. Start QEMU with:
+in QEMU. This flag instructs platform configuration scripts to adjust the kernel
+base address as necessary for QEMU. For example, QEMU's Raspberry Pi 2 profile
+expects the kernel at `0x10000` rather than `0x8000`.
+
+Start QEMU with:
 
     qemu-system-aarch64 -M raspi3b \
                         -kernel build/aarch64/src/boot/kernel8.img \

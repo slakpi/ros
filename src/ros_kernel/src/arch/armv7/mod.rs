@@ -14,7 +14,7 @@ const HIGH_MEM_SIZE: usize = 128 * 1024 * 1024;
 /// Base address for long-term mappings made by drivers.
 const DRIVER_VIRTUAL_BASE: usize = 0xfff8_1000;
 
-/// Basic kernel configuration provided by the bootstrap code. All address are
+/// Basic kernel configuration provided by the start code. All address are
 /// physical.
 #[repr(C)]
 struct KernelConfig {
@@ -52,8 +52,7 @@ static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 ///
 /// # Parameters
 ///
-/// * `config` - The kernel configuration address provided by the bootstrap
-///   code.
+/// * `config` - The kernel configuration address provided by the start code.
 ///
 /// # Description
 ///

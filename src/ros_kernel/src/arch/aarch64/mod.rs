@@ -9,7 +9,7 @@ use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{bits, dtb, range};
 
-/// Basic kernel configuration provided by the bootstrap code. All address are
+/// Basic kernel configuration provided by the start code. All address are
 /// physical.
 #[repr(C)]
 struct KernelConfig {
@@ -48,8 +48,7 @@ static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 ///
 /// # Parameters
 ///
-/// * `config` - The kernel configuration address provided by the bootstrap
-///   code.
+/// * `config` - The kernel configuration address provided by the start code.
 ///
 /// # Description
 ///

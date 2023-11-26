@@ -1,4 +1,4 @@
-//! ARMv7a Page Table Bootstrap with Large Physical Address Extensions
+//! ARMv7a Page Table Setup with Large Physical Address Extensions
 //!
 //!   NOTE: Currently this code only configures a 3:1 split. It should be
 //!         generalized to support 2:2 and 1:3 splits.
@@ -82,8 +82,7 @@ mmu_make_ttbcr_value_long:
 
 
 /*----------------------------------------------------------------------------*/
-/// Create the bootstrap kernel page tables using Large Physical Address
-/// Extensions.
+/// Create the initial kernel page tables using long descriptors.
 ///
 /// # Parameters
 ///
@@ -95,7 +94,7 @@ mmu_make_ttbcr_value_long:
 /// Maps the kernel and, as necessary, the DTB into 2 MiB sections. The kernel
 /// will re-map the pages after determining the memory layout.
 ///
-/// The mapping will use LPAE and long page table descriptors. The bootstrap
+/// The mapping will use LPAE and long page table descriptors. The start code
 /// should have already set the TTBR0/TTBR1 split. This code only needs to know
 /// the virtual base address to choose the correct L1 table entry.
 .global mmu_create_kernel_page_tables_long

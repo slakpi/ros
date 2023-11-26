@@ -1,4 +1,4 @@
-//! AArch64 Page Table Bootstrap
+//! AArch64 Page Table Setup
 
 #include "abi.h"
 #include "mmu.h"
@@ -44,7 +44,7 @@
 
 
 /*----------------------------------------------------------------------------*/
-/// Create the bootstrap kernel page tables.
+/// Create the initial kernel page tables.
 ///
 /// # Parameters
 ///
