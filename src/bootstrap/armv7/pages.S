@@ -62,6 +62,17 @@ mmu_create_kernel_page_tables:
   fn_exit
 
 
+/*----------------------------------------------------------------------------*/
+/// Setup the translation table registers before enabling the MMU.
+///
+/// # Parameters
+///
+/// * r0 - The kernel virtual memory split.
+///
+/// # Description
+///
+/// Wraps `mmu_setup_ttbr_short` and `mmu_setup_ttbr_long`. Does nothing if r0
+/// is not 2 or 3.
 .global mmu_setup_ttbr
 mmu_setup_ttbr:
   fn_entry
@@ -79,6 +90,17 @@ mmu_setup_ttbr:
   fn_exit
 
 
+/*----------------------------------------------------------------------------*/
+/// Cleanup the translation table registers after enabling the MMU.
+///
+/// # Parameters
+///
+/// * r0 - The kernel virtual memory split.
+///
+/// # Description
+///
+/// Wraps `mmu_cleanup_ttbr_short` and `mmu_cleanup_ttbr_long`. Does nothing if
+/// r0 is not 2 or 3.
 .global mmu_cleanup_ttbr
 mmu_cleanup_ttbr:
   fn_entry

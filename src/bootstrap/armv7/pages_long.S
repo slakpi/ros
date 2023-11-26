@@ -135,29 +135,20 @@ mmu_create_kernel_page_tables_long:
 // Initialize the indirect memory attributes
   bl      init_mair
 
-// Map the 1 GiB blocks for the identity and kernel tables and save off the base
-// addresses for the level 2 identity and kernel tables.
-  adr     r7, kernel_pages_start_rel
+// Initialize the tables. Since TTBCR configures a 3:1 split, TTBR0 is expected
+// to cover more than 1 GiB and the MMU will start translation through TTBR0 at
+// L1. Translation through TTBR1, however, will start at L2.
+  adr     r0, kernel_pages_start_rel
   ldr     r1, kernel_pages_start_rel
-  add     r7, r7, r1
+  add     r0, r0, r1
+  mov     r10, r0
 
-  mov     r10, r7
-  ldr     r1, =__page_size
-  add     r10, r10, r1
-
-  adr     r11, kernel_id_pages_start_rel
+  adr     r0, kernel_id_pages_start_rel
   ldr     r1, kernel_id_pages_start_rel
-  add     r11, r11, r1
-
-  mov     r0, r7
-  mov     r1, r10
-  ldr     r2, =__virtual_start
+  add     r0, r0, r1
+  eor     r1, r1
   bl      init_table
-
-  mov     r0, r7
-  mov     r1, r11
-  eor     r2, r2
-  bl      init_table
+  mov     r11, r0
 
 // Map the kernel area as RW normal memory.
 //
@@ -247,35 +238,40 @@ init_mair:
 
 
 /*----------------------------------------------------------------------------*/
-/// Initialize a 1 GiB block.
+/// Initialize the L1 table with a single 1 GiB L2 table at the base of the
+/// virtual address space.
 ///
 /// # Parameters
 ///
-/// * r0 - The base address of the L1 table.
-/// * r1 - The base address of the L2 table.
-/// * r2 - The base address of the virtual address space.
+/// * r0 - The base address of the L1.
+/// * r1 - The base address of the virtual address space.
+///
+/// # Returns
+///
+/// The address of the next page after the table.
 init_table:
 // no fn_entry required.
 
-// Shift the virtual address down and mask it with the entry count to get the
-// entry index. Shift the entry index left by 3 since the entries are 64-bit.
-  lsr     r2, r2, #L1_SHIFT
-  and     r2, r2, #L1_TABLE_ENTRY_CNT - 1
-  lsl     r2, r2, #3
+// Get the entry address.
+  lsr     r2, r1, #L1_SHIFT // Top two bits are the index.
+  lsl     r2, r2, #3        // 8 bytes per entry
+  add     r2, r0, r2        // Add the base address
+
+// Get the L2 table address. Copy the table address to r0 as the return value.
+  ldr     r1, =__page_size
+  add     r1, r0, r1
+  mov     r0, r1
 
 // Create the entry. The descriptor has to be split between two 32-bit
-// registers. r1 will be the lower 32-bits and the upper 32-bits will be 0. The
-// table pointer is technically 28-bits (40-bits shifted down by 12-bits),
-// however our physical table address is only 32-bits. The 20-bits of the
-// address in r1 are the complete pointer and none of the upper attribute flags
-// need to be set.
+// registers. r1 will be the lower 32-bits and the upper 32-bits will be 0 since
+// our physical address does not need the extra 8 bits and we do not need to set
+// any of the upper attributes.
   orr     r1, r1, #MM_TYPE_PAGE_TABLE
 
 // Store the entry in the table.
-  add     r0, r0, r2
-  str     r1, [r0], #4      // Lower 32-bits
-  eor     r1, r1, r1        // Zero the upper 32-bits
-  str     r1, [r0], #4      // Upper 32-bits
+  eor     r3, r3
+  str     r1, [r2], #4      // Lower 32-bits
+  str     r3, [r2], #4      // Upper 32-bits
 
 // no fn_exit required.
   mov     pc, lr
@@ -320,33 +316,48 @@ map_block:
   mov     pc, lr
 
 
+/*----------------------------------------------------------------------------*/
+/// Setup the translation table registers before enabling the MMU.
+///
+/// # Description
+///
+/// Sets up TTBR0 with the identity tables and TTBR1 with the kernel tables.
 .global mmu_setup_ttbr_long
 mmu_setup_ttbr_long:
 // no fn_entry required.
 
+// Set TTBR1 to the kernel pages.
   adr     r0, kernel_pages_start_rel
   ldr     r1, kernel_pages_start_rel
   add     r0, r0, r1
-  mcr     p15, 0, r0, c2, c0, 0
+  eor     r1, r1
+  mcrr    p15, 1, r0, r1, c2
 
-  eor     r0, r0
-  mcr     p15, 0, r0, c2, c0, 1
+// Set TTBR0 to the identity pages.
+  adr     r0, kernel_id_pages_start_rel
+  ldr     r1, kernel_id_pages_start_rel
+  add     r0, r0, r1
+  eor     r1, r1
+  mcrr    p15, 0, r0, r1, c2
 
 // no fn_exit required.
   mov     pc, lr
 
 
+/*----------------------------------------------------------------------------*/
+/// Cleanup the translation table registers after enabling the MMU.
+///
+/// # Description
+///
+/// Zeros out TTBR0 leaving TTBR1 with the kernel pages.
 .global mmu_cleanup_ttbr_long
 mmu_cleanup_ttbr_long:
 // no fn_entry required.
 
-  adr     r0, kernel_pages_start_rel
-  ldr     r1, kernel_pages_start_rel
-  add     r0, r0, r1
-
+// Zero out TTBR0.
+  eor     r0, r0
   eor     r1, r1
-  str     r1, [r0], #4
-  str     r1, [r0], #4
+  mcrr    p15, 0, r0, r1, c2
 
 // no fn_exit required.
   mov     pc, lr

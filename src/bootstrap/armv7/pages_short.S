@@ -317,6 +317,12 @@ map_block:
   mov     pc, lr
 
 
+/*----------------------------------------------------------------------------*/
+/// Setup the translation table registers before enabling the MMU.
+///
+/// # Description
+///
+/// Sets up TTBR0 with the identity tables and TTBR1 with the kernel tables.
 .global mmu_setup_ttbr_short
 mmu_setup_ttbr_short:
 // no fn_entry required.
@@ -335,6 +341,12 @@ mmu_setup_ttbr_short:
   mov     pc, lr
 
 
+/*----------------------------------------------------------------------------*/
+/// Cleanup the translation table registers after enabling the MMU.
+///
+/// # Description
+///
+/// Zeros out TTBR0 leaving TTBR1 with the kernel pages.
 .global mmu_cleanup_ttbr_short
 mmu_cleanup_ttbr_short:
 // no fn_entry required.
