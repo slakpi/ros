@@ -25,6 +25,7 @@ struct KernelConfig {
   kernel_size: usize,
   kernel_pages_start: usize,
   kernel_pages_size: usize,
+  using_lpae: usize,
 }
 
 /// Re-initialization guard.
@@ -47,6 +48,9 @@ static mut VIRTUAL_BASE: usize = 0;
 
 /// Max physical address.
 static mut MAX_PHYSICAL_ADDRESS: usize = 0;
+
+/// Using Large Physical Address Extensions
+static mut USING_LPAE: bool = false;
 
 /// ARMv7a platform configuration.
 ///
@@ -81,6 +85,7 @@ pub fn init(config: usize) {
     PAGE_SHIFT = bits::floor_log2(config.page_size);
     VIRTUAL_BASE = config.virtual_base;
     MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
+    USING_LPAE = config.using_lpae != 0;
   }
 
   // Calculate the blob address and its size. There is no need to do any real
@@ -180,6 +185,21 @@ pub fn get_kernel_virtual_base() -> usize {
 /// Returns the maximum physical address.
 pub fn get_max_physical_address() -> usize {
   unsafe { MAX_PHYSICAL_ADDRESS }
+}
+
+/// Did the start code configure the kernel address space using LPAE?
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed. Therefore, read access is safe
+///         and sound.
+///
+/// # Returns
+///
+/// True if the start code configured the address space with LPAE.
+pub fn is_using_lpae() -> bool {
+  unsafe { USING_LPAE }
 }
 
 /// Initialize the SoC memory layout.

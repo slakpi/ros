@@ -1,11 +1,7 @@
 //! ARMv7a Memory Management
 
-use super::task;
+use super::{is_using_lpae, task};
 use core::{cmp, ptr, slice};
-
-extern "C" {
-  fn ext_has_long_descriptor_support() -> usize;
-}
 
 const PAGE_SHIFT: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
@@ -95,7 +91,7 @@ pub fn direct_map_memory(
     base,
     size,
     device,
-    has_lpae(),
+    is_using_lpae(),
   )
 }
 
@@ -135,7 +131,7 @@ pub fn map_memory(
     base,
     size,
     device,
-    has_lpae(),
+    is_using_lpae(),
   )
 }
 
@@ -186,15 +182,6 @@ pub fn kernel_map_page_local(_: &mut task::Task, virtual_base: usize, page: usiz
 /// mappings are thread-local, so the function is thread safe.
 pub fn kernel_unmap_page_local(_: &mut task::Task) {
   debug_assert!(false);
-}
-
-/// Check if the CPU supports Large Physical Address Extensions.
-///
-/// # Returns
-///
-/// True if the CPU supports LPAE, false otherwise.
-fn has_lpae() -> bool {
-  unsafe { ext_has_long_descriptor_support() == 0 }
 }
 
 /// Allocates a new page table if necessary, then fills the table with entries
@@ -442,6 +429,10 @@ fn make_pointer_entry(phys_addr: usize, use_lpae: bool) -> (usize, usize) {
 ///
 /// Additionally, LPAE allows configuring the MMU to increase the size of the
 /// user address space making a 3:1 split possible.
+///
+///     NOTE: The MMU will AUTOMATICALLY skip Level 1 translation if the size of
+///           a segment is 1 GiB or less. In a 3:1 split, the MMU expects that
+///           TTBR1 points directly to the kernel segment's Level 2 table.
 ///
 /// Refer to the AArch64 version of `fill_table`. The table arrangement is
 /// different with/out LPAE, but the logic is the same.
