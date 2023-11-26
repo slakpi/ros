@@ -19,17 +19,18 @@ mmu_make_ttbcr_value:
 
   mov     r1, r0
   cmp     r1, #3
-  bne     ttbcr_not_3to1
+  bne     1f
   bl      mmu_make_ttbcr_value_long
-  b       ttbcr_exit
-ttbcr_not_3to1:
-  mov     r0, #0
+  b       2f
+1:
+  eor     r0, r0
   cmp     r1, #2
-  bne     ttbcr_exit
+  bne     2f
   bl      mmu_make_ttbcr_value_short
 
-ttbcr_exit:
+2:
   fn_exit
+
 
 /*----------------------------------------------------------------------------*/
 /// Create the bootstrap kernel page tables.
@@ -49,13 +50,47 @@ mmu_create_kernel_page_tables:
   fn_entry
 
   cmp     r2, #3
-  bne     pages_not_3to1
+  bne     1f
   bl      mmu_create_kernel_page_tables_long
-  b       pages_exit
-pages_not_3to1:
+  b       2f
+1:
   cmp     r2, #2
-  bne     pages_exit
+  bne     2f
   bl      mmu_create_kernel_page_tables_short
 
-pages_exit:
+2:
+  fn_exit
+
+
+.global mmu_setup_ttbr
+mmu_setup_ttbr:
+  fn_entry
+
+  cmp     r0, #3
+  bne     1f
+  bl      mmu_setup_ttbr_long
+  b       2f
+1:
+  cmp     r0, #2
+  bne     2f
+  bl      mmu_setup_ttbr_short
+
+2:
+  fn_exit
+
+
+.global mmu_cleanup_ttbr
+mmu_cleanup_ttbr:
+  fn_entry
+
+  cmp     r0, #3
+  bne     1f
+  bl      mmu_cleanup_ttbr_long
+  b       2f
+1:
+  cmp     r0, #2
+  bne     2f
+  bl      mmu_cleanup_ttbr_short
+
+2:
   fn_exit

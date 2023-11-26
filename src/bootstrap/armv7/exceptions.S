@@ -93,5 +93,5 @@ _trap_exception:
   bl      trap_exception    // Transfer to Rustland
   // For now just halt.
   // kernel_exit
-halt:
-  b       halt
+1:
+  b       1b

@@ -89,29 +89,30 @@ endfunction()
 
 #-------------------------------------------------------------------------------
 # Get the kernel virtual base address for the Raspberry Pi version specified on
-# the command line. KERNEL_VMSPLIT can override the default 3:1 split for CPUs
-# that support LPAE and force a 2:2 split. However, KERNEL_VMSPLIT cannot force
-# a 3:1 split on CPUs that do not support LPAE.
+# the command line.
+#
+#   NOTE: The ARMv7 bootstrap code uses short page descriptors for the 2:2 split
+#         and long page descriptors for the 3:1 split. This is entirely a
+#         temporary thing just to test setting up both types of tables.
 #-------------------------------------------------------------------------------
 function(rpi_get_kernel_virtual_base_address addr split)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(${addr} 0xffff000000000000 PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
     if (DEFINED KERNEL_VMSPLIT)
+      # If KERNEL_VMSPLIT specifies anything other than a 3:1 or 2:2 split,
+      # we'll catch it below. If the CPU does not support a 3:1 split, we'll
+      # catch it at runtime in the bootstrap code and halt.
       set(tmp_split ${KERNEL_VMSPLIT})
     else()
-      if(RPI_VERSION MATCHES "^(2_2|3|4)$")
-        # The Cortex A53 and later support LPAE; default to a 3:1 split.
-        set(tmp_split 3)
-      elseif(RPI_VERSION STREQUAL "2")
-        # The Cortex A7 does not support LPAE; default to a 2:2 split.
-        set(tmp_split 2)
-      endif()
+      # The Cortex A7 used by the original Raspberry Pi 2 and the Cortex A53
+      # used by the Raspberry Pi's 2 (rev 1.2), 3, and 4 support LPAE, so just
+      # default to a 3:1 split. In the case of the 2, 2 (rev 1.2), and 3, this
+      # may NOT be the optimal split.
+      set(tmp_split 3)
     endif()
-
-    if(RPI_VERSION STREQUAL "2" AND tmp_split EQUAL 3)
-      message(FATAL_ERROR "Cortex A7 does not support a 3:1 split.")
-    elseif(tmp_split EQUAL 3)
+    
+    if(tmp_split EQUAL 3)
       set(${addr} 0xc0000000 PARENT_SCOPE)
     elseif(tmp_split EQUAL 2)
       set(${addr} 0x80000000 PARENT_SCOPE)

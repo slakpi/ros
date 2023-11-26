@@ -40,7 +40,7 @@ _start:
   mrc     p15, 0, r0, c0, c0, 5
   and     r0, r0, #3
   cmp     r0, #0
-  bne     start_cpu_halt
+  bne     cpu_halt
 
 // Temporary stack setup before turning on the MMU.
   adr     r0, kernel_stack_start_rel
@@ -52,7 +52,7 @@ _start:
   adr     r0, bss_start_rel
   ldr     r1, bss_start_rel
   add     r0, r0, r1
-  mov     r1, #0
+  eor     r1, r1
   ldr     r2, =__bss_size
   bl      memset
 
@@ -60,7 +60,7 @@ _start:
 // if it does not support the split.
   ldr     r0, =__vmsplit
   bl      validate_vmsplit
-  bne     start_cpu_halt
+  bne     cpu_halt
 
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
 // is a DTB, the DTB will be mapped into the bootstrap kernel page tables.
@@ -82,17 +82,9 @@ _start:
   ldr     r5, kernel_pages_start_rel
   add     r4, r4, r5
 
-// Setup the MMU. The identity map in TTBR0 is going to allow us to get to the
-// next instruction after we switch on the MMU. 
-  adr     r0, kernel_id_pages_start_rel
-  ldr     r1, kernel_id_pages_start_rel
-  add     r0, r0, r1
-  mcr     p15, 0, r0, c2, c0, 0
-
-  adr     r0, kernel_pages_start_rel
-  ldr     r1, kernel_pages_start_rel
-  add     r0, r0, r1
-  mcr     p15, 0, r0, c2, c0, 1
+// Setup the MMU and enable it.
+  ldr     r0, =__vmsplit
+  bl      mmu_setup_ttbr
 
   ldr     r0, =__vmsplit
   bl      mmu_make_ttbcr_value
@@ -111,13 +103,11 @@ _start:
   isb
 
 // Jump using our first virtual address to switch the program counter over to
-// virtual addressing. Once the program counter is using virtual addresses,
-// clear TTBR0, we no longer need the temporary identity map.
+// virtual addressing.
   bx      r5
 begin_virt_addressing:
-  mov     r0, #0
-  mcr     p15, 0, r0, c2, c0, 0
-  isb
+  ldr     r0, =__vmsplit
+  bl      mmu_cleanup_ttbr
 
 // Real stack setup.
   ldr     r0, =__kernel_stack_start
@@ -162,7 +152,7 @@ begin_virt_addressing:
   ldr     r1, =__kernel_pages_size
   str     r1, [fp, #-8]
 
-  mov     r1, #0
+  eor     r1, r1
   str     r1, [fp, #-4]
 
 // Transfer control to the Rustland. The kernel should not return. If it does,
@@ -170,8 +160,8 @@ begin_virt_addressing:
   sub     r0, fp, #32
   bl      ros_kernel
 
-start_cpu_halt:
-  b       start_cpu_halt
+cpu_halt:
+  b       cpu_halt
 
 
 /*----------------------------------------------------------------------------*/
@@ -190,22 +180,22 @@ validate_vmsplit:
 
 // A 2/2 split is OK regardless of LPAE support.
   cmp     r0, #2
-  beq     vmsplit_ok
+  beq     1f
 
 // If not a 2/2 or 3/1 split, report an error.
   cmp     r0, #3
-  bne     vmsplit_error
+  bne     2f
 
 // If a 3/1 split and no LPAE support, report an error.
   bl      ext_has_long_descriptor_support
   cmp     r0, #0
-  bne     vmsplit_error
+  bne     2f
 
-vmsplit_ok:
-  mov     r0, #0
+1:
+  eor     r0, r0
   fn_exit
 
-vmsplit_error:
+2:
   mov     r0, #1
   fn_exit
 
