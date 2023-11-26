@@ -54,16 +54,16 @@ _start:
 // Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
   mrs     x9, mpidr_el1
   and     x9, x9, #0xff
-  cbnz    x9, start_cpu_halt
+  cbnz    x9, cpu_halt
 
 // Configure the processor exception levels. The bootloader should have dropped
 // us into EL2, so returning from this exception handler will jump to EL1 after
 // configuration.
-  bl      _init_kernel_el
+  bl      init_kernel_el
   eret 
 
-start_cpu_halt:
-  b       start_cpu_halt
+cpu_halt:
+  b       cpu_halt
 
 
 .section ".text"
@@ -71,7 +71,7 @@ start_cpu_halt:
 
 /*----------------------------------------------------------------------------*/
 /// Dummy entry point for EL3 -> E2.
-_el2_entry:
+el2_entry:
   eret
 
 
@@ -82,7 +82,7 @@ _el2_entry:
 ///
 /// Runs once when the kernel drops from EL2 to EL1 during start. All subsequent
 /// exception level changes will be EL0 -> EL1 or EL1 -> EL0.
-_el1_entry:
+el1_entry:
 // Temporary stack setup before turning on the MMU.
   adrp    x9, __kernel_stack_start
   mov     sp, x9
@@ -194,36 +194,36 @@ el1_cpu_halt:
 
 /*----------------------------------------------------------------------------*/
 /// Initialize the kernel in the correct exception level.
-_init_kernel_el:
+init_kernel_el:
   mrs     x9, CurrentEL
   lsr     x9, x9, #2
 
   cmp     x9, #1
-  beq     in_el1            // Skip EL2 initialization if already in EL1
+  beq     1f                // Skip EL2 initialization if already in EL1
   cmp     x9, #2
-  beq     in_el2            // Skip EL3 initialization if already in EL2
+  beq     2f                // Skip EL3 initialization if already in EL2
 
-in_el3:
+3:
   ldr     x9, =SCR_EL3_DEFAULT
   msr     scr_el3, x9
 
   ldr     x9, =SPSR_EL3_DEFAULT
   msr     spsr_el3, x9
 
-  adr     x9, _el2_entry
+  adr     x9, el2_entry
   msr     elr_el3, x9
 
-in_el2:
+2:
   ldr     x9, =HCR_EL2_DEFAULT
   msr     hcr_el2, x9
 
   ldr     x9, =SPSR_EL2_DEFAULT
   msr     spsr_el2, x9
 
-  adr     x9, _el1_entry
+  adr     x9, el1_entry
   msr     elr_el2, x9
 
-in_el1:
+1:
   ldr     x9, =SCTLR_EL1_DEFAULT
   msr     sctlr_el1, x9
 

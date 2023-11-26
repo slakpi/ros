@@ -241,12 +241,12 @@ map_block:
   and     x3, x3, #TABLE_ENTRY_CNT - 1
   lsr     x1, x1, #SECTION_SHIFT
   orr     x1, x4, x1, lsl #SECTION_SHIFT
-map_block_loop:
+1:
   str     x1, [x0, x2, lsl #3]
   add     x2, x2, #1
   add     x1, x1, #SECTION_SIZE
   cmp     x2, x3
-  b.ls    map_block_loop
+  b.ls    1b
 
 // no fn_exit required.
   ret

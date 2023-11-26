@@ -25,11 +25,11 @@ dtb_quick_check:
 
   ldr     w11, =DTB_MAGIC
   cmp     w10, w11
-  b.ne    quick_dtb_check_exit
+  b.ne    1f
 
   ldr     w0, [x9, #4]
   rev     w0, w0
 
-quick_dtb_check_exit:
+1:
 // no fn_exit required.
   ret
