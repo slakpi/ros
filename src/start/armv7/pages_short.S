@@ -156,17 +156,6 @@ mmu_create_kernel_page_tables_short:
   eor     r3, r3
   bl      map_vectors
 
-// Setup TTBR0 and TTBR 1.
-  adr     r0, kernel_id_pages_start_rel
-  ldr     r1, kernel_id_pages_start_rel
-  add     r0, r0, r1
-  mcr     p15, 0, r11, c2, c0, 0
-
-  adr     r0, kernel_pages_start_rel
-  ldr     r1, kernel_pages_start_rel
-  add     r0, r0, r1
-  mcr     p15, 0, r10, c2, c0, 1
-
 // Map the kernel area as RW normal memory.
 //
 //   TODO: The code should probably be separate from the stack and page tables

@@ -21,8 +21,8 @@
 #define MM_TYPE_PAGE       0x3
 #define MM_TYPE_BLOCK      0x1
 #define MM_ACCESS_FLAG     (0x1 << 10)
-#define MM_ACCESS_RW       (0x0 << 15)
-#define MM_ACCESS_RO       (0x1 << 15)
+#define MM_ACCESS_RW       (0x0 << 6)
+#define MM_ACCESS_RO       (0x2 << 6)
 
 #define MM_DEVICE_ATTR     0x04
 #define MM_NORMAL_ATTR     0x44
@@ -32,10 +32,19 @@
 #define MM_NORMAL_MAIR_IDX (0x0 << 2)
 #define MM_DEVICE_MAIR_IDX (0x1 << 2)
 
-#define MMU_NORMAL_RO_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RO | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
-#define MMU_NORMAL_RW_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
-#define MMU_DEVICE_RO_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RO | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
-#define MMU_DEVICE_RW_FLAGS (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_NORMAL_RO_BLOCK_FLAGS                                                                  \
+  (MM_TYPE_BLOCK | MM_ACCESS_RO | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_NORMAL_RW_BLOCK_FLAGS                                                                  \
+  (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_DEVICE_RO_BLOCK_FLAGS                                                                  \
+  (MM_TYPE_BLOCK | MM_ACCESS_RO | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_DEVICE_RW_BLOCK_FLAGS                                                                  \
+  (MM_TYPE_BLOCK | MM_ACCESS_RW | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
+
+#define MMU_NORMAL_RO_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RO | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_NORMAL_RW_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RW | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_DEVICE_RO_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RO | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
+#define MMU_DEVICE_RW_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RW | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
 
 /// 2 MiB section virtual address layout:
 ///
@@ -149,6 +158,19 @@ mmu_create_kernel_page_tables_long:
   bl      init_table
   mov     r11, r0
 
+// Map the vectors.
+  adr     r7, kernel_exception_vectors_start_rel
+  ldr     r1, kernel_exception_vectors_start_rel
+  add     r7, r7, r1
+
+  mov     r0, r10
+  mov     r1, r7
+  bl      map_vectors
+
+  mov     r0, r11
+  mov     r1, r7
+  bl      map_vectors
+
 // Map the kernel area as RW normal memory.
 //
 //   TODO: The code should probably be separate from the stack and page tables
@@ -158,7 +180,7 @@ mmu_create_kernel_page_tables_long:
   ldr     r2, =__virtual_start
   add     r3, r2, r6
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RW_FLAGS
+  ldr     r7, =MMU_NORMAL_RW_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -168,7 +190,7 @@ mmu_create_kernel_page_tables_long:
   eor     r2, r2
   add     r3, r2, r6
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RW_FLAGS
+  ldr     r7, =MMU_NORMAL_RW_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -186,7 +208,7 @@ mmu_create_kernel_page_tables_long:
   add     r2, r2, r4
   add     r3, r2, r5
   sub     r3, r3, #1
-  ldr     r7, =MMU_NORMAL_RO_FLAGS
+  ldr     r7, =MMU_NORMAL_RO_BLOCK_FLAGS
   push    {r7}
   bl      map_block
   pop     {r7}
@@ -216,6 +238,57 @@ section_align_size:
   ldr     r1, =SECTION_SIZE
   neg     r1, r1
   and     r0, r0, r1
+
+// no fn_exit required.
+  mov     pc, lr
+
+
+/*----------------------------------------------------------------------------*/
+/// Map the exception vector page.
+///
+/// # Parameters
+///
+/// * r0 - The base address of the L2 table for the top 1 GiB.
+/// * r1 - The base address of the exception vectors.
+///
+/// # Description
+///
+///     NOTE: Assumes that the page after the L2 table is free.
+///
+/// Creates a L3 table with entries for the exception vector pages.
+map_vectors:
+// no fn_entry required.
+
+// Get the address for the new L3 table.
+  ldr     r2, =__page_size
+  add     r2, r2, r0
+  orr     r2, r2, #MM_TYPE_PAGE_TABLE
+
+// Entry 511 in the L2 table covers the last 2 MiB of the address space.
+  ldr     r3, =0xff8
+  add     r3, r0, r3
+  str     r2, [r3], #4
+  eor     r2, r2
+  str     r2, [r3], #4
+
+// r3 now points to the L3 table and entry 496 covers the page at 0xffff_0000.
+  mov     r0, r3
+  ldr     r3, =0xf80
+  add     r3, r0, r3
+
+// Make the descriptor for the vectors.
+  ldr     r2, =MMU_NORMAL_RO_PAGE_FLAGS
+  orr     r1, r1, r2
+  eor     r2, r2
+  str     r1, [r3], #4
+  str     r2, [r3], #4
+
+// Make the descriptor for the stubs.
+  ldr     r2, =__page_size
+  add     r1, r1, r2
+  eor     r2, r2
+  str     r1, [r3], #4
+  str     r2, [r3], #4
 
 // no fn_exit required.
   mov     pc, lr
@@ -364,6 +437,8 @@ mmu_cleanup_ttbr_long:
 
 /*----------------------------------------------------------------------------*/
 /// See boot.S.
+kernel_exception_vectors_start_rel:
+  .word __kernel_exception_vectors_start - kernel_exception_vectors_start_rel
 kernel_id_pages_start_rel:
   .word __kernel_id_pages_start - kernel_id_pages_start_rel
 kernel_id_pages_end_rel:
