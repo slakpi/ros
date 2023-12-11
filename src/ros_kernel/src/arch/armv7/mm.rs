@@ -1,18 +1,11 @@
 //! ARMv7a Memory Management
 
-use super::{is_using_lpae, task};
+use super::{task};
 use core::{cmp, ptr, slice};
 
 const PAGE_SHIFT: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 const PAGE_MASK: usize = PAGE_SIZE - 1;
-
-const LEVEL_1_SHIFT_SHORT: usize = 20;
-const LEVEL_1_INDEX_SHIFT_SHORT: usize = 12;
-const LEVEL_1_INDEX_MASK_SHORT: usize = (1 << LEVEL_1_INDEX_SHIFT_SHORT) - 1;
-const LEVEL_2_SHIFT_SHORT: usize = 12;
-const LEVEL_2_INDEX_SHIFT_SHORT: usize = 8;
-const LEVEL_2_INDEX_MASK_SHORT: usize = (1 << LEVEL_2_INDEX_SHIFT_SHORT) - 1;
 
 const LEVEL_1_SHIFT_LONG: usize = 30;
 const LEVEL_2_SHIFT_LONG: usize = 21;
@@ -20,27 +13,9 @@ const LEVEL_3_SHIFT_LONG: usize = 12;
 const INDEX_SHIFT_LONG: usize = 9;
 const INDEX_MASK_LONG: usize = (1 << INDEX_SHIFT_LONG) - 1;
 
-/// Without LPAE, the Level 1 table has 4096 32-bit entries and the Level 2
-/// table has 256 32-bit entries.
-const LEVEL_1_TABLE_SIZE_SHORT: usize = 4096 * 4;
-const LEVEL_2_TABLE_SIZE_SHORT: usize = 256 * 4;
-
 /// With LPAE, the Level 1 table only has 4 entries, but let it use an entire
 /// 4 KiB page so that it matches the Level 2 and 3 table sizes.
 const TABLE_SIZE_LONG: usize = 512 * 8;
-
-const ADDR_MASK_SHORT: usize = 0xffff_fc00;
-const MM_PAGE_TABLE_FLAG_SHORT: usize = 0x1 << 0;
-const MM_BLOCK_FLAG_SHORT: usize = 0x2 << 0;
-const MM_PAGE_FLAG_SHORT: usize = 0x2 << 0;
-const MM_L1_ACCESS_FLAG_SHORT: usize = 0x1 << 10;
-const MM_L1_ACCESS_RW_SHORT: usize = 0x0 << 15;
-const MM_L1_ACCESS_RO_SHORT: usize = 0x1 << 15;
-const MM_L2_ACCESS_FLAG_SHORT: usize = 0x1 << 4;
-const MM_L2_ACCESS_RW_SHORT: usize = 0x0 << 9;
-const MM_L2_ACCESS_RO_SHORT: usize = 0x1 << 9;
-const MM_DEVICE_MEM_SHORT: usize = 0x1 << 2;
-const MM_NORMAL_MEM_SHORT: usize = 0x2 << 2;
 
 const ADDR_MASK_LONG: usize = 0xffff_f000;
 const MM_PAGE_TABLE_FLAG_LONG: usize = 0x3 << 0;
@@ -91,7 +66,6 @@ pub fn direct_map_memory(
     base,
     size,
     device,
-    is_using_lpae(),
   )
 }
 
@@ -131,7 +105,6 @@ pub fn map_memory(
     base,
     size,
     device,
-    is_using_lpae(),
   )
 }
 
@@ -198,7 +171,6 @@ pub fn kernel_unmap_page_local(_: &mut task::Task) {
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
@@ -213,10 +185,9 @@ fn alloc_table_and_fill(
   base: usize,
   size: usize,
   device: bool,
-  use_lpae: bool,
 ) -> (usize, usize, usize) {
-  let next_level = get_next_table(table_level, use_lpae).unwrap();
-  let mut next_addr = get_phys_addr_from_descriptor(desc, desc_high, use_lpae);
+  let next_level = get_next_table(table_level).unwrap();
+  let mut next_addr = get_phys_addr_from_descriptor(desc, desc_high);
   let mut desc = desc;
   let mut desc_high = desc_high;
   let mut pages_end = pages_end;
@@ -224,8 +195,8 @@ fn alloc_table_and_fill(
   // TODO: It is probably fine to overwrite a section descriptor. If the memory
   //       configuration is overwriting itself, then we probably have something
   //       wrong and a memory trap is the right outcome.
-  if is_pointer_entry(desc, desc_high, use_lpae) {
-    let table_size = get_table_size(table_level, use_lpae).unwrap();
+  if is_pointer_entry(desc, desc_high) {
+    let table_size = get_table_size(table_level);
     next_addr = pages_end;
     pages_end += table_size;
 
@@ -235,7 +206,7 @@ fn alloc_table_and_fill(
       ptr::write_bytes((virtual_base + next_addr) as *mut u8, 0, table_size);
     }
 
-    (desc, desc_high) = make_pointer_entry(next_addr, use_lpae);
+    (desc, desc_high) = make_pointer_entry(next_addr);
   }
 
   (
@@ -250,7 +221,6 @@ fn alloc_table_and_fill(
       base,
       size,
       device,
-      use_lpae,
     ),
   )
 }
@@ -261,24 +231,15 @@ fn alloc_table_and_fill(
 /// # Parameters
 ///
 /// * `table_level` - The current table level.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
 /// The next table level. None if Level 2 is specified (no LPAE) or Level 3 is
 /// is specified (with LPAE).
-fn get_next_table(table_level: TableLevel, use_lpae: bool) -> Option<TableLevel> {
+fn get_next_table(table_level: TableLevel) -> Option<TableLevel> {
   match table_level {
     TableLevel::Level1 => Some(TableLevel::Level2),
-
-    TableLevel::Level2 => {
-      if use_lpae {
-        Some(TableLevel::Level3)
-      } else {
-        None
-      }
-    }
-
+    TableLevel::Level2 => Some(TableLevel::Level3),
     TableLevel::Level3 => None,
   }
 }
@@ -289,7 +250,6 @@ fn get_next_table(table_level: TableLevel, use_lpae: bool) -> Option<TableLevel>
 ///
 /// * `desc` - The descriptor.
 /// * `desc_high` - High 32-bits of a long descriptor (0 if LPAE not supported).
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Description
 ///
@@ -299,12 +259,8 @@ fn get_next_table(table_level: TableLevel, use_lpae: bool) -> Option<TableLevel>
 /// # Returns
 ///
 /// The physical address.
-fn get_phys_addr_from_descriptor(desc: usize, _desc_high: usize, use_lpae: bool) -> usize {
-  if use_lpae {
-    desc & ADDR_MASK_LONG
-  } else {
-    desc & ADDR_MASK_SHORT
-  }
+fn get_phys_addr_from_descriptor(desc: usize, _desc_high: usize) -> usize {
+  desc & ADDR_MASK_LONG
 }
 
 /// Given a table level, determine the size of the table.
@@ -312,37 +268,12 @@ fn get_phys_addr_from_descriptor(desc: usize, _desc_high: usize, use_lpae: bool)
 /// # Parameters
 ///
 /// * `table_level` - The current table level.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
 /// The size of the table in bytes.
-fn get_table_size(table_level: TableLevel, use_lpae: bool) -> Option<usize> {
-  match table_level {
-    TableLevel::Level1 => {
-      if use_lpae {
-        Some(TABLE_SIZE_LONG)
-      } else {
-        Some(LEVEL_1_TABLE_SIZE_SHORT)
-      }
-    }
-
-    TableLevel::Level2 => {
-      if use_lpae {
-        Some(TABLE_SIZE_LONG)
-      } else {
-        Some(LEVEL_2_TABLE_SIZE_SHORT)
-      }
-    }
-
-    TableLevel::Level3 => {
-      if use_lpae {
-        Some(TABLE_SIZE_LONG)
-      } else {
-        None
-      }
-    }
-  }
+fn get_table_size(table_level: TableLevel) -> usize {
+  TABLE_SIZE_LONG
 }
 
 /// Determine if a descriptor is a table pointer entry.
@@ -351,17 +282,12 @@ fn get_table_size(table_level: TableLevel, use_lpae: bool) -> Option<usize> {
 ///
 /// * `desc` - The current descriptor in the table.
 /// * `desc_high` - High 32-bits of a long descriptor (0 if LPAE not supported).
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
 /// True if the descriptor is a page table pointer, false otherwise.
-fn is_pointer_entry(desc: usize, _desc_high: usize, use_lpae: bool) -> bool {
-  if use_lpae {
-    desc & TYPE_MASK == MM_PAGE_TABLE_FLAG_LONG
-  } else {
-    desc & TYPE_MASK == MM_PAGE_TABLE_FLAG_SHORT
-  }
+fn is_pointer_entry(desc: usize, _desc_high: usize) -> bool {
+  desc & TYPE_MASK == MM_PAGE_TABLE_FLAG_LONG
 }
 
 /// Make a pointer entry to a lower level page table.
@@ -369,18 +295,13 @@ fn is_pointer_entry(desc: usize, _desc_high: usize, use_lpae: bool) -> bool {
 /// # Parameters
 ///
 /// * `phys_addr` - The physical address of the table.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
 /// A tuple with the low and high 32-bits of the descriptor. The high 32-bits
 /// are zero if LPAE is not supported.
-fn make_pointer_entry(phys_addr: usize, use_lpae: bool) -> (usize, usize) {
-  if use_lpae {
-    ((phys_addr & ADDR_MASK_LONG) | MM_PAGE_TABLE_FLAG_LONG, 0)
-  } else {
-    ((phys_addr & ADDR_MASK_SHORT) | MM_PAGE_TABLE_FLAG_SHORT, 0)
-  }
+fn make_pointer_entry(phys_addr: usize) -> (usize, usize) {
+  ((phys_addr & ADDR_MASK_LONG) | MM_PAGE_TABLE_FLAG_LONG, 0)
 }
 
 /// Fills a page table with entries for the specified range.
@@ -395,7 +316,6 @@ fn make_pointer_entry(phys_addr: usize, use_lpae: bool) -> (usize, usize) {
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Details
 ///
@@ -449,17 +369,16 @@ fn fill_table(
   base: usize,
   size: usize,
   device: bool,
-  use_lpae: bool,
 ) -> usize {
-  let entry_size = get_table_entry_size(table_level, use_lpae).unwrap();
+  let entry_size = get_table_entry_size(table_level);
   let mut virt = virt;
   let mut base = base;
   let mut size = size;
   let mut pages_end = pages_end;
 
   while size >= PAGE_SIZE {
-    let idx = get_descriptor_index(virtual_base + virt, table_level, use_lpae).unwrap();
-    let table = get_table(table_level, table_addr, use_lpae).unwrap();
+    let idx = get_descriptor_index(virtual_base + virt, table_level);
+    let table = get_table(table_level, table_addr);
     let mut fill_size = entry_size;
     let desc: usize;
     let desc_high: usize;
@@ -467,42 +386,23 @@ fn fill_table(
     if size < entry_size || table_level == TableLevel::Level1 {
       fill_size = cmp::min(size, entry_size);
 
-      if use_lpae {
-        (desc, desc_high, pages_end) = alloc_table_and_fill(
-          virtual_base,
-          table_level,
-          table[idx] as usize,
-          table[idx + 1] as usize,
-          pages_end,
-          virt,
-          base,
-          fill_size,
-          device,
-          use_lpae,
-        );
-      } else {
-        (desc, desc_high, pages_end) = alloc_table_and_fill(
-          virtual_base,
-          table_level,
-          table[idx] as usize,
-          0,
-          pages_end,
-          virt,
-          base,
-          fill_size,
-          device,
-          use_lpae,
-        );
-      }
+      (desc, desc_high, pages_end) = alloc_table_and_fill(
+        virtual_base,
+        table_level,
+        table[idx],
+        table[idx + 1],
+        pages_end,
+        virt,
+        base,
+        fill_size,
+        device,
+      );
     } else {
-      (desc, desc_high) = make_descriptor(table_level, base, device, use_lpae).unwrap();
+      (desc, desc_high) = make_descriptor(table_level, base, device).unwrap();
     }
 
-    table[idx] = desc as u32;
-
-    if use_lpae {
-      table[idx + 1] = desc_high as u32;
-    }
+    table[idx] = desc;
+    table[idx + 1] = desc_high;
 
     virt += fill_size;
     base += fill_size;
@@ -518,37 +418,15 @@ fn fill_table(
 /// # Parameters
 ///
 /// * `table_level` - The table level of interest.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
-/// The size covered by a single entry in bytes. None if the CPU does not have
-/// LPAE and Level 3 is specified.
-fn get_table_entry_size(table_level: TableLevel, use_lpae: bool) -> Option<usize> {
+/// The size covered by a single entry in bytes.
+fn get_table_entry_size(table_level: TableLevel) -> usize {
   match table_level {
-    TableLevel::Level1 => {
-      if use_lpae {
-        Some(1 << LEVEL_1_SHIFT_LONG)
-      } else {
-        Some(1 << LEVEL_1_SHIFT_SHORT)
-      }
-    }
-
-    TableLevel::Level2 => {
-      if use_lpae {
-        Some(1 << LEVEL_2_SHIFT_LONG)
-      } else {
-        Some(1 << LEVEL_2_SHIFT_SHORT)
-      }
-    }
-
-    TableLevel::Level3 => {
-      if use_lpae {
-        Some(PAGE_SIZE)
-      } else {
-        None
-      }
-    }
+    TableLevel::Level1 => 1 << LEVEL_1_SHIFT_LONG,
+    TableLevel::Level2 => 1 << LEVEL_2_SHIFT_LONG,
+    TableLevel::Level3 => PAGE_SIZE,
   }
 }
 
@@ -558,43 +436,14 @@ fn get_table_entry_size(table_level: TableLevel, use_lpae: bool) -> Option<usize
 ///
 /// * `table_level` - The table level of interest.
 /// * `table_addr` - The table address.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Returns
 ///
-/// A slice of the correct size for the table level, or None if the table level
-/// is not valid.
-fn get_table(
-  table_level: TableLevel,
-  table_addr: usize,
-  use_lpae: bool,
-) -> Option<&'static mut [u32]> {
-  if use_lpae {
-    // Note the shift right by 2 instead of 3. The slice is u32, not u64.
-    return unsafe {
-      Some(slice::from_raw_parts_mut(
-        table_addr as *mut u32,
-        TABLE_SIZE_LONG >> 2,
-      ))
-    };
-  }
-
-  match table_level {
-    TableLevel::Level1 => unsafe {
-      Some(slice::from_raw_parts_mut(
-        table_addr as *mut u32,
-        LEVEL_1_TABLE_SIZE_SHORT >> 2,
-      ))
-    },
-
-    TableLevel::Level2 => unsafe {
-      Some(slice::from_raw_parts_mut(
-        table_addr as *mut u32,
-        LEVEL_2_TABLE_SIZE_SHORT >> 2,
-      ))
-    },
-
-    _ => None,
+/// A slice of the correct size for the table level.
+fn get_table(table_level: TableLevel, table_addr: usize) -> &'static mut [usize] {
+  unsafe {
+    // Note the shift right by 2 instead of 3. The slice is 32 bits, not 64.
+    slice::from_raw_parts_mut(table_addr as *mut usize, TABLE_SIZE_LONG >> 2)
   }
 }
 
@@ -604,7 +453,6 @@ fn get_table(
 ///
 /// * `virt_addr` - The virtual address.
 /// * `table_level` - The table level for the index.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Description
 ///
@@ -629,35 +477,11 @@ fn get_table(
 /// # Returns
 ///
 /// The index into the table at the specified level.
-fn get_descriptor_index(
-  virt_addr: usize,
-  table_level: TableLevel,
-  use_lpae: bool,
-) -> Option<usize> {
+fn get_descriptor_index(virt_addr: usize, table_level: TableLevel) -> usize {
   match table_level {
-    TableLevel::Level1 => {
-      if use_lpae {
-        Some(((virt_addr >> LEVEL_1_SHIFT_LONG) & INDEX_MASK_LONG) << 1)
-      } else {
-        Some((virt_addr >> LEVEL_1_SHIFT_SHORT) & LEVEL_1_INDEX_MASK_SHORT)
-      }
-    }
-
-    TableLevel::Level2 => {
-      if use_lpae {
-        Some(((virt_addr >> LEVEL_2_SHIFT_LONG) & INDEX_MASK_LONG) << 1)
-      } else {
-        Some((virt_addr >> LEVEL_2_SHIFT_SHORT) & LEVEL_2_INDEX_MASK_SHORT)
-      }
-    }
-
-    TableLevel::Level3 => {
-      if use_lpae {
-        Some(((virt_addr >> LEVEL_3_SHIFT_LONG) & INDEX_MASK_LONG) << 1)
-      } else {
-        None
-      }
-    }
+    TableLevel::Level1 => ((virt_addr >> LEVEL_1_SHIFT_LONG) & INDEX_MASK_LONG) << 1,
+    TableLevel::Level2 => ((virt_addr >> LEVEL_2_SHIFT_LONG) & INDEX_MASK_LONG) << 1,
+    TableLevel::Level3 => ((virt_addr >> LEVEL_3_SHIFT_LONG) & INDEX_MASK_LONG) << 1,
   }
 }
 
@@ -668,7 +492,6 @@ fn get_descriptor_index(
 /// * `table_level` - The table level of the new entry.
 /// * `phys_addr` - The physical address of the block or page.
 /// * `device` - Whether this block or page maps to device memory.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Description
 ///
@@ -683,25 +506,10 @@ fn make_descriptor(
   table_level: TableLevel,
   phys_addr: usize,
   device: bool,
-  use_lpae: bool,
 ) -> Option<(usize, usize)> {
   match table_level {
-    TableLevel::Level2 => {
-      if use_lpae {
-        Some(make_block_descriptor(phys_addr, device))
-      } else {
-        Some(make_page_descriptor(phys_addr, device, use_lpae))
-      }
-    }
-
-    TableLevel::Level3 => {
-      if use_lpae {
-        Some(make_page_descriptor(phys_addr, device, use_lpae))
-      } else {
-        None
-      }
-    }
-
+    TableLevel::Level2 => Some(make_block_descriptor(phys_addr, device)),
+    TableLevel::Level3 => Some(make_page_descriptor(phys_addr, device)),
     _ => None,
   }
 }
@@ -730,7 +538,6 @@ fn make_block_descriptor(phys_addr: usize, device: bool) -> (usize, usize) {
 ///
 /// * `phys_addr` - The physical address of the block or page.
 /// * `device` - Whether this block or page maps to device memory.
-/// * `use_lpae` - Use Large Physical Address Extensions.
 ///
 /// # Description
 ///
@@ -740,16 +547,6 @@ fn make_block_descriptor(phys_addr: usize, device: bool) -> (usize, usize) {
 ///
 /// A tuple with the low and high 32-bits of the descriptor. The high 32-bits
 /// are zero if LPAE is not supported.
-fn make_page_descriptor(phys_addr: usize, device: bool, use_lpae: bool) -> (usize, usize) {
-  if use_lpae {
-    return (0, 0);
-  } else {
-    let mut entry = (phys_addr & ADDR_MASK_SHORT) | MM_L2_ACCESS_FLAG_SHORT | MM_NORMAL_MEM_SHORT;
-
-    if device {
-      entry |= MM_DEVICE_MEM_SHORT;
-    }
-  
-    return (entry, 0)
-  }
+fn make_page_descriptor(phys_addr: usize, device: bool) -> (usize, usize) {
+  (0, 0)
 }

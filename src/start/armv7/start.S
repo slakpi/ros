@@ -56,10 +56,8 @@ _start:
   ldr     r2, =__bss_size
   bl      memset
 
-// Validate the CPU supports the compile-time split configuration. Halt the CPU
-// if it does not support the split.
-  ldr     r0, =__vmsplit
-  bl      validate_vmsplit
+// Halt the CPU if it does not support LPAE.
+  bl      ext_has_long_descriptor_support
   bne     cpu_halt
 
 // Check if the blob is a DTB, then create the kernel page tables. If the blob
@@ -83,7 +81,6 @@ _start:
   add     r4, r4, r5
 
 // Setup the MMU and enable it.
-  ldr     r0, =__vmsplit
   bl      mmu_setup_ttbr
 
   ldr     r0, =__vmsplit
@@ -132,7 +129,7 @@ begin_virt_addressing:
 //   +------------------------------+ 24
 //   | Page table area size         |
 //   +------------------------------+ 28
-//   | Using long descriptors       |
+//   | Virtual memory split         |
 //   +------------------------------+ 32
   ldr     r2, =__virtual_start
   str     r2, [fp, #-32]
@@ -153,53 +150,15 @@ begin_virt_addressing:
   str     r1, [fp, #-8]
 
   ldr     r1, =__vmsplit
-  sub     r1, r1, #3
-  mvn     r1, r1
   str     r1, [fp, #-4]
 
-// Transfer control to the Rustland. The kernel should not return. If it does,
-// just halt the CPU.
+// Transfer control to Rustland. The kernel should not return. If it does, just
+// halt the CPU.
   sub     r0, fp, #32
   bl      ros_kernel
 
 cpu_halt:
   b       cpu_halt
-
-
-/*----------------------------------------------------------------------------*/
-/// Verify that the CPU supports the compile-time virtual memory split
-/// configuration.
-///
-/// # Paramters
-///
-/// * r0 - The virtual memory split configured at compile-time.
-///
-/// # Returns
-///
-/// 0 if the configuration is supported, non-zero otherwise.
-validate_vmsplit:
-  fn_entry
-
-// A 2/2 split is OK regardless of LPAE support.
-  cmp     r0, #2
-  beq     1f
-
-// If not a 2/2 or 3/1 split, report an error.
-  cmp     r0, #3
-  bne     2f
-
-// If a 3/1 split and no LPAE support, report an error.
-  bl      ext_has_long_descriptor_support
-  cmp     r0, #0
-  bne     2f
-
-1:
-  eor     r0, r0
-  fn_exit
-
-2:
-  mov     r0, #1
-  fn_exit
 
 
 /*----------------------------------------------------------------------------*/

@@ -183,8 +183,8 @@ begin_virt_addressing:
   mov     x10, #0
   stp     x9, x10, [x29, #-16]
 
-// Transfer control to the Rustland. The kernel should not return. If it does,
-// just halt the CPU.
+// Transfer control to Rustland. The kernel should not return. If it does, just
+// halt the CPU.
   sub     x0, x29, #64
   bl      ros_kernel
 
