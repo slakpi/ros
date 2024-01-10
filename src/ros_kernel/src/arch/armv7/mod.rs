@@ -197,7 +197,7 @@ pub fn get_max_physical_address() -> usize {
 ///
 /// # Returns
 ///
-/// 2 for a 2:1 split or 3 for a 3:1 split.
+/// 2 for a 2/2 split or 3 for a 3/1 split.
 pub fn get_vm_slit() -> usize {
   unsafe { VM_SPLIT }
 }
@@ -313,7 +313,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///
 /// # Description
 ///
-/// The canonical 32-bit 2:2 and 3:1 virtual address space layouts suppored by
+/// The canonical 32-bit 2/2 and 3/1 virtual address space layouts suppored by
 /// the kernel:
 ///
 ///   +-----------------+ 0xffff_ffff       +-----------------+ 0xffff_ffff
@@ -331,7 +331,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///   +-----------------+ 0x0000_0000       +-----------------+ 0x0000_0000
 ///
 /// Not all ARMv7a CPUs support the Large Physical Address Extensions required
-/// for the 3:1 split. For example, the Cortex A7 in the original Raspberry Pi
+/// for the 3/1 split. For example, the Cortex A7 in the original Raspberry Pi
 /// 2's SoC does not support LPAE while the Cortex A53 in the second revision of
 /// the Raspberry Pi 2 does.
 ///

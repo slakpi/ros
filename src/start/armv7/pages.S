@@ -2,9 +2,16 @@
 
 #include "abi.h"
 
-/// TTBCR value. See B4.1.153 and B3.6.4. TTBR0 is used otherwise. A value of 0
-/// for TTBCR.A1 tells the MMU that TTBR0 defines address space IDs. TTBCR.EAE
-/// enable extended address extensions for long page descriptors.
+/// TTBCR value. See B4.1.153 and B3.6.4. A value of 0 for TTBCR.A1 tells the
+/// MMU that TTBR0 defines address space IDs. TTBCR.EAE enable extended address
+/// extensions for long page descriptors. TTBCR.T0SZ is 0 to let the user
+/// segment fill the virtual addresses not used by the kernel segment.
+///
+///   TODO: Investigate why a 2/2 split does not work. This could be a QEMU
+///         issue. When using a 2/2 split, the CPU treats TTBR1 as a Level 2
+///         table instead of a Level 1 table which should be incorrect per
+///         B3.6.6. If 2^(32 - T1SZ) > 2^30, TTBR1 should be treated as a Level
+///         1 table.
 #define TTBCR_EAE    (0x1 << 31)
 #define TTBCR_A1     (0x0 << 22)
 #define TTBCR_T1SZ_2 (0x1 << 16)
@@ -77,7 +84,7 @@
 ///
 /// # Returns
 ///
-/// A TTBCR value appropriate for short page descriptors. Defaults to use a 2:1
+/// A TTBCR value appropriate for short page descriptors. Defaults to use a 2/2
 /// virtual memory split if the split value is not 3.
 .global mmu_make_ttbcr_value
 mmu_make_ttbcr_value:
@@ -85,7 +92,7 @@ mmu_make_ttbcr_value:
 
   ldr     r1, =TTBCR_VALUE
 
-  sub     r0, #3
+  cmp     r0, #3
   bne     1f
 
   orr     r1, #TTBCR_T1SZ_3
@@ -96,7 +103,7 @@ mmu_make_ttbcr_value:
 
 2:
   mov     r0, r1
-  
+
 // no fn_exit required.
   mov     pc, lr
 
@@ -112,6 +119,8 @@ mmu_make_ttbcr_value:
 ///
 /// # Description
 ///
+///   TODO: Break this monolith up.
+///
 /// Maps the kernel and, as necessary, the DTB into 2 MiB sections. The kernel
 /// will re-map the pages after determining the memory layout.
 ///
@@ -126,14 +135,16 @@ mmu_create_kernel_page_tables:
 // r6 - The saved blob base.
 // r7 - The section-aligned blob size.
 // r8 - The saved virtual memory split.
-// r9 - The kernel pages address.
-// r10 - The kernel ID pages address.
+// r9 - Lower L2 table address.
+// r10 - Upper L2 table address.
   push    {r4, r5, r6, r7, r8, r9, r10}
 
   mov     r6, r0
+  mov     r7, r1
+  mov     r8, r2
 
 // Align the blob size on a section.
-  mov     r0, r1
+  mov     r0, r7
   bl      section_align_size
   mov     r7, r0
 
@@ -144,7 +155,10 @@ mmu_create_kernel_page_tables:
   bl      section_align_size
   mov     r5, r0
 
-// Clear the page tables.
+// Initialize the indirect memory attributes
+  bl      init_mair
+
+// Clear the kernel page tables.
   adr     r0, kernel_pages_start_rel
   ldr     r1, kernel_pages_start_rel
   add     r9, r0, r1
@@ -153,49 +167,26 @@ mmu_create_kernel_page_tables:
   ldr     r2, =__kernel_pages_size
   bl      memset
 
-  adr     r0, kernel_id_pages_start_rel
-  ldr     r1, kernel_id_pages_start_rel
-  add     r10, r0, r1
-  mov     r0, r10
-  eor     r1, r1
-  ldr     r2, =__kernel_id_pages_size
-  bl      memset
-
-// Initialize the indirect memory attributes
-  bl      init_mair
-
-// Initialize the tables. If using a 3:1 split, translation through TTBR1 will
-// start at a L2 table. If using a 2:2 split, however, both TTBR0 and TTBR1 will
-// start at a L1 table. Check the virtual memory split value. If 3, skip
-// initializing an L1 table and use the start address as the L2 table.
-// Otherwise, initialize the L1 table and use the address it calculates for the
-// L2 table.
+// Initialize the kernel page tables. If using a 3/1 split, translation through
+// TTBR1 will start at a L2 table. If using a 2/2 split, however, both TTBR0 and
+// TTBR1 will start at a L1 table. Check the virtual memory split value. If 3,
+// skip initializing an L1 table and use the start address as the L2 table.
   mov     r0, r9
-  sub     r1, r8, #3
+  mov     r1, r9            // Use the same L2 table for the kernel and vectors.
+  cmp     r8, #3
   beq     1f
   ldr     r1, =__virtual_start
   bl      init_table
+  
 1:
-  mov     r9, r0
+  mov     r9, r0            // Save the lower L2 table address
+  mov     r10, r1           // Save the upper L2 table address
 
-  adr     r0, kernel_id_pages_start_rel
-  ldr     r1, kernel_id_pages_start_rel
-  add     r0, r0, r1
-  eor     r1, r1
-  bl      init_table
-  mov     r10, r0
-
-// Map the vectors.
-  adr     r4, kernel_exception_vectors_start_rel
-  ldr     r1, kernel_exception_vectors_start_rel
-  add     r4, r4, r1
-
-  mov     r0, r9
-  mov     r1, r4
-  bl      map_vectors
-
+// Map the vectors into the kernel page tables.
   mov     r0, r10
-  mov     r1, r4
+  adr     r1, kernel_exception_vectors_start_rel
+  ldr     r3, kernel_exception_vectors_start_rel
+  add     r1, r1, r3
   bl      map_vectors
 
 // Map the kernel area as RW normal memory.
@@ -205,16 +196,6 @@ mmu_create_kernel_page_tables:
   mov     r0, r9
   eor     r1, r1
   ldr     r2, =__virtual_start
-  add     r3, r2, r5
-  sub     r3, r3, #1
-  ldr     r4, =MMU_NORMAL_RW_BLOCK_FLAGS
-  push    {r4}
-  bl      map_block
-  pop     {r4}
-
-  mov     r0, r10
-  eor     r1, r1
-  eor     r2, r2
   add     r3, r2, r5
   sub     r3, r3, #1
   ldr     r4, =MMU_NORMAL_RW_BLOCK_FLAGS
@@ -240,6 +221,42 @@ mmu_create_kernel_page_tables:
   pop     {r4}
 
 1:
+// Clear the kernel identity page tables.
+  adr     r0, kernel_id_pages_start_rel
+  ldr     r1, kernel_id_pages_start_rel
+  add     r9, r0, r1
+  mov     r0, r9
+  eor     r1, r1
+  ldr     r2, =__kernel_id_pages_size
+  bl      memset
+
+// Initialize the kernel identity page tables. The kernel identity pages are
+// always going to handle more than 1 GiB since the kernel does not support a
+// 1/3 split.
+  mov     r0, r9
+  eor     r1, r1
+  bl      init_table
+  mov     r9, r0            // Save the lower L2 table address
+  mov     r10, r1           // Save the upper L2 table address
+
+// Map the vectors into the kernel identity page tables.
+  mov     r0, r10
+  adr     r1, kernel_exception_vectors_start_rel
+  ldr     r3, kernel_exception_vectors_start_rel
+  add     r1, r1, r3
+  bl      map_vectors
+
+// Map the kernel area as RW normal memory. See above.
+  mov     r0, r9
+  eor     r1, r1
+  eor     r2, r2
+  add     r3, r2, r5
+  sub     r3, r3, #1
+  ldr     r4, =MMU_NORMAL_RW_BLOCK_FLAGS
+  push    {r4}
+  bl      map_block
+  pop     {r4}
+
   pop     {r4, r5, r6, r7, r8, r9, r10}
   fn_exit
 
@@ -336,39 +353,52 @@ init_mair:
 
 
 /*----------------------------------------------------------------------------*/
-/// Initialize the L1 table with a single 1 GiB L2 table at the base of the
-/// virtual address space.
+/// Initialize the L1 table.
 ///
 /// # Parameters
 ///
-/// * r0 - The base address of the L1.
+/// * r0 - The base address of the L1 table.
 /// * r1 - The base address of the virtual address space.
+///
+/// # Description
+///
+///   NOTE: Assumes that a 2/2 virtual memory split is being used and creates
+///         entries for two L2 tables that cover the 2 GiB of the address space.
 ///
 /// # Returns
 ///
-/// The address of the next page after the table.
+/// The addresses of the lower and upper L2 tables.
 init_table:
 // no fn_entry required.
 
 // Get the entry address.
-  lsr     r2, r1, #L1_SHIFT // Top two bits are the index.
+  lsr     r2, r1, #L1_SHIFT // Top two bits are the index
   lsl     r2, r2, #3        // 8 bytes per entry
   add     r2, r0, r2        // Add the base address
 
-// Get the L2 table address. Copy the table address to r0 as the return value.
-  ldr     r1, =__page_size
-  add     r1, r0, r1
-  mov     r0, r1
-
-// Create the entry. The descriptor has to be split between two 32-bit
-// registers. r1 will be the lower 32-bits and the upper 32-bits will be 0 since
-// our physical address does not need the extra 8 bits and we do not need to set
-// any of the upper attributes.
-  orr     r1, r1, #MM_TYPE_PAGE_TABLE
+// Create the table entry for the lower 1 GiB. The descriptor has to be split
+// between two 32-bit registers. r3 will be the lower 32-bits and the upper
+// 32-bits will be 0 since our physical address does not need the extra 8 bits
+// and we do not need to set any of the upper attributes.
+  ldr     r3, =__page_size
+  add     r0, r0, r3        // r0 is now the lower L2 table address
+  mov     r3, r0
+  orr     r3, r3, #MM_TYPE_PAGE_TABLE
 
 // Store the entry in the table.
+  str     r3, [r2], #4      // Lower 32-bits
   eor     r3, r3
-  str     r1, [r2], #4      // Lower 32-bits
+  str     r3, [r2], #4      // Upper 32-bits
+
+// Create the table entry for the upper 1 GiB. See above.
+  ldr     r3, =__page_size
+  add     r1, r0, r3        // r1 is now the upper L2 table address
+  mov     r3, r1
+  orr     r3, r3, #MM_TYPE_PAGE_TABLE
+  
+// Store the entry in the table.
+  str     r3, [r2], #4      // Lower 32-bits
+  eor     r3, r3
   str     r3, [r2], #4      // Upper 32-bits
 
 // no fn_exit required.

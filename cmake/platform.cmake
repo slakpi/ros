@@ -14,6 +14,18 @@ function(validate_platform)
 endfunction()
 
 #-------------------------------------------------------------------------------
+# Validate the build configuration.
+#-------------------------------------------------------------------------------
+function(validate_build_type)
+  if(NOT DEFINED KERNEL_BUILD_TYPE)
+    message(WARNING "Defaulting to QEMU build.")
+    set(KERNEL_BUILD_TYPE qemu PARENT_SCOPE)
+  elseif(NOT KERNEL_BUILD_TYPE MATCHES "(qemu|hardware)")
+    message(FATAL_ERROR "Invalid build type.")
+  endif()
+endfunction()
+
+#-------------------------------------------------------------------------------
 # Add architecture-agnostic options for the assembler to the specified target.
 #-------------------------------------------------------------------------------
 function(target_arch_agnostic_asm_options target)
@@ -76,9 +88,7 @@ function(rust_arch_options opts)
   endif()
 
   # Quiet Rust's dead code and unused variable warnings in Debug.
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    list(APPEND tmp -A dead_code -A unused_variables)
-  endif()
+  list(APPEND tmp $<$<CONFIG:Debug>:-A dead_code -A unused_variables>)
 
   set(${opts} ${tmp} PARENT_SCOPE)
 endfunction()
@@ -135,7 +145,7 @@ endfunction()
 
 #-------------------------------------------------------------------------------
 # Get the kernel virtual base address for the platform. If KERNEL_VMSPLIT is not
-# defined, a 2:2 split is the default. No error checking is done here to prevent
+# defined, a 2/2 split is the default. No error checking is done here to prevent
 # specifying a split that the target CPU does not support.
 #-------------------------------------------------------------------------------
 function(get_kernel_virtual_base_address addr split)

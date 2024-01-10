@@ -79,7 +79,7 @@ function(rpi_get_kernel_base_address addr)
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(${addr} 0x80000 PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
-    if(${QEMU_BUILD})
+    if(KERNEL_BUILD_TYPE STREQUAL "qemu")
       set(${addr} 0x10000 PARENT_SCOPE)
     else()
       set(${addr} 0x8000 PARENT_SCOPE)
@@ -91,8 +91,8 @@ endfunction()
 # Get the kernel virtual base address for the Raspberry Pi version specified on
 # the command line.
 #
-#   NOTE: The ARMv7 start code uses short page descriptors for the 2:2 split and
-#         long page descriptors for the 3:1 split. This is entirely a temporary
+#   NOTE: The ARMv7 start code uses short page descriptors for the 2/2 split and
+#         long page descriptors for the 3/1 split. This is entirely a temporary
 #         thing just to test setting up both types of tables.
 #-------------------------------------------------------------------------------
 function(rpi_get_kernel_virtual_base_address addr split)
@@ -100,14 +100,14 @@ function(rpi_get_kernel_virtual_base_address addr split)
     set(${addr} 0xffff000000000000 PARENT_SCOPE)
   elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7")
     if (DEFINED KERNEL_VMSPLIT)
-      # If KERNEL_VMSPLIT specifies anything other than a 3:1 or 2:2 split,
-      # we'll catch it below. If the CPU does not support a 3:1 split, we'll
+      # If KERNEL_VMSPLIT specifies anything other than a 3/1 or 2/2 split,
+      # we'll catch it below. If the CPU does not support a 3/1 split, we'll
       # catch it at runtime in the start code and halt.
       set(tmp_split ${KERNEL_VMSPLIT})
     else()
       # The Cortex A7 used by the original Raspberry Pi 2 and the Cortex A53
       # used by the Raspberry Pi's 2 (rev 1.2), 3, and 4 support LPAE, so just
-      # default to a 3:1 split. In the case of the 2, 2 (rev 1.2), and 3, this
+      # default to a 3/1 split. In the case of the 2, 2 (rev 1.2), and 3, this
       # may NOT be the optimal split.
       set(tmp_split 3)
     endif()

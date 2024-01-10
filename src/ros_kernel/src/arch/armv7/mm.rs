@@ -336,7 +336,7 @@ fn make_pointer_entry(phys_addr: usize) -> (usize, usize) {
 ///
 /// With short page table descriptors, if the address space is split between
 /// user space and kernel space, the user address space cannot be larger than
-/// 2 GiB (even 2:2 split).
+/// 2 GiB (even 2/2 split).
 ///
 /// When an ARMv7a CPU implements the Large Physical Address Extensions, it
 /// supports the long page table descriptor format. Instead of the "classic"
@@ -348,10 +348,10 @@ fn make_pointer_entry(phys_addr: usize) -> (usize, usize) {
 ///     Covers 4 GiB      Covers 1 GiB     Covers 2 MiB
 ///
 /// Additionally, LPAE allows configuring the MMU to increase the size of the
-/// user address space making a 3:1 split possible.
+/// user address space making a 3/1 split possible.
 ///
 ///     NOTE: The MMU will AUTOMATICALLY skip Level 1 translation if the size of
-///           a segment is 1 GiB or less. In a 3:1 split, the MMU expects that
+///           a segment is 1 GiB or less. In a 3/1 split, the MMU expects that
 ///           TTBR1 points directly to the kernel segment's Level 2 table.
 ///
 /// Refer to the AArch64 version of `fill_table`. The table arrangement is

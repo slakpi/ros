@@ -6,6 +6,7 @@ include(platform)
 project(ros ASM)
 
 validate_platform()
+validate_build_type()
 
 rust_arch_target(Rust_CARGO_TARGET)
 add_subdirectory(cmake/corrosion)
