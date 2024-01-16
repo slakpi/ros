@@ -6,12 +6,7 @@
 /// MMU that TTBR0 defines address space IDs. TTBCR.EAE enable extended address
 /// extensions for long page descriptors. TTBCR.T0SZ is 0 to let the user
 /// segment fill the virtual addresses not used by the kernel segment.
-///
-///   TODO: Investigate why a 2/2 split does not work. This could be a QEMU
-///         issue. When using a 2/2 split, the CPU treats TTBR1 as a Level 2
-///         table instead of a Level 1 table which should be incorrect per
-///         B3.6.6. If 2^(32 - T1SZ) > 2^30, TTBR1 should be treated as a Level
-///         1 table.
+/// TTBCR.T1SZ is either 1 for a 2/2 split or 2 for a 3/1 split.
 #define TTBCR_EAE    (0x1 << 31)
 #define TTBCR_A1     (0x0 << 22)
 #define TTBCR_T1SZ_2 (0x1 << 16)
@@ -84,8 +79,8 @@
 ///
 /// # Returns
 ///
-/// A TTBCR value appropriate for short page descriptors. Defaults to use a 2/2
-/// virtual memory split if the split value is not 3.
+/// Configures the bootstrap TTBCR value. If the split value is 3, a 3/1 split
+/// is used. Otherwise, a 2/2 split is used.
 .global mmu_make_ttbcr_value
 mmu_make_ttbcr_value:
 // no fn_entry required.
@@ -365,6 +360,10 @@ init_mair:
 ///   NOTE: Assumes that a 2/2 virtual memory split is being used and creates
 ///         entries for two L2 tables that cover the 2 GiB of the address space.
 ///
+///   NOTE: When using a 2/2 split, the input address size is 31 bits, so only
+///         bit 30 is used to index the Level 1 table. This means both Level 1
+///         tables use entries 0 and 1.
+///
 /// # Returns
 ///
 /// The addresses of the lower and upper L2 tables.
@@ -373,6 +372,7 @@ init_table:
 
 // Get the entry address.
   lsr     r2, r1, #L1_SHIFT // Top two bits are the index
+  and     r2, r2, #1        // See note in function header
   lsl     r2, r2, #3        // 8 bytes per entry
   add     r2, r0, r2        // Add the base address
 

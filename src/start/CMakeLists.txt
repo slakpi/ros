@@ -66,7 +66,7 @@ set(asm_out ${CMAKE_CURRENT_BINARY_DIR}/asm.txt)
 set(dummy_asm_out ${CMAKE_CURRENT_BINARY_DIR}/__asm.txt)
 add_custom_command(
   OUTPUT ${asm_out} ${dummy_asm_out}
-  COMMAND ${CMAKE_OBJDUMP} -D $<TARGET_FILE:kernel> >${asm_out}
+  COMMAND ${CMAKE_OBJDUMP} -h -D $<TARGET_FILE:kernel> >${asm_out}
   DEPENDS kernel_img
   COMMENT "Dumping kernel assembly...")
 
