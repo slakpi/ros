@@ -44,6 +44,9 @@
 #define MMU_DEVICE_RO_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RO | MM_DEVICE_MAIR_IDX | MM_ACCESS_FLAG)
 #define MMU_DEVICE_RW_PAGE_FLAGS (MM_TYPE_PAGE | MM_ACCESS_RW | MM_NORMAL_MAIR_IDX | MM_ACCESS_FLAG)
 
+#define VEC_L2_OFFSET 0xff8
+#define VEC_L3_OFFSET 0xf80
+
 /// 2 MiB section virtual address layout:
 ///
 ///   +----+--------+--------------------+
@@ -168,8 +171,8 @@ mmu_create_kernel_page_tables:
 // skip initializing an L1 table and use the start address as the L2 table.
   mov     r0, r9
   mov     r1, r9            // Use the same L2 table for the kernel and vectors.
-  cmp     r8, #3
-  beq     1f
+  cmp     r8, #3            // Using 3/1 split?
+  beq     1f                // If yes, skip L1 initialization
   ldr     r1, =__virtual_start
   bl      init_table
   
@@ -303,7 +306,7 @@ map_vectors:
   orr     r2, r2, #MM_TYPE_PAGE_TABLE
 
 // Entry 511 in the L2 table covers the last 2 MiB of the address space.
-  ldr     r3, =0xff8
+  ldr     r3, =VEC_L2_OFFSET
   add     r3, r0, r3
   str     r2, [r3], #4
   eor     r2, r2
@@ -311,7 +314,7 @@ map_vectors:
 
 // r3 now points to the L3 table and entry 496 covers the page at 0xffff_0000.
   mov     r0, r3
-  ldr     r3, =0xf80
+  ldr     r3, =VEC_L3_OFFSET
   add     r3, r0, r3
 
 // Make the descriptor for the vectors.

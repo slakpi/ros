@@ -5,14 +5,15 @@ pub mod exceptions;
 pub mod mm;
 pub mod task;
 
-use crate::peripherals::{memory, soc};
+use crate::debug_print;
+use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{bits, dtb, range};
 
 /// Reserve the upper 128 MiB of the kernel segment for the high memory area.
 const HIGH_MEM_SIZE: usize = 128 * 1024 * 1024;
 
 /// Base address for long-term mappings made by drivers.
-const DRIVER_VIRTUAL_BASE: usize = 0xfff8_1000;
+const DRIVER_VIRTUAL_BASE: usize = 0xf820_0000;
 
 /// Basic kernel configuration provided by the start code. All address are
 /// physical.
@@ -49,9 +50,6 @@ static mut VIRTUAL_BASE: usize = 0;
 /// Max physical address.
 static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 
-/// Virtual memory split.
-static mut VM_SPLIT: usize = 0;
-
 /// ARMv7a platform configuration.
 ///
 /// # Parameters
@@ -85,7 +83,6 @@ pub fn init(config: usize) {
     PAGE_SHIFT = bits::floor_log2(config.page_size);
     VIRTUAL_BASE = config.virtual_base;
     MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
-    VM_SPLIT = config.vm_split;
   }
 
   // Calculate the blob address and its size. There is no need to do any real
@@ -105,10 +102,10 @@ pub fn init(config: usize) {
   //         demand. For now, just tell the peripherals they are mapped to the
   //         beginning of the driver mapping area.
   pages_end = init_soc_mappings(config.kernel_pages_start, pages_end, blob_addr);
-  // base::set_peripheral_base_addr(config.virtual_base + DRIVER_VIRTUAL_BASE);
-  // mini_uart::init();
+  base::set_peripheral_base_addr(DRIVER_VIRTUAL_BASE);
+  mini_uart::init();
 
-  // debug_print!("=== ROS (ARM) ===\n");
+  debug_print!("=== ROS (ARMv7 32-bit) ===\n");
 
   // Initialize the physical memory mappings.
   pages_end = init_physical_memory_mappings(config.kernel_pages_start, pages_end, blob_addr);
@@ -185,21 +182,6 @@ pub fn get_kernel_virtual_base() -> usize {
 /// Returns the maximum physical address.
 pub fn get_max_physical_address() -> usize {
   unsafe { MAX_PHYSICAL_ADDRESS }
-}
-
-/// Get the virtual memory split.
-///
-/// # Description
-///
-///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
-///
-/// # Returns
-///
-/// 2 for a 2/2 split or 3 for a 3/1 split.
-pub fn get_vm_slit() -> usize {
-  unsafe { VM_SPLIT }
 }
 
 /// Initialize the SoC memory layout.
@@ -331,9 +313,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///   +-----------------+ 0x0000_0000       +-----------------+ 0x0000_0000
 ///
 /// Not all ARMv7a CPUs support the Large Physical Address Extensions required
-/// for the 3/1 split. For example, the Cortex A7 in the original Raspberry Pi
-/// 2's SoC does not support LPAE while the Cortex A53 in the second revision of
-/// the Raspberry Pi 2 does.
+/// for the 3/1 split.
 ///
 /// Kernel segment layout:
 ///
@@ -347,7 +327,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///   |                 |                 |
 ///   | Driver Mappings |                 |
 ///   |                 |                 |
-///   |.................| 0xf800_1000     |
+///   |.................| 0xf820_0000     |
 ///   | Temp Mappings   |                 |
 ///   +-----------------+ 0xf800_0000    -+
 ///   |                 |                 |
