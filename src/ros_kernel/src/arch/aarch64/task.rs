@@ -40,4 +40,34 @@ impl Task {
       },
     }
   }
+
+  /// Maps a page into the kernel's virtual address space.
+  ///
+  /// # Parameters
+  ///
+  /// * `task` - The kernel task receiving the mapping.
+  /// * `virtual_base` - The kernel segment base address.
+  /// * `page` - The physical address of the page to map.
+  ///
+  /// # Description
+  ///
+  /// The kernel's page table is not modified by this function.
+  ///
+  /// # Returns
+  ///
+  /// The virtual address of the mapped page.
+  pub fn map_page_local(&mut self, virtual_base: usize, page: usize) -> usize {
+    virtual_base + page
+  }
+
+  /// Unmaps a page from the kernel's virtual address space.
+  ///
+  /// # Parameters
+  ///
+  /// * `task` - The kernel task receiving the mapping.
+  ///
+  /// # Description
+  ///
+  /// The kernel's page table is not modified by this function.
+  pub fn unmap_page_local(&mut self) {}
 }

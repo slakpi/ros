@@ -8,6 +8,7 @@ pub mod task;
 use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{bits, dtb, range};
+use core::ptr;
 
 /// Basic kernel configuration provided by the start code. All address are
 /// physical.
@@ -93,7 +94,7 @@ pub fn init(config: usize) {
   // Initialize the SoC memory mappings.
   //
   //   TODO: Eventually this can be replaced by drivers mapping memory on
-  //         demand. For now, since we are just linearly mapping, use the
+  //         demand. For now, since we are just directly mapping, use the
   //         default location of the Broadcom SoC on a Raspberry Pi 2 and 3.
   pages_end = init_soc_mappings(config.kernel_pages_start, pages_end, blob_addr);
   base::set_peripheral_base_addr(config.virtual_base + 0x3f00_0000);
@@ -113,10 +114,9 @@ pub fn init(config: usize) {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_memory_layout() -> &'static memory::MemoryConfig {
-  unsafe { &MEM_LAYOUT }
+  unsafe { ptr::addr_of!(MEM_LAYOUT).as_ref().unwrap() }
 }
 
 /// Get the page allocation exclusion list.
@@ -124,10 +124,9 @@ pub fn get_memory_layout() -> &'static memory::MemoryConfig {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
-  unsafe { &EXCL_LAYOUT }
+  unsafe { ptr::addr_of!(EXCL_LAYOUT).as_ref().unwrap() }
 }
 
 /// Get the page size.
@@ -135,8 +134,7 @@ pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_page_size() -> usize {
   unsafe { PAGE_SIZE }
 }
@@ -146,8 +144,7 @@ pub fn get_page_size() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_page_shift() -> usize {
   unsafe { PAGE_SHIFT }
 }
@@ -157,8 +154,7 @@ pub fn get_page_shift() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_kernel_virtual_base() -> usize {
   unsafe { VIRTUAL_BASE }
 }
@@ -168,8 +164,7 @@ pub fn get_kernel_virtual_base() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 ///
 /// # Returns
 ///
@@ -301,7 +296,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///     +-----------------+ 0x0000_0000_0000_0000
 ///
 /// This layout allows mapping up to 256 TiB of physical memory into the
-/// kernel's address space using a fixed linear mapping.
+/// kernel's address space using a fixed, direct mapping.
 ///
 /// # Returns
 ///

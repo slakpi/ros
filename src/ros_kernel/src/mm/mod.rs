@@ -26,7 +26,7 @@ pub fn init() {
   pager::init();
 }
 
-/// Maps a page into the curren thread's virtual address space.
+/// Maps a page into the current thread's virtual address space.
 ///
 /// # Parameters
 ///
@@ -43,13 +43,13 @@ pub fn init() {
 pub fn kernel_map_page_local(page: usize) -> usize {
   let task = task::get_kernel_task();
   let virtual_base = arch::get_kernel_virtual_base();
-  arch::mm::kernel_map_page_local(task, virtual_base, page)
+  task.map_page_local(virtual_base, page)
 }
 
 /// Unmaps the current thread's last mapped page.
 pub fn kernel_unmap_page_local() {
   let task = task::get_kernel_task();
-  arch::mm::kernel_unmap_page_local(task);
+  task.unmap_page_local();
 }
 
 #[cfg(feature = "module_tests")]

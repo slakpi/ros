@@ -1,6 +1,5 @@
 //! AArch64 Memory Management
 
-use super::task;
 use core::{cmp, ptr, slice};
 
 const TABLE_SIZE: usize = 4096;
@@ -114,36 +113,6 @@ pub fn map_memory(
     device,
   )
 }
-
-/// Maps a page into the kernel's virtual address space.
-///
-/// # Parameters
-///
-/// * `task` - The kernel task receiving the mapping.
-/// * `virtual_base` - The kernel segment base address.
-/// * `page` - The physical address of the page to map.
-///
-/// # Description
-///
-/// The kernel's page table is not modified by this function.
-///
-/// # Returns
-///
-/// The virtual address of the mapped page.
-pub fn kernel_map_page_local(_: &mut task::Task, virtual_base: usize, page: usize) -> usize {
-  virtual_base + page
-}
-
-/// Unmaps a page from the kernel's virtual address space.
-///
-/// # Parameters
-///
-/// * `task` - The kernel task receiving the mapping.
-///
-/// # Description
-///
-/// The kernel's page table is not modified by this function.
-pub fn kernel_unmap_page_local(_: &mut task::Task) {}
 
 /// Allocates a new page table if the specified descriptor is invalid, then
 /// fills the table with entries for the specified range of memory.

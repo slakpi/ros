@@ -1,6 +1,6 @@
 //! ARMv7a Memory Management
 
-use super::{task};
+use super::task;
 use core::{cmp, ptr, slice};
 
 const PAGE_SHIFT: usize = 12;
@@ -112,55 +112,6 @@ pub fn map_memory(
     size,
     device,
   )
-}
-
-/// Maps a page into the kernel's virtual address space.
-///
-/// # Parameters
-///
-/// * `task` - The kernel task receiving the mapping.
-/// * `virtual_base` - The kernel segment base address.
-/// * `page` - The physical address of the page to map.
-///
-/// # Description
-///
-/// If the page is in low memory, the function simply returns the virtual
-/// address of the mapped page without modifying the kernel's page table.
-///
-/// Otherwise, the function maps the page to the next available virtual address
-/// in the task's local mappings. The mappings are thread-local, so the function
-/// is thread safe.
-///
-///   NOTE: The Linux implementation ensures the thread is pinned to the same
-///         CPU for the duration of temporary mappings.
-///
-/// The function will panic if no more pages can be mapped into the thread's
-/// local mappings.
-///
-/// # Returns
-///
-/// The virtual address of the mapped page.
-pub fn kernel_map_page_local(_: &mut task::Task, virtual_base: usize, page: usize) -> usize {
-  debug_assert!(false);
-  0
-}
-
-/// Unmaps a page from the kernel's virtual address space.
-///
-/// # Parameters
-///
-/// * `task` - The kernel task receiving the mapping.
-///
-/// # Description
-///
-/// If the page is in low memory or if no pages have been mapped into the
-/// thread's local mappings, the function simply returns without modifying
-/// the kernel's page table.
-///
-/// Otherwise, the function unmaps the page from the task's local mappings. The
-/// mappings are thread-local, so the function is thread safe.
-pub fn kernel_unmap_page_local(_: &mut task::Task) {
-  debug_assert!(false);
 }
 
 /// Allocates a new page table if necessary, then fills the table with entries

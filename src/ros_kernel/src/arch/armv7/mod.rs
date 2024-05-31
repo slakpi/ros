@@ -8,6 +8,7 @@ pub mod task;
 use crate::debug_print;
 use crate::peripherals::{base, memory, mini_uart, soc};
 use crate::support::{bits, dtb, range};
+use core::ptr;
 
 /// Reserve the upper 128 MiB of the kernel segment for the high memory area.
 const HIGH_MEM_SIZE: usize = 128 * 1024 * 1024;
@@ -119,10 +120,9 @@ pub fn init(config: usize) {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_memory_layout() -> &'static memory::MemoryConfig {
-  unsafe { &MEM_LAYOUT }
+  unsafe { ptr::addr_of!(MEM_LAYOUT).as_ref().unwrap() }
 }
 
 /// Get the physical memory exclusion list.
@@ -130,10 +130,9 @@ pub fn get_memory_layout() -> &'static memory::MemoryConfig {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
-  unsafe { &EXCL_LAYOUT }
+  unsafe { ptr::addr_of!(EXCL_LAYOUT).as_ref().unwrap() }
 }
 
 /// Get the page size.
@@ -141,8 +140,7 @@ pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_page_size() -> usize {
   unsafe { PAGE_SIZE }
 }
@@ -152,8 +150,7 @@ pub fn get_page_size() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_page_shift() -> usize {
   unsafe { PAGE_SHIFT }
 }
@@ -163,8 +160,7 @@ pub fn get_page_shift() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 pub fn get_kernel_virtual_base() -> usize {
   unsafe { VIRTUAL_BASE }
 }
@@ -174,8 +170,7 @@ pub fn get_kernel_virtual_base() -> usize {
 /// # Description
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed. Therefore, read access is safe
-///         and sound.
+///         one-time initialization is assumed.
 ///
 /// # Returns
 ///
@@ -295,7 +290,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///
 /// # Description
 ///
-/// The canonical 32-bit 2/2 and 3/1 virtual address space layouts suppored by
+/// The canonical 32-bit 2/2 and 3/1 virtual address space layouts supported by
 /// the kernel:
 ///
 ///   +-----------------+ 0xffff_ffff       +-----------------+ 0xffff_ffff
@@ -340,14 +335,22 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///   +-----------------+ 0x8000_0000    -+
 ///
 /// The kernel's high memory area occupies the top 128 MiB of the kernel
-/// segment. The temp mappings area is reserved for thread-local temporary
-/// mappings through `kernel_map_local`. The driver mappings area is reserved
-/// for long-term mapping of memory areas that are not mapped in low memory. The
-/// exception vectors and stubs areas are simply mappings from the pages in the
-/// kernel that contain the vectors and stubs to the high vectors area.
+/// segment.
 ///
-///   TODO: What about kernel thread stacks? Presumably these could be part of
-///         the task structures allocated in the low memory area, maybe?
+/// The Fixed Mappings area is a direct mapping of the lower 2 GiB (2/2 split)
+/// or the lower 768 MiB (3/1 split) of physical memory.
+///
+/// The Temporary Mappings area is 128 KiB providing enough space for 32 4 KiB
+/// page tables. Every kernel thread has a single, thread-local page table used
+/// to temporarily map physical memory beyond the fixed mappings. Refer to
+/// `Task::map_page_local()` and `Task::unmap_page_local()`.
+///
+///   NOTE: The fixed size of 32 pages allows for 32 simultaneous kernel
+///         threads. There probably should be a system in place to set the size
+///         of this based the number of cores.
+///
+/// The Driver Mappings area is an ~126 MiB area kernel drivers can use to map
+/// device memory.
 ///
 /// # Returns
 ///

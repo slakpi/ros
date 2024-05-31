@@ -4,9 +4,10 @@
 //!       processes.
 
 use crate::arch::task;
+use core::ptr;
 
 static mut KERNEL_TASK: task::Task = task::Task::new(0);
 
 pub fn get_kernel_task() -> &'static mut task::Task {
-  unsafe { &mut KERNEL_TASK }
+  unsafe { ptr::addr_of_mut!(KERNEL_TASK).as_mut().unwrap() }
 }
