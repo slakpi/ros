@@ -25,7 +25,7 @@ sync_spin_lock:
 
 
 /*----------------------------------------------------------------------------*/
-/// Attempt to obtain a spin lock. See K13.6.2.
+/// Attempt to obtain a spin lock. See K13.3.4.
 ///
 /// # Parameters
 ///
@@ -51,7 +51,7 @@ sync_try_spin_lock:
 
 
 /*----------------------------------------------------------------------------*/
-/// Release a spin lock. See K13.6.2.
+/// Release a spin lock. See K13.3.4.
 ///
 /// # Parameters
 ///
