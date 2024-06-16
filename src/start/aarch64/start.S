@@ -23,9 +23,10 @@
 
 // EL1 system control register default. Set the required reserved bits to 1 per
 // D17.2.118. Leave EL1 and EL0 in little endian and leave the MMU disabled.
-#define SCTLR_EL1_RESERVED   ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11))
+#define SCTLR_EL1_C          (1 << 2)
+#define SCTLR_EL1_RESERVED   ((3 << 28) | (3 << 22) | (1 << 20) | (1 << 11) | (3 << 7))
 #define SCTLR_EL1_MMU_ENABLE (1 << 0)
-#define SCTLR_EL1_DEFAULT    (SCTLR_EL1_RESERVED)
+#define SCTLR_EL1_DEFAULT    (SCTLR_EL1_RESERVED | SCTLR_EL1_C)
 
 
 // The linker script forces this section to reside at the kernel base address.
@@ -50,11 +51,6 @@
 _start:
 // Save the entry arguments
   mov     w19, w0
-
-// Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
-  mrs     x9, mpidr_el1
-  and     x9, x9, #0xff
-  cbnz    x9, cpu_halt
 
 // Configure the processor exception levels. The bootloader should have dropped
 // us into EL2, so returning from this exception handler will jump to EL1 after
@@ -83,6 +79,11 @@ el2_entry:
 /// Runs once when the kernel drops from EL2 to EL1 during start. All subsequent
 /// exception level changes will be EL0 -> EL1 or EL1 -> EL0.
 el1_entry:
+// Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
+  mrs     x0, mpidr_el1
+  and     x0, x0, #0xff
+  bl      gate_cpu
+
 // Temporary stack setup before turning on the MMU.
   adrp    x9, __kernel_stack_start
   mov     sp, x9
@@ -183,11 +184,11 @@ begin_virt_addressing:
   mov     x10, #0
   stp     x9, x10, [x29, #-16]
 
-// Transfer control to Rustland. The kernel should not return. If it does, just
-// halt the CPU.
+// Perform the rest of the kernel initialization in Rustland.
   sub     x0, x29, #64
-  bl      ros_kernel
+  bl      ros_kernel_init
 
+// For now, just halt after initialization.
 el1_cpu_halt:
   b       el1_cpu_halt
 
@@ -227,4 +228,22 @@ init_kernel_el:
   ldr     x9, =SCTLR_EL1_DEFAULT
   msr     sctlr_el1, x9
 
+  ret
+
+
+/*----------------------------------------------------------------------------*/
+/// Gate the CPU. Assumes interrupts are disabled and that WFE will only release
+/// the CPU in response to SEV. Simply returns if the CPU ID is 0.
+///
+/// # Parameters
+///
+/// * x0 - CPU ID
+gate_cpu:
+// no fn_entry required.
+
+  cmp     x0, #0
+  beq     1f                // Return if this is CPU 0.
+  wfe                       // Otherwise, wait for SEV.
+1:
+// no fn_exit required.
   ret

@@ -3,6 +3,7 @@
 pub mod debug;
 pub mod exceptions;
 pub mod mm;
+pub mod sync;
 pub mod task;
 
 use crate::debug_print;

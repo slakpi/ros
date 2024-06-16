@@ -8,10 +8,7 @@ Rustland.
 _start
 ------
 
-`_start` is the entry point called by the bootloader. `_start` halts any other
-running instances on other CPUs, moves the kernel into the appropriate
-protection ring, sets up exception vectors, sets up the MMU, then transfers
-control to `ros_kernel` in Rustland.
+`_start` is the entry point called by the bootloader.
 
 Exceptions
 ----------
@@ -31,3 +28,7 @@ address space layout.
 The minimal page table structure maps the kernel and DTB (if present) into the
 kernel's virtual address space using their physical offsets from the virtual
 address base.
+
+Initialization
+--------------
+

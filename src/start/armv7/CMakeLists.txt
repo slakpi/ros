@@ -7,5 +7,6 @@ add_executable(
          extensions.S
          pages.S
          pages.S
+         spin_lock.S
          start.S)
 target_include_directories(kernel PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)

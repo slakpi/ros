@@ -482,7 +482,7 @@ fn get_descriptor_index(virtual_base: usize, virt_addr: usize, table_level: Tabl
       };
 
       ((virt_addr >> LEVEL_1_SHIFT_LONG) & mask) << 1
-    },
+    }
     TableLevel::Level2 => ((virt_addr >> LEVEL_2_SHIFT_LONG) & INDEX_MASK_LONG) << 1,
     TableLevel::Level3 => ((virt_addr >> LEVEL_3_SHIFT_LONG) & INDEX_MASK_LONG) << 1,
   }
@@ -538,7 +538,10 @@ fn make_descriptor(
 ///
 /// A tuple with the low and high 32-bits of the descriptor.
 fn make_block_descriptor(phys_addr: usize, mair_idx: usize) -> (usize, usize) {
-  (phys_addr | mair_idx | MM_ACCESS_FLAG_LONG | MM_BLOCK_FLAG_LONG, 0)
+  (
+    phys_addr | mair_idx | MM_ACCESS_FLAG_LONG | MM_BLOCK_FLAG_LONG,
+    0,
+  )
 }
 
 /// Make a level 2 or 3 page descriptor.
@@ -557,5 +560,8 @@ fn make_block_descriptor(phys_addr: usize, mair_idx: usize) -> (usize, usize) {
 /// A tuple with the low and high 32-bits of the descriptor. The high 32-bits
 /// are zero if LPAE is not supported.
 fn make_page_descriptor(phys_addr: usize, mair_idx: usize) -> (usize, usize) {
-  (phys_addr | mair_idx | MM_ACCESS_FLAG_LONG | MM_PAGE_FLAG_LONG, 0)
+  (
+    phys_addr | mair_idx | MM_ACCESS_FLAG_LONG | MM_PAGE_FLAG_LONG,
+    0,
+  )
 }

@@ -3,11 +3,12 @@
 #include "abi.h"
 
 // SCTLR flags. See B4.1.130. Enable the MMU, expect exception vectors at the
-// high address (0xffff_0000), and enable the Access Flag.
+// high address (0xffff_0000), enable the Access Flag, enable data caching.
 #define SCTLR_MMU_ENABLE 1
+#define SCTLR_C          (0b1 << 2)
 #define SCTLR_V          (0b1 << 13)
 #define SCTLR_AFE        (0b1 << 29)
-#define SCTLR_FLAGS      (SCTLR_MMU_ENABLE | SCTLR_AFE | SCTLR_V)
+#define SCTLR_FLAGS      (SCTLR_MMU_ENABLE | SCTLR_AFE | SCTLR_V | SCTLR_C)
 
 // DACR setup. See B4.1.43. Only using domain 0 in client mode (access
 // permissions are checked).
@@ -36,11 +37,12 @@ _start:
   mov     r5, r1
   mov     r6, r2
 
-// Check the CPU ID. Halt CPUs other than 0. MPIDR[1:0] is the CPU ID.
+// Check the CPU ID. Gate CPUs other than 0. MPIDR[1:0] is the CPU ID. After
+// CPU0 initializes the kernel, the remainder of the CPUs will be released to
+// set themselves up.
   mrc     p15, 0, r0, c0, c0, 5
   and     r0, r0, #3
-  cmp     r0, #0
-  bne     cpu_halt
+  bl      gate_cpu
 
 // Temporary stack setup before turning on the MMU.
   adr     r0, kernel_stack_start_rel
@@ -152,13 +154,31 @@ begin_virt_addressing:
   ldr     r1, =__vmsplit
   str     r1, [fp, #-4]
 
-// Transfer control to Rustland. The kernel should not return. If it does, just
-// halt the CPU.
+// Perform the rest of the kernel initialization in Rustland.
   sub     r0, fp, #32
-  bl      ros_kernel
+  bl      ros_kernel_init
 
+// For now, just halt after initialization.
 cpu_halt:
   b       cpu_halt
+
+
+/*----------------------------------------------------------------------------*/
+/// Gate the CPU. Assumes interrupts are disabled and that WFE will only release
+/// the CPU in response to SEV. Simply returns if the CPU ID is 0.
+///
+/// # Parameters
+///
+/// * r0 - CPU ID
+gate_cpu:
+// no fn_entry required.
+
+  cmp     r0, #0
+  beq     1f                // Return if this is CPU 0.
+  wfe                       // Otherwise, wait for SEV.
+1:
+// no fn_exit required.
+  mov     pc, lr
 
 
 /*----------------------------------------------------------------------------*/

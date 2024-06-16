@@ -3,6 +3,7 @@
 pub mod debug;
 pub mod exceptions;
 pub mod mm;
+pub mod sync;
 pub mod task;
 
 use crate::debug_print;
@@ -323,7 +324,7 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///   | Driver Mappings |                 |
 ///   |                 |                 |
 ///   |.................| 0xf820_0000     |
-///   | Temp Mappings   |                 |
+///   | Thread Local    |                 |
 ///   +-----------------+ 0xf800_0000    -+
 ///   |                 |                 |
 ///  ...               ...                |
@@ -340,14 +341,9 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 /// The Fixed Mappings area is a direct mapping of the lower 2 GiB (2/2 split)
 /// or the lower 768 MiB (3/1 split) of physical memory.
 ///
-/// The Temporary Mappings area is 128 KiB providing enough space for 32 4 KiB
-/// page tables. Every kernel thread has a single, thread-local page table used
-/// to temporarily map physical memory beyond the fixed mappings. Refer to
-/// `Task::map_page_local()` and `Task::unmap_page_local()`.
-///
-///   NOTE: The fixed size of 32 pages allows for 32 simultaneous kernel
-///         threads. There probably should be a system in place to set the size
-///         of this based the number of cores.
+/// The Thread Local area is a 128 KiB area for thread local data. For example,
+/// a kernel thread's temporary page table will be copied here when it begins
+/// running.
 ///
 /// The Driver Mappings area is an ~126 MiB area kernel drivers can use to map
 /// device memory.
