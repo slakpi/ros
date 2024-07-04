@@ -6,8 +6,9 @@ pub mod mm;
 pub mod sync;
 pub mod task;
 
+use crate::arch::arm::soc;
 use crate::debug_print;
-use crate::peripherals::{base, memory, mini_uart, soc};
+use crate::peripherals::{base, memory, mini_uart};
 use crate::support::{bits, dtb, range};
 use core::ptr;
 
@@ -46,6 +47,9 @@ static mut VIRTUAL_BASE: usize = 0;
 /// Max physical address.
 static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 
+/// Number of CPU cores in the SoC.
+static mut CORE_COUNT: usize = 0;
+
 /// AArch64 platform configuration.
 ///
 /// # Parameters
@@ -74,13 +78,6 @@ pub fn init(config: usize) {
   // TODO: 16 KiB and 64 KiB page support.
   assert!(config.page_size == 4096);
 
-  unsafe {
-    PAGE_SIZE = config.page_size;
-    PAGE_SHIFT = bits::floor_log2(config.page_size);
-    VIRTUAL_BASE = config.virtual_base;
-    MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
-  }
-
   // Calculate the blob address and its size. There is no need to do any real
   // error checking on the size. If the blob is not valid,
   // `init_physical_memory_mappings()` will panic. If the blob is an ATAG list,
@@ -90,6 +87,17 @@ pub fn init(config: usize) {
   let blob_size = dtb::DtbReader::check_dtb(blob_addr)
     .map_or_else(|_| 0, |size| bits::align_up(size, config.page_size));
 
+  unsafe {
+    PAGE_SIZE = config.page_size;
+    PAGE_SHIFT = bits::floor_log2(config.page_size);
+    VIRTUAL_BASE = config.virtual_base;
+    MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
+    CORE_COUNT = soc::get_soc_core_count(blob_addr).unwrap();
+  }
+
+  // Verify that the DTB provided CPU core information.
+  assert!(get_core_count() > 0);
+  
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
   // Initialize the SoC memory mappings.
@@ -172,6 +180,20 @@ pub fn get_kernel_virtual_base() -> usize {
 /// Returns the bitwise NOT of the kernel base address.
 pub fn get_max_physical_address() -> usize {
   unsafe { MAX_PHYSICAL_ADDRESS }
+}
+
+/// Get the number of cores.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed.
+///
+/// # Returns
+///
+/// Returns the number of cores.
+pub fn get_core_count() -> usize {
+  unsafe { CORE_COUNT }
 }
 
 /// Initialize the SoC memory layout.

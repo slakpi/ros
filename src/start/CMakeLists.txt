@@ -5,7 +5,7 @@ include(platform)
 #-------------------------------------------------------------------------------
 get_kernel_base_address(kernel_base)
 get_kernel_virtual_base_address(kernel_virtual_base kernel_vmsplit)
-get_kernel_stack_pages(kernel_stack_pages)
+get_kernel_stack_page_count(kernel_stack_pages)
 get_kernel_page_size(kernel_page_size)
 
 #-------------------------------------------------------------------------------

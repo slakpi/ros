@@ -3,8 +3,10 @@
 use crate::support::dtb;
 use core::cmp;
 
+/// Maximum number of SoC memory mappings that can be stored in a configuration.
 const SOC_MAPPINGS: usize = 64;
 
+/// Mapping from system peripheral addresses to CPU address.
 #[derive(Copy, Clone)]
 pub struct SocMapping {
   pub soc_base: usize,
@@ -12,9 +14,10 @@ pub struct SocMapping {
   pub size: usize,
 }
 
+/// Mapping container.
 pub struct SocConfig {
   mappings: [SocMapping; SOC_MAPPINGS],
-  mapping_count: usize,
+  count: usize,
 }
 
 impl SocConfig {
@@ -25,24 +28,44 @@ impl SocConfig {
         cpu_base: 0,
         size: 0,
       }; SOC_MAPPINGS],
-      mapping_count: 0,
+      count: 0,
     }
   }
 
+  /// Get the valid mappings in the container.
+  ///
+  /// # Returns
+  ///
+  /// A slice containing the valid mappings.
   pub fn get_mappings(&self) -> &[SocMapping] {
-    &self.mappings[0..self.mapping_count]
+    &self.mappings[0..self.count]
   }
 
+  /// Add a mapping to the container.
+  ///
+  /// # Parameters
+  ///
+  /// * `mapping` - The mapping to add to the container.
   pub fn add_mapping(&mut self, mapping: SocMapping) {
-    if self.mapping_count >= SOC_MAPPINGS {
+    if self.count >= SOC_MAPPINGS {
       return;
     }
 
-    self.mappings[self.mapping_count] = mapping;
-    self.mapping_count += 1;
+    self.mappings[self.count] = mapping;
+    self.count += 1;
   }
 }
 
+/// Scan the DTB for SoC memory mappings.
+///
+/// # Parameters
+///
+/// * `blob` - The DTB address.
+///
+/// # Returns
+///
+/// SoC memory mappings found in the DTB, or None if an error occurs. The
+/// mapping list may be empty.
 pub fn get_soc_memory_layout(blob: usize) -> Option<SocConfig> {
   let mut config = SocConfig::new();
   let reader = dtb::DtbReader::new(blob).ok()?;
@@ -65,6 +88,15 @@ pub fn get_soc_memory_layout(blob: usize) -> Option<SocConfig> {
   .ok()?;
 
   Some(config)
+}
+
+pub fn get_soc_core_count(blob: usize) -> Option<usize> {
+  let mut scanner = DtbCpuScanner::new();
+  let reader = dtb::DtbReader::new(blob).ok()?;
+
+  _ = reader.scan(&mut scanner).ok()?;
+
+  Some(scanner.count)
 }
 
 fn get_cell_config(
@@ -194,4 +226,51 @@ fn read_ranges(
   }
 
   Ok(())
+}
+
+/// Scans for DTB CPU nodes.
+///
+///   NOTE: It would probably be more efficient to add a method to the DTB
+///         reader that allows walking the immediate children of a node rather
+///         than scanning the whole DTB for CPU nodes. That would allow finding
+///         /cpus, then checking for `cpu@x` children.
+struct DtbCpuScanner {
+  count: usize,
+}
+
+impl DtbCpuScanner {
+  pub fn new() -> Self {
+    DtbCpuScanner {
+      count: 0,
+    }
+  }
+}
+
+impl dtb::DtbScanner for DtbCpuScanner {
+  /// Check if a node matches `cpu@[0-9]+`.
+  ///
+  /// # Assumptions
+  ///
+  /// The digits are not validated. The scanner assumes digits will follow if
+  /// the node name starts with `cpu@`.
+  fn scan_node(
+    &mut self,
+    reader: &dtb::DtbReader,
+    name: &[u8],
+    cursor: &dtb::DtbCursor,
+  ) -> Result<bool, dtb::DtbError> {
+    // Check if the name is long enough to contain at least `cpu@x`.
+    if name.len() < 5 {
+      return Ok(true);
+    }
+
+    // If long enough, check that the string starts with `cpu@`. Increment the
+    // CPU count if it does.
+    match "cpu@".as_bytes().cmp(&name[..4]) {
+      cmp::Ordering::Equal => self.count += 1,
+      _ => {}
+    }
+
+    Ok(true)
+  }
 }
