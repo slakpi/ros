@@ -11,9 +11,9 @@ Connections
 
     USB Serial          Raspberry Pi
     --------------------------------
-    Black (Ground)      6 (Ground)
-    White (RX)          8 (TX)
-    Green (TX)          10 (RX)
+    Black (Ground)      6  (Ground)
+    White (RX)          8  (UART TX)
+    Green (TX)          10 (UART RX)
 
 ### JTAG (GPIO Alt4 Configuration)
 
@@ -26,4 +26,8 @@ Connections
     CN2:10              13 (TMS)
     CN2:12              15 (TRST)
     CN3:1 - CN3:3       -
-    CN3:4               9 (Ground)
+    CN3:4               9  (Ground)
+    CN3:25              8  (UART TX)
+    CN3:26              10 (UART RX)
+
+Use `usbserial-FT7GUT2I2` for serial communication.
