@@ -15,14 +15,16 @@ const AUX_MU_CNTL_REG: usize = 0x00215060;
 const _AUX_MU_STAT_REG: usize = 0x00215064;
 const AUX_MU_BAUD_REG: usize = 0x00215068;
 
-/// @fn init_uart
-/// @brief   Intialize UART1.
-/// @details Modifies GPFSEL1 to configure GPIO14 and GPIO15 to use their
-///          Alternate Function 5 modes, UART1 TX and RX respectively. Disable
-///          Pull-up/-down. Then enable and configure UART1.
+/// Enables the UART1.
 ///
-///          The system frequency is 250 MHz. The baud register value of 270
-///          translates to a baud rate of 250 MHz / (8 * (270 + 1)) ~ 115200.
+/// # Description
+///
+/// Modifies GPFSEL1 to configure GPIO14 and GPIO15 to use their Alternate
+/// Function 5 modes, UART1 TX and RX respectively. Disable Pull-up/-down. Then
+/// enable and configure UART1.
+///
+/// The system frequency is 250 MHz. The baud register value of 270 translates
+/// to a baud rate of 250 MHz / (8 * (270 + 1)) ~ 115200.
 pub fn init() {
   base::peripheral_reg_put(0, gpio::GPPUD);
   base::peripheral_delay(gpio::GPIO_DELAY);
@@ -43,9 +45,15 @@ pub fn init() {
   base::peripheral_reg_put(3, AUX_MU_CNTL_REG);
 }
 
-/// @fn uart_recv
-/// @brief   Receive a byte from UART1. Blocks until the a arrives.
-/// @returns The received byte.
+/// Receive a byte from UART1.
+///
+/// # Description
+///
+/// Blocks until a arrives.
+///
+/// # Returns
+///
+/// The received byte.
 pub fn _recv() -> u8 {
   loop {
     let c = base::peripheral_reg_get(AUX_MU_LSR_REG);
@@ -57,9 +65,15 @@ pub fn _recv() -> u8 {
   (base::peripheral_reg_get(AUX_MU_IO_REG) & 0xff) as u8
 }
 
-/// @fn uart_send
-/// @brief Send a byte to UART1. Blocks until the UART is ready.
-/// @param[in] c The byte to send.
+/// Send a byte to UART1.
+///
+/// # Parameters
+///
+/// * `c` - The byte to send.
+///
+/// # Description
+///
+/// Serializes UART access and blocks until the UART is ready.
 pub fn send(c: u8) {
   loop {
     let c = base::peripheral_reg_get(AUX_MU_LSR_REG);
@@ -71,18 +85,30 @@ pub fn send(c: u8) {
   base::peripheral_reg_put(c as u32, AUX_MU_IO_REG);
 }
 
-/// @fn uart_send_bytes
-/// @brief Send an array of bytes to the mini UART.
-/// @param[in] s The byte array to send.
+/// Send an array of bytes to the mini UART.
+///
+/// # Parameters
+///
+/// * `s` - The byte array to send.
+///
+/// # Description
+///
+/// Serializes UART access and blocks until the UART is ready.
 pub fn send_bytes(s: &[u8]) {
   for c in s {
     send(*c);
   }
 }
 
-/// @fn uart_send_string
-/// @brief Convenience function to send UTF-8 bytes to the mini UART.
-/// @param[in] s The string to send.
+/// Convenience function to send UTF-8 bytes to the mini UART.
+///
+/// # Parameters
+///
+/// * `s` - The string to send.
+///
+/// # Description
+///
+/// Serializes UART access and blocks until the UART is ready.
 pub fn send_string(s: &str) {
   send_bytes(s.as_bytes());
 }
