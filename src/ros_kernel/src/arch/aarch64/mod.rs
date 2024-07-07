@@ -2,13 +2,14 @@
 
 pub mod debug;
 pub mod exceptions;
+pub mod memory;
 pub mod mm;
 pub mod sync;
 pub mod task;
 
-use crate::arch::arm::soc;
+use crate::arch::arm::{cpu, soc};
 use crate::debug_print;
-use crate::peripherals::{base, memory, mini_uart};
+use crate::peripherals::{base, mini_uart};
 use crate::support::{bits, dtb, range};
 use core::ptr;
 
@@ -41,14 +42,17 @@ static mut PAGE_SIZE: usize = 0;
 /// Page shift.
 static mut PAGE_SHIFT: usize = 0;
 
+/// Kernel base address.
+static mut KERNEL_BASE: usize = 0;
+
 /// Kernel virtual address base.
 static mut VIRTUAL_BASE: usize = 0;
 
 /// Max physical address.
 static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 
-/// Number of CPU cores in the SoC.
-static mut CORE_COUNT: usize = 0;
+/// CPU configuration.
+static mut CPU_CONFIG: cpu::CpuConfig = cpu::CpuConfig::new();
 
 /// AArch64 platform configuration.
 ///
@@ -90,14 +94,14 @@ pub fn init(config: usize) {
   unsafe {
     PAGE_SIZE = config.page_size;
     PAGE_SHIFT = bits::floor_log2(config.page_size);
+    KERNEL_BASE = config.kernel_base;
     VIRTUAL_BASE = config.virtual_base;
     MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
-    CORE_COUNT = soc::get_soc_core_count(blob_addr).unwrap();
   }
 
-  // Verify that the DTB provided CPU core information.
-  assert!(get_core_count() > 0);
-  
+  // Initialize the CPU information.
+  init_cpu_configuration(blob_addr);
+
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
   // Initialize the SoC memory mappings.
@@ -116,6 +120,19 @@ pub fn init(config: usize) {
 
   // Initialize the page allocation exclusions.
   init_exclusions(pages_end, config.blob, blob_size);
+}
+
+pub fn init_secondary_cores() {
+  let config = get_cpu_config();
+  let addr = get_kernel_base();
+  let virt_base = get_kernel_virtual_base();
+
+  for core in &config.cores()[1..] {
+    unsafe {
+      let ptr = (core.get_cpu_release_addr() + virt_base) as *mut usize;
+      *ptr = addr;
+    }
+  }
 }
 
 /// Get the physical memory layout.
@@ -158,6 +175,16 @@ pub fn get_page_shift() -> usize {
   unsafe { PAGE_SHIFT }
 }
 
+/// Get the kernel base address.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed.
+pub fn get_kernel_base() -> usize {
+  unsafe { KERNEL_BASE }
+}
+
 /// Get the kernel virtual base address.
 ///
 /// # Description
@@ -193,7 +220,35 @@ pub fn get_max_physical_address() -> usize {
 ///
 /// Returns the number of cores.
 pub fn get_core_count() -> usize {
-  unsafe { CORE_COUNT }
+  unsafe { CPU_CONFIG.len() }
+}
+
+/// Get the full CPU configuration.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed.
+///
+/// # Returns
+///
+/// Returns the CPU configuration.
+pub fn get_cpu_config() -> &'static cpu::CpuConfig {
+  unsafe { ptr::addr_of!(CPU_CONFIG).as_ref().unwrap() }
+}
+
+/// Initialize the CPU configuration.
+///
+/// # Parameters
+///
+/// * `blob_addr` - The ATAGs or DTB blob address.
+fn init_cpu_configuration(blob_addr: usize) {
+  unsafe {
+    assert!(cpu::get_cpu_config(
+      ptr::addr_of_mut!(CPU_CONFIG).as_mut().unwrap(),
+      blob_addr
+    ));
+  }
 }
 
 /// Initialize the SoC memory layout.
@@ -243,17 +298,19 @@ fn init_soc_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> 
 ///
 /// The new end of the kernel page tables.
 fn init_physical_memory_mappings(pages_start: usize, pages_end: usize, blob_addr: usize) -> usize {
-  let mem_layout = memory::get_memory_layout(blob_addr).unwrap();
+  unsafe {
+    assert!(memory::get_memory_layout(
+      ptr::addr_of_mut!(MEM_LAYOUT).as_mut().unwrap(),
+      blob_addr
+    ));
+  }
+
   let pages_end = init_kernel_memory_map(
     get_kernel_virtual_base(),
     pages_start,
     pages_end,
-    &mem_layout,
+    get_memory_layout(),
   );
-
-  unsafe {
-    MEM_LAYOUT = mem_layout;
-  }
 
   pages_end
 }
@@ -307,11 +364,11 @@ fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
 ///     | Kernel Segment  | 256 TiB
 ///     |                 |
 ///     +-----------------+ 0xffff_0000_0000_0000
-///     |  / / / / / / /  |
 ///     | / / / / / / / / |
-///     |  / / / / / / /  | 16,776,704 TiB of unused address space
 ///     | / / / / / / / / |
-///     |  / / / / / / /  |
+///     | / / / / / / / / | 16,776,704 TiB of unused address space
+///     | / / / / / / / / |
+///     | / / / / / / / / |
 ///     +-----------------+ 0x0000_ffff_ffff_ffff
 ///     |                 |
 ///     | User Segment    | 256 TiB

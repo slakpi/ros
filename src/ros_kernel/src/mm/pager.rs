@@ -1,8 +1,7 @@
 //! Kernel Memory Pager
 
 use super::page_allocator::PageAllocator;
-use crate::arch;
-use crate::peripherals::memory;
+use crate::arch::{self, memory};
 use crate::support::{bits, range};
 
 /// We need to have at least as many allocators as we have memory ranges. The

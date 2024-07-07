@@ -38,7 +38,7 @@
 ///
 /// # Parameters
 ///
-/// * x0 - 32-bit pointer to the DTB (primary core)
+/// * w0 - 32-bit pointer to the DTB (primary core)
 /// * x1 - Zero
 /// * x2 - Zero
 /// * x3 - Zero
@@ -58,139 +58,8 @@ _start:
   bl      init_kernel_el
   eret 
 
-cpu_halt:
-  b       cpu_halt
-
 
 .section ".text"
-
-
-/*----------------------------------------------------------------------------*/
-/// Dummy entry point for EL3 -> E2.
-el2_entry:
-  eret
-
-
-/*----------------------------------------------------------------------------*/
-/// Entry point for EL2 -> EL1.
-///
-/// # Description
-///
-/// Runs once when the kernel drops from EL2 to EL1 during start. All subsequent
-/// exception level changes will be EL0 -> EL1 or EL1 -> EL0.
-el1_entry:
-// Check the CPU ID. Halt CPUs other than 0. MPIDR[7:0] (Aff0) is the CPU ID.
-  mrs     x0, mpidr_el1
-  and     x0, x0, #0xff
-  bl      gate_cpu
-
-// Temporary stack setup before turning on the MMU.
-  adrp    x9, __kernel_stack_start
-  mov     sp, x9
-  mov     x29, sp
-
-// Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
-  adrp    x0, __bss_start
-  mov     x1, #0
-  ldr     x2, =__bss_size
-  bl      memset
-
-// Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
-// kernel page tables. If the blob is a DTB, the DTB will be mapped into the
-// initial kernel page tables.
-  ldr     x9, =0xffffffff
-  and     x19, x19, x9
-  mov     x0, x19
-  bl      dtb_quick_check
-
-  mov     x1, x0            // dtb_quick_check return value to x1
-  mov     x0, x19           // blob address to x0
-  bl      mmu_create_kernel_page_tables
-
-// Save off physical addresses needed for the kernel configuration struct.
-  adrp    x21, __kernel_start
-  adrp    x22, __kernel_pages_start
-
-// Setup the MMU. The identity map in TTBR0_EL1 is going to allow us to get to
-// the next instruction after we switch on the MMU.
-  adrp    x9, __kernel_id_pages_start
-  msr     ttbr0_el1, x9
-
-  adrp    x9, __kernel_pages_start
-  msr     ttbr1_el1, x9
-
-  ldr     x9, =TCR_EL1_VALUE
-  msr     tcr_el1, x9
-
-  ldr     x9, =MAIR_EL1_VALUE
-  msr     mair_el1, x0
-
-  ldr     x20, =begin_virt_addressing
-
-  isb
-  mrs     x9, sctlr_el1
-  orr     x9, x9, #SCTLR_EL1_MMU_ENABLE
-  msr     sctlr_el1, x9
-  isb
-
-// Jump using our first virtual address to switch the program counter over to
-// virtual addressing. Once the program counter is using virtual addresses,
-// clear TTBR0_EL1, we no longer need the temporary identity map.
-  br      x20
-begin_virt_addressing:
-  mov     x9, #0
-  msr     ttbr0_el1, x9
-  isb
-
-// Setup the exception vectors.
-  adr     x9, vectors
-  msr     vbar_el1, x9
- 
-// Real stack setup.
-  ldr     x9, =__kernel_stack_start
-  mov     sp, x9
-  mov     x29, sp
-  sub     sp, sp, #(8 * 8)
-
-// Write kernel configuration struct. Provide all addresses as physical.
-//
-//   +------------------------------+ 0
-//   | Virtual base address         |
-//   +------------------------------+ 8
-//   | Page size                    |
-//   +------------------------------+ 16
-//   | Physical blob address        |
-//   +------------------------------+ 24
-//   | Physical kernel address      |
-//   +------------------------------+ 32
-//   | Kernel size                  |
-//   +------------------------------+ 40
-//   | Physical page tables address |
-//   +------------------------------+ 48
-//   | Page table area size         |
-//   +------------------------------+ 56
-//   | / / / / / Padding / / / / /  |
-//   +------------------------------+ 64
-  ldr     x11, =__virtual_start
-  ldr     x10, =__page_size
-  stp     x11, x10, [x29, #-64]
-
-  stp     x19, x21, [x29, #-48]
-
-  ldr     x9, =__kernel_size
-  stp     x9, x22, [x29, #-32]
-
-  ldr     x9, =__kernel_pages_size
-  mov     x10, #0
-  stp     x9, x10, [x29, #-16]
-
-// Perform the rest of the kernel initialization in Rustland.
-  sub     x0, x29, #64
-  bl      ros_kernel_init
-
-// For now, just halt after initialization.
-el1_cpu_halt:
-  b       el1_cpu_halt
 
 
 /*----------------------------------------------------------------------------*/
@@ -232,18 +101,195 @@ init_kernel_el:
 
 
 /*----------------------------------------------------------------------------*/
-/// Gate the CPU. Assumes interrupts are disabled and that WFE will only release
-/// the CPU in response to SEV. Simply returns if the CPU ID is 0.
-///
-/// # Parameters
-///
-/// * x0 - CPU ID
-gate_cpu:
+/// Dummy entry point for EL3 -> E2.
+el2_entry:
+  eret
+
+
+/*----------------------------------------------------------------------------*/
+/// Entry point for EL2 -> EL1.
+el1_entry:
+  mrs     x9, mpidr_el1
+  and     x9, x9, #0xff
+  cbz     x9, primary_cpu_boot
+  b       secondary_cpu_boot
+
+
+/*----------------------------------------------------------------------------*/
+/// Boot the primary CPU. While the secondary CPUs are parked and interrupts are
+/// disabled, the primary CPU will perform all of the low-level kernel setup
+/// that needs to be done single-threaded. When setup is complete, the primary
+/// CPU will release the secondary CPUs to do their initialization.
+primary_cpu_boot:
 // no fn_entry required.
 
-  cmp     x0, #0
-  beq     1f                // Return if this is CPU 0.
-  wfe                       // Otherwise, wait for SEV.
-1:
-// no fn_exit required.
-  ret
+// Temporary stack setup before turning on the MMU.
+  adrp    x9, __kernel_stack_start
+  mov     sp, x9
+  mov     x29, sp
+
+// Clear the BSS. The Rust Core Library provides a memset compiler intrinsic.
+  adrp    x0, __bss_start
+  mov     x1, #0
+  ldr     x2, =__bss_size
+  bl      memset
+
+// Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
+// kernel page tables. If the blob is a DTB, the DTB will be mapped into the
+// initial kernel page tables.
+  ldr     x9, =0xffffffff
+  and     x19, x19, x9
+  mov     x0, x19
+  bl      dtb_quick_check
+
+  mov     x1, x0            // dtb_quick_check return value to x1
+  mov     x0, x19           // blob address to x0
+  bl      mmu_create_kernel_page_tables
+
+// Save off physical addresses needed for the kernel configuration struct.
+  adrp    x21, __kernel_start
+  adrp    x22, __kernel_pages_start
+
+// Setup the MMU. The identity map in TTBR0_EL1 is going to allow us to get to
+// the next instruction after we switch on the MMU.
+//
+//   TODO: For some reason, functionalizing this causes downstream issues when
+//         the kernel runs. Attempted to do:
+//
+//             ldr     x0, =primary_cpu_begin_virt_addressing
+//             b       setup_and_enable_mmu
+//           primary_cpu_begin_virt_addressing:
+//             <cleanup code>
+//
+//         Then:
+//
+//           setup_and_enable_mmu:
+//             <setup code>
+//             br      x0
+//
+//         This caused an infinite loop waiting for the UART to become available
+//         on hardware, but worked fine in QEMU.
+  adrp    x9, __kernel_id_pages_start
+  msr     ttbr0_el1, x9
+
+  adrp    x9, __kernel_pages_start
+  msr     ttbr1_el1, x9
+
+  ldr     x9, =TCR_EL1_VALUE
+  msr     tcr_el1, x9
+
+  ldr     x9, =MAIR_EL1_VALUE
+  msr     mair_el1, x0
+
+  ldr     x20, =primary_cpu_begin_virt_addressing
+
+  isb
+  mrs     x9, sctlr_el1
+  orr     x9, x9, #SCTLR_EL1_MMU_ENABLE
+  msr     sctlr_el1, x9
+  isb
+
+// Jump using our first virtual address to switch the program counter over to
+// virtual addressing. Once the program counter is using virtual addresses,
+// clear TTBR0_EL1, we no longer need the temporary identity map.
+  br      x20
+primary_cpu_begin_virt_addressing:
+  mov     x9, #0
+  msr     ttbr0_el1, x9
+  isb
+
+// Setup the exception vectors.
+  adr     x9, vectors
+  msr     vbar_el1, x9
+ 
+// Temporary stack setup with virtual addressing enabled.
+  ldr     x9, =__kernel_stack_start
+  mov     sp, x9
+  mov     x29, sp
+
+// Write kernel configuration struct. Provide all addresses as physical.
+//
+//   +------------------------------+ 0
+//   | Virtual base address         |
+//   +------------------------------+ 8
+//   | Page size                    |
+//   +------------------------------+ 16
+//   | Physical blob address        |
+//   +------------------------------+ 24
+//   | Physical kernel address      |
+//   +------------------------------+ 32
+//   | Kernel size                  |
+//   +------------------------------+ 40
+//   | Physical page tables address |
+//   +------------------------------+ 48
+//   | Page table area size         |
+//   +------------------------------+ 56
+//   | / / / / / Padding / / / / /  |
+//   +------------------------------+ 64
+  sub     sp, sp, #(8 * 8)
+
+  ldr     x11, =__virtual_start
+  ldr     x10, =__page_size
+  stp     x11, x10, [x29, #-64]
+
+  stp     x19, x21, [x29, #-48]
+
+  ldr     x9, =__kernel_size
+  stp     x9, x22, [x29, #-32]
+
+  ldr     x9, =__kernel_pages_size
+  mov     x10, #0
+  stp     x9, x10, [x29, #-16]
+
+// Perform the rest of the kernel initialization in Rustland.
+  sub     x0, x29, #64
+  bl      ros_kernel_init
+
+// Jump to the scheduler.
+  bl      ros_kernel_scheduler
+
+// no fn_exit required. We are not coming back from the scheduler.
+
+
+secondary_cpu_boot:
+// no fn_entry required.
+
+// Setup the MMU. The identity map in TTBR0_EL1 is going to allow us to get to
+// the next instruction after we switch on the MMU.
+  adrp    x9, __kernel_id_pages_start
+  msr     ttbr0_el1, x9
+
+  adrp    x9, __kernel_pages_start
+  msr     ttbr1_el1, x9
+
+  ldr     x9, =TCR_EL1_VALUE
+  msr     tcr_el1, x9
+
+  ldr     x9, =MAIR_EL1_VALUE
+  msr     mair_el1, x0
+
+  ldr     x20, =secondary_cpu_begin_virt_addressing
+
+  isb
+  mrs     x9, sctlr_el1
+  orr     x9, x9, #SCTLR_EL1_MMU_ENABLE
+  msr     sctlr_el1, x9
+  isb
+
+// Jump using our first virtual address to switch the program counter over to
+// virtual addressing. Once the program counter is using virtual addresses,
+// clear TTBR0_EL1, we no longer need the temporary identity map.
+  br      x20
+secondary_cpu_begin_virt_addressing:
+  mov     x9, #0
+  msr     ttbr0_el1, x9
+  isb
+
+// Setup the exception vectors.
+  adr     x9, vectors
+  msr     vbar_el1, x9
+ 
+// Jump to the scheduler.
+  bl      ros_kernel_scheduler
+
+// no fn_exit required. We are not coming back from the scheduler.

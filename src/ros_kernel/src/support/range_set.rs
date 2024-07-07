@@ -69,7 +69,7 @@ impl<const SET_SIZE: usize> RangeSet<SET_SIZE> {
   ///
   /// A slice with the valid ranges.
   pub fn get_ranges(&self) -> &[Range] {
-    &self.ranges[0..self.count]
+    &self.ranges[..self.count]
   }
 
   /// Insert a new range in to the set ordered by base.

@@ -32,3 +32,21 @@ address base.
 Initialization
 --------------
 
+          ● Entry Point
+          |
+          ● Drop to EL1 (AArch64) / SYS (ARMv7)
+          |
+          ● CPU 0                     ● CPUs 1, 2, and 3 Gated
+          |                           |
+          ● Setup Bootstrap Stack     |
+          |                           |
+          ● Check for DeviceTree      |
+          |                           |
+          ● Setup Kernel Page Tables  |
+          |                           |
+          ● Enable CPU 0 MMU          |
+          |                           |
+          ● Architecture Init         |
+          |                           |
+          ● Ungate CPUs 1, 2, 3       ● CPUs 1, 2, and 3 enable their MMUs
+          |

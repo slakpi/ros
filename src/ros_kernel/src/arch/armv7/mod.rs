@@ -2,6 +2,7 @@
 
 pub mod debug;
 pub mod exceptions;
+pub mod memory;
 pub mod mm;
 pub mod sync;
 pub mod task;
@@ -103,7 +104,7 @@ pub fn init(config: usize) {
 
   // Verify that the DTB provided CPU core information.
   assert!(get_core_count() > 0);
-  
+
   let mut pages_end = config.kernel_pages_start + config.kernel_pages_size;
 
   // Initialize the SoC memory mappings.

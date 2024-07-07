@@ -6,7 +6,7 @@ extern "C" {
   fn sync_spin_unlock(lock_addr: usize);
 }
 
-/// Low-level spin lock.
+/// Spin lock.
 ///
 /// # Parameters
 ///

@@ -9,8 +9,7 @@
 #[cfg(feature = "module_tests")]
 pub mod test;
 
-use crate::arch;
-use crate::peripherals::memory;
+use crate::arch::{self, memory};
 use crate::support::bits;
 use core::{cmp, ptr, slice};
 

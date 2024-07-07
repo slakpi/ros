@@ -1,4 +1,4 @@
-//! SoC platform configuration.
+//! ARM SoC Platform Configuration
 
 use crate::support::dtb;
 use core::cmp;
@@ -88,15 +88,6 @@ pub fn get_soc_memory_layout(blob: usize) -> Option<SocConfig> {
   .ok()?;
 
   Some(config)
-}
-
-pub fn get_soc_core_count(blob: usize) -> Option<usize> {
-  let mut scanner = DtbCpuScanner::new();
-  let reader = dtb::DtbReader::new(blob).ok()?;
-
-  _ = reader.scan(&mut scanner).ok()?;
-
-  Some(scanner.count)
 }
 
 fn get_cell_config(
@@ -226,51 +217,4 @@ fn read_ranges(
   }
 
   Ok(())
-}
-
-/// Scans for DTB CPU nodes.
-///
-///   NOTE: It would probably be more efficient to add a method to the DTB
-///         reader that allows walking the immediate children of a node rather
-///         than scanning the whole DTB for CPU nodes. That would allow finding
-///         /cpus, then checking for `cpu@x` children.
-struct DtbCpuScanner {
-  count: usize,
-}
-
-impl DtbCpuScanner {
-  pub fn new() -> Self {
-    DtbCpuScanner {
-      count: 0,
-    }
-  }
-}
-
-impl dtb::DtbScanner for DtbCpuScanner {
-  /// Check if a node matches `cpu@[0-9]+`.
-  ///
-  /// # Assumptions
-  ///
-  /// The digits are not validated. The scanner assumes digits will follow if
-  /// the node name starts with `cpu@`.
-  fn scan_node(
-    &mut self,
-    reader: &dtb::DtbReader,
-    name: &[u8],
-    cursor: &dtb::DtbCursor,
-  ) -> Result<bool, dtb::DtbError> {
-    // Check if the name is long enough to contain at least `cpu@x`.
-    if name.len() < 5 {
-      return Ok(true);
-    }
-
-    // If long enough, check that the string starts with `cpu@`. Increment the
-    // CPU count if it does.
-    match "cpu@".as_bytes().cmp(&name[..4]) {
-      cmp::Ordering::Equal => self.count += 1,
-      _ => {}
-    }
-
-    Ok(true)
-  }
 }

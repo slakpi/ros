@@ -11,6 +11,7 @@ const FDT_NOOP: u32 = 0x4;
 const FDT_END: u32 = 0x9;
 const FDT_MAGIC: u32 = 0xd00d_feed;
 const FDT_MAX_SIZE: usize = 64 * 1024 * 1024;
+const FDT_WORD_BITS: usize = u32::BITS as usize;
 const FDT_WORD_BYTES: usize = (u32::BITS / 8) as usize;
 const FDT_HEADER_SIZE: usize = FDT_WORD_BYTES * 8;
 const FDT_MAX_CELL_COUNT: u32 = (usize::BITS / 8) as u32;
@@ -304,6 +305,16 @@ impl<'blob> DtbReader<'blob> {
     Some(self.get_u32_unchecked(cursor))
   }
 
+  pub fn get_u64(&self, cursor: &mut DtbCursor) -> Option<u64> {
+    if cursor.loc > self.dtb.len() - (FDT_WORD_BYTES * 2) {
+      return None;
+    }
+
+    let upper = (self.get_u32_unchecked(cursor) as u64) << FDT_WORD_BITS;
+    let lower = self.get_u32_unchecked(cursor) as u64;
+    Some(upper | lower)
+  }
+
   /// Internal helper to read a 32-bit integer.
   ///
   /// # Parameters
@@ -372,7 +383,7 @@ impl<'blob> DtbReader<'blob> {
     FDT_WORD_BYTES * (addr_cells as usize + size_cells as usize)
   }
 
-  /// Read a reg value from the DTB as the position pointed to by the cursor.
+  /// Read a reg value from the DTB at the position pointed to by the cursor.
   /// Advances the cursor by the total size of the reg value if the reg value
   /// could be read.
   ///
@@ -405,12 +416,12 @@ impl<'blob> DtbReader<'blob> {
     let mut size = 0u64;
 
     for _ in 0..addr_cells {
-      addr <<= FDT_WORD_BYTES;
+      addr <<= FDT_WORD_BITS;
       addr |= self.get_u32_unchecked(cursor) as u64;
     }
 
     for _ in 0..size_cells {
-      size <<= FDT_WORD_BYTES;
+      size <<= FDT_WORD_BITS;
       size |= self.get_u32_unchecked(cursor) as u64;
     }
 

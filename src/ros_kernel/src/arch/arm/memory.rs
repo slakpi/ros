@@ -1,4 +1,4 @@
-//! DTB physical memory scanning.
+//! ARM Memory Peripheral Utilities
 
 use crate::support::{dtb, range, range_set};
 use core::cmp;
@@ -201,18 +201,39 @@ impl<'mem> dtb::DtbScanner for DtbMemoryScanner<'mem> {
 }
 
 /// Get the system memory layout.
-pub fn get_memory_layout(blob: usize) -> Option<MemoryConfig> {
-  let mut config = MemoryConfig::new();
-  let mut scanner = DtbMemoryScanner::new(&mut config);
-  let reader = dtb::DtbReader::new(blob).ok()?;
+///
+/// # Parameters
+///
+/// * `config` - The memory configuration.
+/// * `blob` - The DTB address.
+///
+/// # Assumptions
+///
+/// Assumes the configuration is empty.
+///
+/// # Returns
+///
+/// True if able to read the memory configuration and at least one valid memory
+/// range is provided by the SoC, false otherwise.
+pub fn get_memory_layout(config: &mut MemoryConfig, blob: usize) -> bool {
+  debug_assert!(config.is_empty());
 
-  _ = reader.scan(&mut scanner).ok()?;
+  let mut scanner = DtbMemoryScanner::new(config);
+
+  let reader = match dtb::DtbReader::new(blob) {
+    Ok(r) => r,
+    _ => return false,
+  };
+
+  if !reader.scan(&mut scanner).is_ok() {
+    return false;
+  }
 
   config.trim_ranges();
 
   if config.is_empty() {
-    return None;
+    return false;
   }
 
-  Some(config)
+  true
 }
