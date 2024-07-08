@@ -147,8 +147,9 @@ primary_cpu_boot:
   bl      mmu_create_kernel_page_tables
 
 // Save off physical addresses needed for the kernel configuration struct.
-  adrp    x21, __kernel_start
-  adrp    x22, __kernel_pages_start
+  adrp    x20, __kernel_start
+  adrp    x21, __kernel_pages_start
+  adrp    x22, __kernel_stack_list
 
 // Enable the MMU.
   adrp    x0, __kernel_id_pages_start
@@ -184,25 +185,32 @@ primary_cpu_begin_virt_addressing:
 //   +------------------------------+ 48
 //   | Page table area size         |
 //   +------------------------------+ 56
-//   | / / / / / Padding / / / / /  |
+//   | Kernel stack list address    |
 //   +------------------------------+ 64
-  sub     sp, sp, #(8 * 8)
+//   | Kernel stack page count      |
+//   +------------------------------+ 72
+//   | / / / / / / / / / / / / / /  |
+//   +------------------------------+ 80
+  sub     sp, sp, #(8 * 10)
 
-  ldr     x11, =__virtual_start
+  ldr     x9, =__virtual_start
   ldr     x10, =__page_size
-  stp     x11, x10, [x29, #-64]
+  stp     x9, x10, [x29, #-80]
 
-  stp     x19, x21, [x29, #-48]
+  stp     x19, x20, [x29, #-64]
 
   ldr     x9, =__kernel_size
-  stp     x9, x22, [x29, #-32]
+  stp     x9, x21, [x29, #-48]
 
   ldr     x9, =__kernel_pages_size
+  stp     x9, x22, [x29, #-32]
+
+  ldr     x9, =__kernel_stack_pages
   mov     x10, #0
   stp     x9, x10, [x29, #-16]
 
 // Perform the rest of the kernel initialization in Rustland.
-  sub     x0, x29, #64
+  sub     x0, x29, #80
   bl      ros_kernel_init
 
 // Jump to the scheduler.
@@ -225,7 +233,14 @@ secondary_cpu_begin_virt_addressing:
 // Setup the exception vectors.
   adr     x9, vectors
   msr     vbar_el1, x9
- 
+
+// Get the temporary stack address for this CPU. 
+  mrs     x9, mpidr_el1
+  and     x9, x9, #0xff
+  ldr     x10, =__kernel_stack_list
+  ldr     x11, [x10, x9, lsl #3]
+  mov     sp, x11
+
 // Jump to the scheduler.
   bl      ros_kernel_scheduler
 

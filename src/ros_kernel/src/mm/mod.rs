@@ -52,6 +52,10 @@ pub fn kernel_unmap_page_local() {
   task.unmap_page_local();
 }
 
+pub fn kernel_allocate(pages: usize) -> Option<(usize, usize, usize)> {
+  pager::allocate(pages)
+}
+
 #[cfg(feature = "module_tests")]
 pub fn run_tests() {
   debug_print!("[mm]\n");

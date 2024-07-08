@@ -31,6 +31,10 @@ pub struct Core {
 }
 
 impl Core {
+  pub fn get_id(&self) -> usize {
+    self.id
+  }
+
   pub fn get_cpu_type(&self) -> &[u8] {
     &self.cpu_type
   }

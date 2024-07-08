@@ -232,8 +232,8 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// Assumes that the region `[base, base + size)` is the maximum available
   /// range. If `base` is not page-aligned, it will be aligned up and the size
-  /// reduced accordingly. If `size` is not an integer multipe of the page size,
-  /// it will be reduced to an integer multiple.
+  /// reduced accordingly. If `size` is not an integer multiple of the page
+  /// size, it will be reduced to an integer multiple.
   ///
   /// # Returns
   ///
@@ -262,10 +262,6 @@ impl<'memory> PageAllocator<'memory> {
 
     // Now update the base address for page-alignment.
     let base = bits::align_up(base, page_size);
-
-    if base == 0 {
-      return None;
-    }
 
     // Now update the new size for page-alignment.
     let size = bits::align_down(end - base + 1, page_size);
@@ -309,9 +305,9 @@ impl<'memory> PageAllocator<'memory> {
   ///
   /// # Returns
   ///
-  /// A tuple with the base physical address of the contigous block and the
+  /// A tuple with the base physical address of the contiguous block and the
   /// actual number of pages allocated, or None if the allocator could not find
-  /// an available contigous block of the requested size.
+  /// an available contiguous block of the requested size.
   pub fn allocate(&mut self, pages: usize) -> Option<(usize, usize)> {
     if pages == 0 {
       return None;

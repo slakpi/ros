@@ -1,86 +1,63 @@
 //! Spin Lock
 
-use super::Sync;
 use crate::arch::sync::{spin_lock, spin_unlock, try_spin_lock};
-use core::ops::Drop;
+use core::cell::UnsafeCell;
+use core::ops::{Deref, DerefMut, Drop};
 use core::ptr;
 
-/// Light-weight RAII guard object.
-pub struct SpinLockGuard {
-  lock_addr: usize,
+pub struct SpinLockGuard<'lock, T> {
+  lock: &'lock SpinLock<T>,
 }
 
-impl SpinLockGuard {
-  /// Obtain the spin lock and construct a guard object.
-  ///
-  /// # Parameters
-  ///
-  /// * `lock_addr` - The lock variable address.
-  ///
-  /// # Returns
-  ///
-  /// A guard object.
-  pub fn lock(lock_addr: usize) -> Self {
-    spin_lock(lock_addr);
-    Self { lock_addr }
+impl<'lock, T> SpinLockGuard<'lock, T> {
+  pub fn new(lock: &'lock SpinLock<T>) -> Self {
+    SpinLockGuard { lock }
+  }
+}
+
+impl<T> Drop for SpinLockGuard<'_, T> {
+  fn drop(&mut self) {
+    spin_unlock(ptr::addr_of!(self.lock.lock_var) as usize);
+  }
+}
+
+impl<T> Deref for SpinLockGuard<'_, T> {
+  type Target = T;
+
+  fn deref(&self) -> &T {
+    unsafe { &*self.lock.obj.get() }
+  }
+}
+
+impl<T> DerefMut for SpinLockGuard<'_, T> {
+  fn deref_mut(&mut self) -> &mut T {
+    unsafe { &mut *self.lock.obj.get() }
+  }
+}
+
+pub struct SpinLock<T> {
+  obj: UnsafeCell<T>,
+  lock_var: u32,
+}
+
+impl<T> SpinLock<T> {
+  pub fn new(obj: T) -> Self {
+    SpinLock {
+      obj: UnsafeCell::new(obj),
+      lock_var: 0,
+    }
   }
 
-  /// Try to obtain the spin lock.
-  ///
-  /// # Parameters
-  ///
-  /// * `lock_addr` - The lock variable address.
-  ///
-  /// # Returns
-  ///
-  /// A guard object if able to obtain the lock, None otherwise.
-  pub fn try_lock(lock_addr: usize) -> Option<Self> {
-    if !try_spin_lock(lock_addr) {
+  pub fn lock(&self) -> SpinLockGuard<'_, T> {
+    spin_lock(ptr::addr_of!(self.lock_var) as usize);
+    SpinLockGuard::new(self)
+  }
+
+  pub fn try_lock(&self) -> Option<SpinLockGuard<'_, T>> {
+    if !try_spin_lock(ptr::addr_of!(self.lock_var) as usize) {
       return None;
     }
 
-    Some(Self { lock_addr })
-  }
-}
-
-impl Drop for SpinLockGuard {
-  /// Release a spin lock.
-  fn drop(&mut self) {
-    spin_unlock(self.lock_addr);
-  }
-}
-
-/// Spin lock. Holds a mutable reference to the lock variable to ensure no other
-/// spin lock objects are constructed on the same lock variable.
-pub struct SpinLock<'lock> {
-  lock: &'lock mut u32,
-}
-
-impl<'lock> SpinLock<'lock> {
-  /// Construct a new spin lock object on a lock variable.
-  ///
-  /// # Parameters
-  ///
-  /// * `lock` - The lock variable.
-  ///
-  /// # Returns
-  ///
-  /// A spin lock object.
-  pub fn new(lock: &'lock mut u32) -> Self {
-    SpinLock { lock }
-  }
-}
-
-impl<'lock> Sync for SpinLock<'lock> {
-  type Guard = SpinLockGuard;
-
-  /// Obtain the spin lock.
-  fn lock(&self) -> Self::Guard {
-    Self::Guard::lock(ptr::addr_of!(self.lock) as usize)
-  }
-
-  /// Try to obtain the spin lock.
-  fn try_lock(&self) -> Option<Self::Guard> {
-    Self::Guard::try_lock(ptr::addr_of!(self.lock) as usize)
+    Some(SpinLockGuard::new(self))
   }
 }

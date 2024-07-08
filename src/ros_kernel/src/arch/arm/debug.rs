@@ -4,7 +4,7 @@ use crate::peripherals::mini_uart;
 use crate::support::print;
 use core::fmt::{self, Write};
 
-const PRINT_BUFFER_SIZE: usize = 2048;
+const PRINT_BUFFER_SIZE: usize = 256;
 
 /// Formats the arguments to a string and writes it to the mini UART.
 ///

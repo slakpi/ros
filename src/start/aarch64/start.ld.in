@@ -1,6 +1,7 @@
 //! AArch64 Linker Script
 
 __page_size = (KERNEL_PAGE_SIZE * 1024);
+__kernel_stack_pages = KERNEL_STACK_PAGES;
 __virtual_start = KERNEL_VIRTUAL_BASE;
 __kernel_start = __virtual_start + KERNEL_BASE;
 
@@ -54,12 +55,23 @@ SECTIONS
   
   __bss_size = __bss_end - __bss_start;
 
-  // Reserve space for the kernel stack. Note the reversal of start and end.
+  // Reserve space for the primary CPU's temporary kernel stack. Note the
+  // reversal of start and end.
   .data.stack :
   {
     __kernel_stack_end = .;
-    . += (KERNEL_STACK_PAGES * __page_size);
+    . += (__kernel_stack_pages * __page_size);
     __kernel_stack_start = .;
+  }
+
+  // Reserve space for a list of temporary kernel stack pointers for the
+  // secondary CPU's. The primary CPU will allocate the memory for the stacks
+  // and place the pointers to the start of each stack in this list indexed by
+  // CPU ID.
+  .data.stack_pointers :
+  {
+    __kernel_stack_list = .;
+    . += __page_size;
   }
 
   __kernel_size = __kernel_stack_start - __kernel_start;

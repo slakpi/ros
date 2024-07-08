@@ -24,6 +24,8 @@ struct KernelConfig {
   kernel_size: usize,
   kernel_pages_start: usize,
   kernel_pages_size: usize,
+  kernel_stack_list: usize,
+  kernel_stack_pages: usize,
 }
 
 /// Re-initialization guard.
@@ -53,6 +55,12 @@ static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 
 /// CPU configuration.
 static mut CPU_CONFIG: cpu::CpuConfig = cpu::CpuConfig::new();
+
+/// Kernel stack list base address.
+static mut KERNEL_STACK_LIST: usize = 0;
+
+/// Number of pages to allocate for temporary kernel stacks.
+static mut KERNEL_STACK_PAGES: usize = 0;
 
 /// AArch64 platform configuration.
 ///
@@ -97,6 +105,8 @@ pub fn init(config: usize) {
     KERNEL_BASE = config.kernel_base;
     VIRTUAL_BASE = config.virtual_base;
     MAX_PHYSICAL_ADDRESS = !VIRTUAL_BASE;
+    KERNEL_STACK_LIST = config.kernel_stack_list;
+    KERNEL_STACK_PAGES = config.kernel_stack_pages;
   }
 
   // Initialize the CPU information.
@@ -123,14 +133,27 @@ pub fn init(config: usize) {
 }
 
 pub fn init_secondary_cores() {
-  let config = get_cpu_config();
-  let addr = get_kernel_base();
+  let cpu_config = get_cpu_config();
+  let kernel_base = get_kernel_base();
   let virt_base = get_kernel_virtual_base();
+  let kernel_stack_list = get_kernel_stack_list();
+  let kernel_stack_pages = get_kernel_stack_pages();
+  let total_pages = cpu_config.len() * kernel_stack_pages;
+  let page_shift = get_page_shift();
+  let id_shift = bits::floor_log2((usize::BITS as usize) / 8);
+  
+  // We have to successfully allocate the stack pages to continue. We can ignore
+  // the zone; we are never going to deallocate these pages.
+  let (stack_base, stack_pages, _) = crate::mm::kernel_allocate(total_pages).unwrap();
+  assert!(stack_pages == total_pages);
 
-  for core in &config.cores()[1..] {
+  for core in &cpu_config.cores()[1..] {
     unsafe {
+      let ptr = (kernel_stack_list + (core.get_id() << id_shift) + virt_base) as *mut usize;
+      *ptr = stack_base + (((core.get_id() + 1) * kernel_stack_pages) << page_shift) + virt_base;
+
       let ptr = (core.get_cpu_release_addr() + virt_base) as *mut usize;
-      *ptr = addr;
+      *ptr = kernel_base; 
     }
   }
 }
@@ -235,6 +258,14 @@ pub fn get_core_count() -> usize {
 /// Returns the CPU configuration.
 pub fn get_cpu_config() -> &'static cpu::CpuConfig {
   unsafe { ptr::addr_of!(CPU_CONFIG).as_ref().unwrap() }
+}
+
+pub fn get_kernel_stack_list() -> usize {
+  unsafe { KERNEL_STACK_LIST }
+}
+
+pub fn get_kernel_stack_pages() -> usize {
+  unsafe { KERNEL_STACK_PAGES }
 }
 
 /// Initialize the CPU configuration.

@@ -166,7 +166,7 @@ impl Range {
 
     let b = match order {
       RangeOrder::Greater | RangeOrder::Contains => Some(Range {
-        base: excl_end,
+        base: excl_end + 1,
         size: my_end - excl_end,
       }),
 

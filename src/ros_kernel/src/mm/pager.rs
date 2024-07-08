@@ -3,16 +3,18 @@
 use super::page_allocator::PageAllocator;
 use crate::arch::{self, memory};
 use crate::support::{bits, range};
+use crate::sync;
+use core::ptr;
 
 /// We need to have at least as many allocators as we have memory ranges. The
 /// allocator only works on contiguous blocks of memory.
 const MAX_ALLOCATORS: usize = memory::MAX_MEM_RANGES;
 
 /// A convenience initializer for the allocator array.
-const INIT_ALLOCATOR: Option<PageAllocator> = None;
+const INIT_ALLOCATOR: Option<sync::SpinLock<PageAllocator>> = None;
 
 /// List of available page allocators.
-static mut ALLOCATORS: [Option<PageAllocator>; MAX_ALLOCATORS] = [INIT_ALLOCATOR; MAX_ALLOCATORS];
+static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] = [INIT_ALLOCATOR; MAX_ALLOCATORS];
 
 /// Initializes the page allocators for the given memory layout.
 ///
@@ -61,9 +63,33 @@ pub fn init() {
 
     avail.exclude_range(&meta_range);
 
-    // Create the allocator.
-    unsafe {
-      ALLOCATORS[i] = PageAllocator::new(r.base, r.size, ptr, &avail);
+    if let Some(allocator) = PageAllocator::new(r.base, r.size, ptr, &avail) {
+      unsafe {
+        ALLOCATORS[i] = Some(sync::SpinLock::new(allocator));
+      }
     }
+  }
+}
+
+pub fn allocate(pages: usize) -> Option<(usize, usize, usize)> {
+  unsafe {
+    for (zone, lock) in ptr::addr_of!(ALLOCATORS).as_ref().unwrap().iter().enumerate() {
+      if let Some(lock) = lock {
+        let mut allocator = lock.lock();
+        if let Some((base, pages)) = allocator.allocate(pages) {
+          return Some((base, pages, zone));
+        }
+      }
+    }
+  }
+
+  None
+}
+
+pub fn free(base: usize, pages: usize, zone: usize) {
+  unsafe {
+    let lock = ALLOCATORS[zone].as_ref().unwrap();
+    let mut allocator = lock.lock();
+    allocator.free(base, pages);
   }
 }
