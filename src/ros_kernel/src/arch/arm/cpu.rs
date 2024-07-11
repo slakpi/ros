@@ -78,7 +78,7 @@ impl CpuConfig {
     self.count
   }
 
-  pub fn cores(&self) -> &[Core] {
+  pub fn get_cores(&self) -> &[Core] {
     &self.cores[..self.count]
   }
 }
@@ -138,7 +138,7 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// OK if able to read the node, Err otherwise.
+  /// Returns Ok if able to read the node, otherwise a DTB error.
   fn scan_cpu_node(
     &mut self,
     reader: &dtb::DtbReader,
@@ -157,17 +157,17 @@ impl<'config> DtbCpuScanner<'config> {
 
       match tag {
         Some(StringTag::DtbPropCompatible) => {
-          self.read_compatible_property(&mut core.cpu_type, reader, &mut tmp_cursor)?;
+          Self::read_compatible(&mut core.cpu_type, reader, &mut tmp_cursor)?;
         }
         Some(StringTag::DtbPropEnableMethod) => {
-          core.enable_method = self.read_enable_method(reader, &mut tmp_cursor)?;
+          core.enable_method = Self::read_enable_method(reader, &mut tmp_cursor, &self.string_map)?;
         }
         Some(StringTag::DtbPropCpuReleaseAddr) => {
           core.cpu_release_addr =
-            self.read_cpu_release_addr(header.size, reader, &mut tmp_cursor)?;
+            Self::read_cpu_release_addr(header.size, reader, &mut tmp_cursor)?;
         }
         Some(StringTag::DtbPropReg) => {
-          core.id = self.read_reg(reader, &mut tmp_cursor)?;
+          core.id = Self::read_reg(reader, &mut tmp_cursor)?;
         }
         _ => reader.skip_and_align(header.size, &mut tmp_cursor),
       }
@@ -193,9 +193,8 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// OK if able to read the property, Err otherwise.
-  fn read_compatible_property(
-    &self,
+  /// Returns Ok if able to read the property, otherwise a DTB error.
+  fn read_compatible(
     cpu_type: &mut [u8],
     reader: &dtb::DtbReader,
     cursor: &mut dtb::DtbCursor,
@@ -220,19 +219,18 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// OK with the enable method if valid, Err otherwise.
+  /// Returns Ok with the enable method if valid, otherwise a DTB error.
   fn read_enable_method(
-    &self,
     reader: &dtb::DtbReader,
     cursor: &mut dtb::DtbCursor,
+    string_map: &StringMap,
   ) -> Result<CoreEnableMethod, dtb::DtbError> {
     let enable_method = reader
       .get_null_terminated_u8_slice(cursor)
       .ok_or(dtb::DtbError::InvalidDtb)?;
     reader.skip_and_align(1, cursor);
 
-    let tag = self
-      .string_map
+    let tag = string_map
       .find(&enable_method)
       .ok_or(dtb::DtbError::UnknownValue)?;
 
@@ -258,9 +256,8 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// OK with the CPU release address if valid, Err otherwise.
+  /// Returns Ok with the CPU release address if valid, otherwise a DTB error.
   fn read_cpu_release_addr(
-    &self,
     size: usize,
     reader: &dtb::DtbReader,
     cursor: &mut dtb::DtbCursor,
@@ -284,9 +281,8 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// OK with the core number if valid, Err otherwise.
+  /// Returns Ok with the core number if valid, otherwise a DTB error.
   fn read_reg(
-    &self,
     reader: &dtb::DtbReader,
     cursor: &mut dtb::DtbCursor,
   ) -> Result<usize, dtb::DtbError> {
@@ -344,7 +340,7 @@ pub fn get_cpu_config(config: &mut CpuConfig, blob: usize) -> bool {
   }
 
   // Validate that the enable method for each core is supported.
-  for core in config.cores() {
+  for core in config.get_cores() {
     match core.enable_method {
       CoreEnableMethod::SpinTable => {}
       _ => return false,
