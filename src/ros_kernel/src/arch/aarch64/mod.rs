@@ -141,7 +141,7 @@ pub fn init_secondary_cores() {
   let total_pages = cpu_config.len() * kernel_stack_pages;
   let page_shift = get_page_shift();
   let id_shift = bits::floor_log2((usize::BITS as usize) / 8);
-  
+
   // We have to successfully allocate the stack pages to continue. We can ignore
   // the zone; we are never going to deallocate these pages.
   let (stack_base, stack_pages, _) = crate::mm::kernel_allocate(total_pages).unwrap();
@@ -153,7 +153,7 @@ pub fn init_secondary_cores() {
       *ptr = stack_base + (((core.get_id() + 1) * kernel_stack_pages) << page_shift) + virt_base;
 
       let ptr = (core.get_cpu_release_addr() + virt_base) as *mut usize;
-      *ptr = kernel_base; 
+      *ptr = kernel_base;
     }
   }
 }

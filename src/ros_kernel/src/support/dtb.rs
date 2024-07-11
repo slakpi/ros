@@ -28,6 +28,9 @@ macro_rules! check_cell_count {
 pub enum DtbError {
   NotADtb,
   InvalidDtb,
+  UnknownProperty,
+  UnknownValue,
+  UnsupportedValue,
 }
 
 /// A lightweight pointer to a location in a DTB that also provides methods to
@@ -54,9 +57,10 @@ impl DtbCursor {
 }
 
 /// DTB property header.
-pub struct DtbPropertyHeader {
+pub struct DtbPropertyHeader<'blob> {
   pub size: usize,
   pub name_offset: usize,
+  pub name: &'blob [u8],
 }
 
 pub trait DtbScanner {
@@ -361,9 +365,14 @@ impl<'blob> DtbReader<'blob> {
         }
       }
 
+      let size = self.get_u32(cursor)? as usize;
+      let name_offset = self.get_u32(cursor)? as usize;
+      let name = self.get_slice_from_string_table(name_offset)?;
+
       return Some(DtbPropertyHeader {
-        size: self.get_u32(cursor)? as usize,
-        name_offset: self.get_u32(cursor)? as usize,
+        size,
+        name_offset,
+        name,
       });
     }
   }

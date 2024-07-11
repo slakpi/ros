@@ -1,11 +1,13 @@
 //! ARM CPU Peripheral Utilities
 
-use crate::support::dtb;
+use crate::support::{dtb, hash, hash_map};
 use core::cmp;
+use core::convert::TryFrom;
 
 /// Maximum number of cores supported for an ARM SoC.
 pub const MAX_CORES: usize = 512;
 
+/// Length of a core type name.
 pub const CPU_TYPE_LEN: usize = 64;
 
 /// Method used to enable a core.
@@ -22,6 +24,7 @@ pub enum CoreEnableMethod {
   Psci,
 }
 
+/// CPU core information.
 #[derive(Copy, Clone)]
 pub struct Core {
   id: usize,
@@ -48,7 +51,7 @@ impl Core {
   }
 }
 
-#[derive(Copy, Clone)]
+/// System CPU configuration.
 pub struct CpuConfig {
   cores: [Core; MAX_CORES],
   count: usize,
@@ -80,18 +83,62 @@ impl CpuConfig {
   }
 }
 
+/// Tags for expected properties and values.
+enum StringTag {
+  DtbPropCompatible,
+  DtbPropEnableMethod,
+  DtbPropCpuReleaseAddr,
+  DtbPropReg,
+  DtbValueSpinTable,
+  DtbValuePsci,
+}
+
+type StringMap<'map> = hash_map::HashMap<&'map [u8], StringTag, hash::BuildFnv1aHasher, 31>;
+
 /// Scans for DTB CPU nodes.
 struct DtbCpuScanner<'config> {
   config: &'config mut CpuConfig,
+  string_map: StringMap<'config>,
 }
 
 impl<'config> DtbCpuScanner<'config> {
+  /// Construct a new DtbCpuScanner.
   pub fn new(config: &'config mut CpuConfig) -> Self {
     DtbCpuScanner {
       config,
+      string_map: Self::build_string_map(),
     }
   }
 
+  /// Build a string map for the scanner.
+  ///
+  /// # Returns
+  ///
+  /// A new string map for the expected properties and values.
+  fn build_string_map() -> StringMap<'config> {
+    let mut string_map = StringMap::with_hasher_factory(hash::BuildFnv1aHasher {});
+    string_map.insert("compatible".as_bytes(), StringTag::DtbPropCompatible);
+    string_map.insert("enable-method".as_bytes(), StringTag::DtbPropEnableMethod);
+    string_map.insert(
+      "cpu-release-addr".as_bytes(),
+      StringTag::DtbPropCpuReleaseAddr,
+    );
+    string_map.insert("reg".as_bytes(), StringTag::DtbPropReg);
+    string_map.insert("spin-table".as_bytes(), StringTag::DtbValueSpinTable);
+    string_map.insert("psci".as_bytes(), StringTag::DtbValuePsci);
+    string_map
+  }
+
+  /// Scan a `cpu@N` node and add it to the set of known cores.
+  ///
+  /// # Parameters
+  ///
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The current position in the DTB.
+  ///
+  /// # Returns
+  ///
+  /// OK if able to read the node, Err otherwise.
   fn scan_cpu_node(
     &mut self,
     reader: &dtb::DtbReader,
@@ -106,45 +153,23 @@ impl<'config> DtbCpuScanner<'config> {
     };
 
     while let Some(header) = reader.get_next_property(&mut tmp_cursor) {
-      let name = reader
-        .get_slice_from_string_table(header.name_offset)
-        .ok_or(dtb::DtbError::InvalidDtb)?;
+      let tag = self.string_map.find(&header.name);
 
-      if "compatible".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        let cpu_type = reader
-          .get_null_terminated_u8_slice(&mut tmp_cursor)
-          .ok_or(dtb::DtbError::InvalidDtb)?;
-        reader.skip_and_align(1, &mut tmp_cursor);
-        let len = cmp::min(CPU_TYPE_LEN - 1, cpu_type.len());
-        core.cpu_type[..len].clone_from_slice(&cpu_type[..len]);
-      } else if "enable-method".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        let enable_method = reader
-          .get_null_terminated_u8_slice(&mut tmp_cursor)
-          .ok_or(dtb::DtbError::InvalidDtb)?;
-        reader.skip_and_align(1, &mut tmp_cursor);
-        if "spin-table".as_bytes().cmp(enable_method) == cmp::Ordering::Equal {
-          core.enable_method = CoreEnableMethod::SpinTable;
-        } else if "psci".as_bytes().cmp(enable_method) == cmp::Ordering::Equal {
-          core.enable_method = CoreEnableMethod::Psci;
+      match tag {
+        Some(StringTag::DtbPropCompatible) => {
+          self.read_compatible_property(&mut core.cpu_type, reader, &mut tmp_cursor)?;
         }
-      } else if "cpu-release-addr".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        // Note: The `cpu-release-addr` property is always 64-bit.
-        //       https://devicetree-specification.readthedocs.io/en/stable/devicenodes.html#cpus-cpu-node-properties
-        let cpu_release_addr = reader
-          .get_u64(&mut tmp_cursor)
-          .ok_or(dtb::DtbError::InvalidDtb)?;
-
-        if cpu_release_addr > usize::MAX as u64 {
-          return Err(dtb::DtbError::InvalidDtb);
+        Some(StringTag::DtbPropEnableMethod) => {
+          core.enable_method = self.read_enable_method(reader, &mut tmp_cursor)?;
         }
-
-        core.cpu_release_addr = cpu_release_addr as usize;
-      } else if "reg".as_bytes().cmp(name) == cmp::Ordering::Equal {
-        core.id = reader
-          .get_u32(&mut tmp_cursor)
-          .ok_or(dtb::DtbError::InvalidDtb)? as usize;
-      } else {
-        reader.skip_and_align(header.size, &mut tmp_cursor);
+        Some(StringTag::DtbPropCpuReleaseAddr) => {
+          core.cpu_release_addr =
+            self.read_cpu_release_addr(header.size, reader, &mut tmp_cursor)?;
+        }
+        Some(StringTag::DtbPropReg) => {
+          core.id = self.read_reg(reader, &mut tmp_cursor)?;
+        }
+        _ => reader.skip_and_align(header.size, &mut tmp_cursor),
       }
     }
 
@@ -156,6 +181,117 @@ impl<'config> DtbCpuScanner<'config> {
     self.config.count += 1;
 
     Ok(())
+  }
+
+  /// Read the `compatible` property with the CPU name.
+  ///
+  /// # Parameters
+  ///
+  /// * `cpu_type` - The slice to receive the string.
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The current position in the DTB.
+  ///
+  /// # Returns
+  ///
+  /// OK if able to read the property, Err otherwise.
+  fn read_compatible_property(
+    &self,
+    cpu_type: &mut [u8],
+    reader: &dtb::DtbReader,
+    cursor: &mut dtb::DtbCursor,
+  ) -> Result<(), dtb::DtbError> {
+    let compatible = reader
+      .get_null_terminated_u8_slice(cursor)
+      .ok_or(dtb::DtbError::InvalidDtb)?;
+    reader.skip_and_align(1, cursor);
+
+    let len = cmp::min(compatible.len(), cpu_type.len());
+    cpu_type[..len].clone_from_slice(&compatible[..len]);
+
+    Ok(())
+  }
+
+  /// Read the `enable-method` property.
+  ///
+  /// # Parameters
+  ///
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The current position in the DTB.
+  ///
+  /// # Returns
+  ///
+  /// OK with the enable method if valid, Err otherwise.
+  fn read_enable_method(
+    &self,
+    reader: &dtb::DtbReader,
+    cursor: &mut dtb::DtbCursor,
+  ) -> Result<CoreEnableMethod, dtb::DtbError> {
+    let enable_method = reader
+      .get_null_terminated_u8_slice(cursor)
+      .ok_or(dtb::DtbError::InvalidDtb)?;
+    reader.skip_and_align(1, cursor);
+
+    let tag = self
+      .string_map
+      .find(&enable_method)
+      .ok_or(dtb::DtbError::UnknownValue)?;
+
+    match tag {
+      StringTag::DtbValueSpinTable => Ok(CoreEnableMethod::SpinTable),
+      _ => Err(dtb::DtbError::UnsupportedValue),
+    }
+  }
+
+  /// Read the `cpu-release-addr` property.
+  ///
+  /// # Parameters
+  ///
+  /// * `size` - The size of the property's value.
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The current position in the DTB.
+  ///
+  /// # Description
+  ///
+  ///     NOTE: The `cpu-release-addr` property SHOULD always be 64-bit, however
+  ///           there exist DTBs that use 32-bit addresses.
+  ///           https://devicetree-specification.readthedocs.io/en/stable/devicenodes.html#cpus-cpu-node-properties
+  ///
+  /// # Returns
+  ///
+  /// OK with the CPU release address if valid, Err otherwise.
+  fn read_cpu_release_addr(
+    &self,
+    size: usize,
+    reader: &dtb::DtbReader,
+    cursor: &mut dtb::DtbCursor,
+  ) -> Result<usize, dtb::DtbError> {
+    match size {
+      4 => Ok(reader.get_u32(cursor).ok_or(dtb::DtbError::InvalidDtb)? as usize),
+      8 => {
+        let addr = reader.get_u64(cursor).ok_or(dtb::DtbError::InvalidDtb)?;
+        usize::try_from(addr).ok().ok_or(dtb::DtbError::InvalidDtb)
+      }
+      _ => Err(dtb::DtbError::UnsupportedValue),
+    }
+  }
+
+  /// Read the `reg` property with the core number.
+  ///
+  /// # Parameters
+  ///
+  /// * `reader` - The DTB reader.
+  /// * `cursor` - The current position in the DTB.
+  ///
+  /// # Returns
+  ///
+  /// OK with the core number if valid, Err otherwise.
+  fn read_reg(
+    &self,
+    reader: &dtb::DtbReader,
+    cursor: &mut dtb::DtbCursor,
+  ) -> Result<usize, dtb::DtbError> {
+    let core_id = reader.get_u32(cursor).ok_or(dtb::DtbError::InvalidDtb)? as usize;
+    Ok(core_id)
   }
 }
 

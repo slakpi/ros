@@ -14,7 +14,8 @@ const MAX_ALLOCATORS: usize = memory::MAX_MEM_RANGES;
 const INIT_ALLOCATOR: Option<sync::SpinLock<PageAllocator>> = None;
 
 /// List of available page allocators.
-static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] = [INIT_ALLOCATOR; MAX_ALLOCATORS];
+static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] =
+  [INIT_ALLOCATOR; MAX_ALLOCATORS];
 
 /// Initializes the page allocators for the given memory layout.
 ///
@@ -73,7 +74,12 @@ pub fn init() {
 
 pub fn allocate(pages: usize) -> Option<(usize, usize, usize)> {
   unsafe {
-    for (zone, lock) in ptr::addr_of!(ALLOCATORS).as_ref().unwrap().iter().enumerate() {
+    for (zone, lock) in ptr::addr_of!(ALLOCATORS)
+      .as_ref()
+      .unwrap()
+      .iter()
+      .enumerate()
+    {
       if let Some(lock) = lock {
         let mut allocator = lock.lock();
         if let Some((base, pages)) = allocator.allocate(pages) {
