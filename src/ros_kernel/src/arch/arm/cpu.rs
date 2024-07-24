@@ -24,13 +24,13 @@ pub enum CoreEnableMethod {
   Psci,
 }
 
-/// CPU core information.
+/// Core information.
 #[derive(Copy, Clone)]
 pub struct Core {
   id: usize,
-  cpu_type: [u8; CPU_TYPE_LEN],
+  core_type: [u8; CPU_TYPE_LEN],
   enable_method: CoreEnableMethod,
-  cpu_release_addr: usize,
+  release_addr: usize,
 }
 
 impl Core {
@@ -38,16 +38,16 @@ impl Core {
     self.id
   }
 
-  pub fn get_cpu_type(&self) -> &[u8] {
-    &self.cpu_type
+  pub fn get_core_type(&self) -> &[u8] {
+    &self.core_type
   }
 
   pub fn get_enable_method(&self) -> CoreEnableMethod {
     self.enable_method
   }
 
-  pub fn get_cpu_release_addr(&self) -> usize {
-    self.cpu_release_addr
+  pub fn get_release_addr(&self) -> usize {
+    self.release_addr
   }
 }
 
@@ -62,9 +62,9 @@ impl CpuConfig {
     CpuConfig {
       cores: [Core {
         id: 0,
-        cpu_type: [0; CPU_TYPE_LEN],
+        core_type: [0; CPU_TYPE_LEN],
         enable_method: CoreEnableMethod::Invalid,
-        cpu_release_addr: 0,
+        release_addr: 0,
       }; MAX_CORES],
       count: 0,
     }
@@ -147,9 +147,9 @@ impl<'config> DtbCpuScanner<'config> {
     let mut tmp_cursor = *cursor;
     let mut core = Core {
       id: usize::MAX,
-      cpu_type: [0; CPU_TYPE_LEN],
+      core_type: [0; CPU_TYPE_LEN],
       enable_method: CoreEnableMethod::Invalid,
-      cpu_release_addr: 0,
+      release_addr: 0,
     };
 
     while let Some(header) = reader.get_next_property(&mut tmp_cursor) {
@@ -157,14 +157,13 @@ impl<'config> DtbCpuScanner<'config> {
 
       match tag {
         Some(StringTag::DtbPropCompatible) => {
-          Self::read_compatible(&mut core.cpu_type, reader, &mut tmp_cursor)?;
+          Self::read_compatible(&mut core.core_type, reader, &mut tmp_cursor)?;
         }
         Some(StringTag::DtbPropEnableMethod) => {
           core.enable_method = Self::read_enable_method(reader, &mut tmp_cursor, &self.string_map)?;
         }
         Some(StringTag::DtbPropCpuReleaseAddr) => {
-          core.cpu_release_addr =
-            Self::read_cpu_release_addr(header.size, reader, &mut tmp_cursor)?;
+          core.release_addr = Self::read_cpu_release_addr(header.size, reader, &mut tmp_cursor)?;
         }
         Some(StringTag::DtbPropReg) => {
           core.id = Self::read_reg(reader, &mut tmp_cursor)?;
@@ -183,11 +182,11 @@ impl<'config> DtbCpuScanner<'config> {
     Ok(())
   }
 
-  /// Read the `compatible` property with the CPU name.
+  /// Read the `compatible` property with the core name.
   ///
   /// # Parameters
   ///
-  /// * `cpu_type` - The slice to receive the string.
+  /// * `core_type` - The slice to receive the string.
   /// * `reader` - The DTB reader.
   /// * `cursor` - The current position in the DTB.
   ///
@@ -195,7 +194,7 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// Returns Ok if able to read the property, otherwise a DTB error.
   fn read_compatible(
-    cpu_type: &mut [u8],
+    core_type: &mut [u8],
     reader: &dtb::DtbReader,
     cursor: &mut dtb::DtbCursor,
   ) -> Result<(), dtb::DtbError> {
@@ -204,8 +203,8 @@ impl<'config> DtbCpuScanner<'config> {
       .ok_or(dtb::DtbError::InvalidDtb)?;
     reader.skip_and_align(1, cursor);
 
-    let len = cmp::min(compatible.len(), cpu_type.len());
-    cpu_type[..len].clone_from_slice(&compatible[..len]);
+    let len = cmp::min(compatible.len(), core_type.len());
+    core_type[..len].clone_from_slice(&compatible[..len]);
 
     Ok(())
   }
@@ -256,7 +255,7 @@ impl<'config> DtbCpuScanner<'config> {
   ///
   /// # Returns
   ///
-  /// Returns Ok with the CPU release address if valid, otherwise a DTB error.
+  /// Returns Ok with the core release address if valid, otherwise a DTB error.
   fn read_cpu_release_addr(
     size: usize,
     reader: &dtb::DtbReader,

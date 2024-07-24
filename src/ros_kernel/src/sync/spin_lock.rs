@@ -41,7 +41,7 @@ pub struct SpinLock<T> {
 }
 
 impl<T> SpinLock<T> {
-  pub fn new(obj: T) -> Self {
+  pub const fn new(obj: T) -> Self {
     SpinLock {
       obj: UnsafeCell::new(obj),
       lock_var: 0,

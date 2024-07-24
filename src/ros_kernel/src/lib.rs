@@ -15,6 +15,8 @@ mod test;
 
 use core::panic::PanicInfo;
 
+static mut SCHEDULER_GUARD: sync::SpinLock<u32> = sync::SpinLock::<u32>::new(0);
+
 /// Panic handler. Prints out diagnostic information and halts.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -31,7 +33,7 @@ fn panic(info: &PanicInfo) -> ! {
 ///
 /// # Description
 ///
-/// This function should only be called by a single CPU to bootstrap the kernel
+/// This function should only be called by a single core to bootstrap the kernel
 /// before enabling interrupts. All other CPUs should be gated.
 ///
 /// After initializing the kernel, this function will ungate the remaining CPUs.
@@ -44,7 +46,7 @@ extern "C" fn ros_kernel_init(config: usize) {
   // Initialize the architecture-independent components.
   kernel_init();
 
-  // Bring secondary CPUs online.
+  // Bring secondary cores online.
   arch::init_secondary_cores();
 }
 
@@ -53,12 +55,15 @@ extern "C" fn ros_kernel_init(config: usize) {
 /// # Description
 ///
 /// Once the kernel has been bootstrapped, all CPUs should end up here to
-/// request work. CPUs will also end up here in response to preemption timer
+/// request work. Cores will also end up here in response to preemption timer
 /// interrupts.
 #[no_mangle]
 extern "C" fn ros_kernel_scheduler() -> ! {
   // TODO: Anything other than this.
-  debug_print!("Core waiting for work...\n");
+  let guard = unsafe { SCHEDULER_GUARD.lock() };
+  debug_print!("Core {} waiting for work...\n", arch::get_core_id());
+  drop(guard);
+
   loop {}
 }
 
@@ -72,6 +77,7 @@ fn kernel_init() {
   mm::init();
 }
 
+/// Run the low-level kernel module tests.
 #[cfg(feature = "module_tests")]
 fn kernel_module_tests() {
   debug_print!("--- Running module tests  ---\n");

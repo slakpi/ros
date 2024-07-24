@@ -55,8 +55,8 @@ SECTIONS
   
   __bss_size = __bss_end - __bss_start;
 
-  // Reserve space for the primary CPU's temporary kernel stack. Note the
-  // reversal of start and end.
+  // Reserve space for the primary CPU's ISR stack. Note the reversal of start
+  // and end.
   .data.stack :
   {
     __kernel_stack_end = .;
@@ -64,17 +64,16 @@ SECTIONS
     __kernel_stack_start = .;
   }
 
-  // Reserve space for a list of temporary kernel stack pointers for the
-  // secondary CPU's. The primary CPU will allocate the memory for the stacks
-  // and place the pointers to the start of each stack in this list indexed by
-  // CPU ID.
+  // Reserve space for a list of ISR stack pointers for the secondary CPU's. The
+  // primary CPU will allocate the memory for the stacks and place the pointers
+  // to the start of each stack in this list indexed by CPU ID.
   .data.stack_pointers :
   {
     __kernel_stack_list = .;
     . += __page_size;
   }
 
-  __kernel_size = __kernel_stack_start - __kernel_start;
+  __kernel_size = . - __kernel_start;
 
   // Reserve three pages for the kernel's temporary identity page map.
   .data.id_pages :

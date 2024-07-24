@@ -11,6 +11,7 @@ use crate::arch::arm::{cpu, soc};
 use crate::debug_print;
 use crate::peripherals::{base, mini_uart};
 use crate::support::{bits, dtb, range};
+use core::arch::asm;
 use core::ptr;
 
 /// Basic kernel configuration provided by the start code. All address are
@@ -132,27 +133,73 @@ pub fn init(config: usize) {
   init_exclusions(pages_end, config.blob, blob_size);
 }
 
+/// Allocate ISR stacks and release the secondary cores.
+///
+/// # Description
+///
+/// The primary core's ISR stack is part of the kernel image, so the only the
+/// stacks for the secondary cores need to be allocated.
 pub fn init_secondary_cores() {
+  assert!(get_core_id() == 0);
+
+  let core_count = get_core_count();
+
+  // Nothing to do if we only have a single core.
+  if core_count < 2 {
+    return;
+  }
+
   let cpu_config = get_cpu_config();
   let kernel_base = get_kernel_base();
   let virt_base = get_kernel_virtual_base();
   let kernel_stack_list = get_kernel_stack_list();
   let kernel_stack_pages = get_kernel_stack_pages();
-  let total_pages = cpu_config.len() * kernel_stack_pages;
   let page_shift = get_page_shift();
   let id_shift = bits::floor_log2((usize::BITS as usize) / 8);
+  let total_pages = (core_count - 1) * kernel_stack_pages;
 
-  // We have to successfully allocate the stack pages to continue. We can ignore
-  // the zone; we are never going to deallocate these pages.
+  // We have to successfully allocate the stack pages to continue. The
+  // allocation is going to give us a power-of-2 number of pages, so it is
+  // likely we will over allocate. We can ignore the zone; we are never going to
+  // deallocate these pages.
   let (stack_base, stack_pages, _) = crate::mm::kernel_allocate(total_pages).unwrap();
-  assert!(stack_pages == total_pages);
+  assert!(stack_pages >= total_pages);
 
-  for core in &cpu_config.cores()[1..] {
+  for core in &cpu_config.get_cores()[1..] {
     unsafe {
-      let ptr = (kernel_stack_list + (core.get_id() << id_shift) + virt_base) as *mut usize;
-      *ptr = stack_base + (((core.get_id() + 1) * kernel_stack_pages) << page_shift) + virt_base;
+      // Calculate the stack address list entry. The entry for Core 0 is left
+      // uninitialized.
+      //
+      //     +---------------------------+  virt_base + kernel_stack_list
+      //     | / / / / / / / / / / / / / |
+      //     +---------------------------+ +8
+      //     | Core 1 ISR Stack Address  |
+      //     +---------------------------+ +16
+      //     | Core 2 ISR Stack Address  |
+      //     +---------------------------+ +24
+      //     | Core 3 ISR Stack Address  |
+      //    ...                         ...
+      //     | Core N ISR Stack Address  |
+      //     +---------------------------+
+      let addr_offset = core.get_id() << id_shift;
+      let ptr = (virt_base + kernel_stack_list + addr_offset) as *mut usize;
 
-      let ptr = (core.get_cpu_release_addr() + virt_base) as *mut usize;
+      // Calculate the address of the stack for this core and place it in the
+      // stack address list.
+      //
+      //     +------------------+  virt_base + stack_base
+      //     | Core 1 ISR Stack |
+      //     +------------------+ +start_offset
+      //     | Core 2 ISR Stack |
+      //     +------------------+ +start_offset * 2
+      //     | Core 3 ISR Stack |
+      //    ...                ...
+      //     | Core N ISR Stack |
+      //     +------------------+ +start_offset * N
+      let start_offset = kernel_stack_pages << page_shift;
+      *ptr = virt_base + stack_base + (start_offset * core.get_id());
+
+      let ptr = (virt_base + core.get_release_addr()) as *mut usize;
       *ptr = kernel_base;
     }
   }
@@ -238,10 +285,6 @@ pub fn get_max_physical_address() -> usize {
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
 ///         one-time initialization is assumed.
-///
-/// # Returns
-///
-/// Returns the number of cores.
 pub fn get_core_count() -> usize {
   unsafe { CPU_CONFIG.len() }
 }
@@ -252,20 +295,55 @@ pub fn get_core_count() -> usize {
 ///
 ///   NOTE: The interface guarantees read-only access outside of the module and
 ///         one-time initialization is assumed.
-///
-/// # Returns
-///
-/// Returns the CPU configuration.
 pub fn get_cpu_config() -> &'static cpu::CpuConfig {
   unsafe { ptr::addr_of!(CPU_CONFIG).as_ref().unwrap() }
 }
 
+/// Get the base address of the list of kernel ISR stack addresses.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed.
+///
+/// # Returns
+///
+/// Returns the physical base address of the kernel ISR stack list.
 pub fn get_kernel_stack_list() -> usize {
   unsafe { KERNEL_STACK_LIST }
 }
 
+/// Get the base address of the kernel ISR stack pages.
+///
+/// # Description
+///
+///   NOTE: The interface guarantees read-only access outside of the module and
+///         one-time initialization is assumed.
+///
+/// # Returns
+///
+/// Returns the physical base address of the kernel ISR stack pages.
 pub fn get_kernel_stack_pages() -> usize {
   unsafe { KERNEL_STACK_PAGES }
+}
+
+/// Get the identifier of the current core.
+///
+/// # Returns
+///
+/// The identifier of the core executing the function.
+pub fn get_core_id() -> usize {
+  let mut core_id = 0;
+
+  unsafe {
+    asm!(
+      "mrs     {x}, mpidr_el1",
+      "and     {x}, {x}, #0xff",
+      x = inout(reg) core_id,
+    )
+  }
+
+  core_id
 }
 
 /// Initialize the CPU configuration.

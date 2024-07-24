@@ -123,7 +123,7 @@ el1_entry:
 primary_cpu_boot:
 // no fn_entry required.
 
-// Temporary stack setup before turning on the MMU.
+// ISR stack setup before turning on the MMU.
   adrp    x9, __kernel_stack_start
   mov     sp, x9
   mov     x29, sp
@@ -163,7 +163,7 @@ primary_cpu_begin_virt_addressing:
   adr     x9, vectors
   msr     vbar_el1, x9
  
-// Temporary stack setup with virtual addressing enabled.
+// ISR stack setup with virtual addressing enabled.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
   mov     x29, sp
@@ -185,9 +185,9 @@ primary_cpu_begin_virt_addressing:
 //   +------------------------------+ 48
 //   | Page table area size         |
 //   +------------------------------+ 56
-//   | Kernel stack list address    |
+//   | ISR stack list address       |
 //   +------------------------------+ 64
-//   | Kernel stack page count      |
+//   | ISR stack page count         |
 //   +------------------------------+ 72
 //   | / / / / / / / / / / / / / /  |
 //   +------------------------------+ 80
@@ -234,7 +234,7 @@ secondary_cpu_begin_virt_addressing:
   adr     x9, vectors
   msr     vbar_el1, x9
 
-// Get the temporary stack address for this CPU. 
+// Get the ISR stack address for this CPU. 
   mrs     x9, mpidr_el1
   and     x9, x9, #0xff
   ldr     x10, =__kernel_stack_list
