@@ -219,6 +219,9 @@ primary_cpu_begin_virt_addressing:
 // no fn_exit required. We are not coming back from the scheduler.
 
 
+/*----------------------------------------------------------------------------*/
+/// Boot a secondary CPU. Once released, the CPU needs to get its ISR stack
+/// address, set the stack pointer, and jump to the scheduler.
 secondary_cpu_boot:
 // no fn_entry required.
 

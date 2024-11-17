@@ -155,7 +155,6 @@ pub fn init_secondary_cores() {
   let kernel_stack_list = get_kernel_stack_list();
   let kernel_stack_pages = get_kernel_stack_pages();
   let page_shift = get_page_shift();
-  let id_shift = bits::floor_log2((usize::BITS as usize) / 8);
   let total_pages = (core_count - 1) * kernel_stack_pages;
 
   // We have to successfully allocate the stack pages to continue. The
@@ -166,42 +165,43 @@ pub fn init_secondary_cores() {
   assert!(stack_pages >= total_pages);
 
   for core in &cpu_config.get_cores()[1..] {
-    unsafe {
-      // Calculate the stack address list entry. The entry for Core 0 is left
-      // uninitialized.
-      //
-      //     +---------------------------+  virt_base + kernel_stack_list
-      //     | / / / / / / / / / / / / / |
-      //     +---------------------------+ +8
-      //     | Core 1 ISR Stack Address  |
-      //     +---------------------------+ +16
-      //     | Core 2 ISR Stack Address  |
-      //     +---------------------------+ +24
-      //     | Core 3 ISR Stack Address  |
-      //    ...                         ...
-      //     | Core N ISR Stack Address  |
-      //     +---------------------------+
-      let addr_offset = core.get_id() << id_shift;
-      let ptr = (virt_base + kernel_stack_list + addr_offset) as *mut usize;
+    let core_id = core.get_id();
 
-      // Calculate the address of the stack for this core and place it in the
-      // stack address list.
-      //
-      //     +------------------+  virt_base + stack_base
-      //     | Core 1 ISR Stack |
-      //     +------------------+ +start_offset
-      //     | Core 2 ISR Stack |
-      //     +------------------+ +start_offset * 2
-      //     | Core 3 ISR Stack |
-      //    ...                ...
-      //     | Core N ISR Stack |
-      //     +------------------+ +start_offset * N
-      let start_offset = kernel_stack_pages << page_shift;
-      *ptr = virt_base + stack_base + (start_offset * core.get_id());
+    // Calculate the stack address list entry. The entry for Core 0 is left
+    // uninitialized.
+    //
+    //     +---------------------------+  virt_base + kernel_stack_list
+    //     | / / / / / / / / / / / / / |
+    //     +---------------------------+ +8
+    //     | Core 1 ISR Stack Address  |
+    //     +---------------------------+ +16
+    //     | Core 2 ISR Stack Address  |
+    //     +---------------------------+ +24
+    //     | Core 3 ISR Stack Address  |
+    //    ...                         ...
+    //     | Core N ISR Stack Address  |
+    //     +---------------------------+
+    let addr_offset = core_id << 3;
+    let ptr = (virt_base + kernel_stack_list + addr_offset) as *mut usize;
 
-      let ptr = (virt_base + core.get_release_addr()) as *mut usize;
-      *ptr = kernel_base;
-    }
+    // Next, calculate the address of the stack for this core and place it in
+    // the stack address list.
+    //
+    //     +---------------------------+  virt_base + stack_base
+    //     | Core 1 ISR Stack          |
+    //     +---------------------------+ +stack size
+    //     | Core 2 ISR Stack          |
+    //     +---------------------------+ +stack size * 2
+    //     | Core 3 ISR Stack          |
+    //    ...                         ...
+    //     | Core N ISR Stack          |
+    //     +---------------------------+ +stack size * N
+    let start_offset = (kernel_stack_pages << page_shift) * core_id;
+    unsafe { *ptr = virt_base + stack_base + start_offset; }
+
+    // Now write the kernel base address to the core's release address.
+    let ptr = (virt_base + core.get_release_addr()) as *mut usize;
+    unsafe { *ptr = kernel_base; }
   }
 }
 

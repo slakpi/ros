@@ -14,6 +14,11 @@ const MAX_ALLOCATORS: usize = memory::MAX_MEM_RANGES;
 const INIT_ALLOCATOR: Option<sync::SpinLock<PageAllocator>> = None;
 
 /// List of available page allocators.
+///
+///   TODO: This is pretty inefficient. There will be lock contention for every
+///         allocation / free. If the zones are split among the cores,
+///         contention can be reduced to situations where a core runs out of
+///         pages in its block.
 static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] =
   [INIT_ALLOCATOR; MAX_ALLOCATORS];
 
@@ -23,6 +28,8 @@ static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] =
 ///
 /// Each allocator reserves enough memory at the end of its associated block for
 /// its allocation flags. The required memory is page-aligned.
+///
+///   TODO: We're going to need separate zones for DMA.
 pub fn init() {
   let page_size = arch::get_page_size();
   let virtual_base = arch::get_kernel_virtual_base();
@@ -72,6 +79,24 @@ pub fn init() {
   }
 }
 
+/// Allocate a contiguous block of physical pages.
+///
+/// # Parameters
+///
+/// * `pages` - The number of pages to allocate.
+///
+/// # Description
+///
+/// The block will come from the first available zone that has available pages.
+///
+///   TODO: This needs to be more sophisticated to allow for allocating pages
+///         for DMA.
+///
+/// # Returns
+///
+/// A tuple with the physical base address of the allocation, the actual number
+/// of pages allocated, and the zone from which the pages originated. None if a
+/// block of the required size could not be allocated.
 pub fn allocate(pages: usize) -> Option<(usize, usize, usize)> {
   unsafe {
     for (zone, lock) in ptr::addr_of!(ALLOCATORS)
@@ -92,6 +117,13 @@ pub fn allocate(pages: usize) -> Option<(usize, usize, usize)> {
   None
 }
 
+/// Free a contiguous block of physical pages.
+///
+/// # Parameters
+///
+/// * `base` - The physical base address of the block of pages.
+/// * `pages` - The number of pages to free.
+/// * `zone` - The zone from which the pages originated.
 pub fn free(base: usize, pages: usize, zone: usize) {
   unsafe {
     let lock = ALLOCATORS[zone].as_ref().unwrap();
