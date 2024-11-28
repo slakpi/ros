@@ -4,8 +4,9 @@ use crate::support::{dtb, hash, hash_map};
 use core::cmp;
 use core::convert::TryFrom;
 
-/// Maximum number of cores supported for an ARM SoC.
-pub const MAX_CORES: usize = 512;
+/// Maximum number of cores supported for an ARM SoC (see B4.1.106 MPIDR and
+/// D17.2.101 MPIDR_EL1).
+pub const MAX_CORES: usize = 256;
 
 /// Length of a core type name.
 pub const CPU_TYPE_LEN: usize = 64;
