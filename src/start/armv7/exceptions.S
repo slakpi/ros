@@ -32,7 +32,6 @@
   str     r10, [sp, #4 * 10]
   str     r11, [sp, #4 * 11]
   str     r12, [sp, #4 * 12]
-  str     r12, [sp, #4 * 12]
 // Skip the stack pointer.
   str     r14, [sp, #4 * 14]
   str     r15, [sp, #4 * 15] 
