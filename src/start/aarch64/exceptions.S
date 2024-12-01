@@ -1,7 +1,7 @@
 //! AArch64 Exception Handling
 
 // Size of the exception handler stack frame.
-#define EXCEPTION_FRAME_SIZE 256
+#define EXCEPTION_FRAME_SIZE 272
 
 
 /*----------------------------------------------------------------------------*/
@@ -20,13 +20,25 @@
 /*----------------------------------------------------------------------------*/
 /// Exception handler prologue.
 ///
+/// # Parameters
+///
+/// * `el` - The exception level from which the exception was taken.
+///
 /// # Description
+///
+/// If the exception was taken from EL0, SP_EL0 is saved in the context struct.
+/// Otherwise, the ISR stack pointer plus the frame size is saved (the original
+/// stack pointer when the exception occurred).
 ///
 ///   NOTE: Only the integer general purpose registers are saved. EL1 is
 ///         configured to trap floating-point and vector instructions to ensure
 ///         they are not used.
-.macro kernel_entry
+///
+///   NOTE: We are not using the frame pointer here to restore the stack. This
+///         is not a normal function.
+.macro kernel_entry el
   sub     sp, sp, #EXCEPTION_FRAME_SIZE
+
   stp     x0, x1, [sp, #16 * 0]
   stp     x2, x3, [sp, #16 * 1]
   stp	    x4, x5, [sp, #16 * 2]
@@ -42,13 +54,40 @@
   stp	    x24, x25, [sp, #16 * 12]
   stp	    x26, x27, [sp, #16 * 13]
   stp	    x28, x29, [sp, #16 * 14]
-  str	    x30, [sp, #16 * 15] 
+
+.if \el == 0
+  mrs     x21, sp_el0
+.else
+  add     x21, sp, #EXCEPTION_FRAME_SIZE
+.endif
+  mrs     x22, elr_el1
+  mrs     x23, spsr_el1
+
+  stp	    x30, x21, [sp, #16 * 15]
+  stp     x22, x23, [sp, #16 * 16]
 .endm
 
 
 /*----------------------------------------------------------------------------*/
 /// Exception handler epilogue.
-.macro kernel_exit
+///
+/// # Parameters
+///
+/// * `el` - The exception level from which the exception was taken.
+///
+/// # Description
+///
+/// Reverses `kernel_entry` and returns from the exception.
+.macro kernel_exit el 
+  ldp     x30, x21, [sp, #16 * 15]
+  ldp     x22, x23, [sp, #16 * 16]
+
+.if \el == 0
+  msr     sp_el0, x21
+.endif
+  msr     elr_el1, x22
+  msr     spsr_el1, x23
+
   ldp	    x0, x1, [sp, #16 * 0]
   ldp	    x2, x3, [sp, #16 * 1]
   ldp	    x4, x5, [sp, #16 * 2]
@@ -64,8 +103,9 @@
   ldp	    x24, x25, [sp, #16 * 12]
   ldp	    x26, x27, [sp, #16 * 13]
   ldp	    x28, x29, [sp, #16 * 14]
-  ldr	    x30, [sp, #16 * 15] 
+
   add	    sp, sp, #EXCEPTION_FRAME_SIZE
+
   eret
 .endm
 
@@ -79,35 +119,50 @@
 .align 11
 .global vectors 
 vectors:
-  ventry  _trap_exception   // EL1t Synchronous
-  ventry  _trap_exception   // EL1t IRQ
-  ventry  _trap_exception   // EL1t FIQ
-  ventry  _trap_exception   // EL1t Error
+  ventry  _trap_exception_el1   // EL1t Synchronous
+  ventry  _trap_exception_el1   // EL1t IRQ
+  ventry  _trap_exception_el1   // EL1t FIQ
+  ventry  _trap_exception_el1   // EL1t Error
 
-  ventry  _trap_exception   // EL1h Synchronous
-  ventry  _trap_exception   // EL1h IRQ
-  ventry  _trap_exception   // EL1h FIQ
-  ventry  _trap_exception   // EL1h Error
+  ventry  _trap_exception_el1   // EL1h Synchronous
+  ventry  _trap_exception_el1   // EL1h IRQ
+  ventry  _trap_exception_el1   // EL1h FIQ
+  ventry  _trap_exception_el1   // EL1h Error
 
-  ventry  _trap_exception   // EL0 Synchronous (64-bit)
-  ventry  _trap_exception   // EL0 IRQ (64-bit)
-  ventry  _trap_exception   // EL0 FIQ (64-bit)
-  ventry  _trap_exception   // EL0 Error (64-bit)
+  ventry  _trap_exception_el0   // EL0 Synchronous (64-bit)
+  ventry  _trap_exception_el0   // EL0 IRQ (64-bit)
+  ventry  _trap_exception_el0   // EL0 FIQ (64-bit)
+  ventry  _trap_exception_el0   // EL0 Error (64-bit)
 
-  ventry  _trap_exception   // EL0 Synchronous (32-bit)
-  ventry  _trap_exception   // EL0 IRQ (32-bit)
-  ventry  _trap_exception   // EL0 FIQ (32-bit)
-  ventry  _trap_exception   // EL0 Error (32-bit)
+  ventry  _trap_exception_el0   // EL0 Synchronous (32-bit)
+  ventry  _trap_exception_el0   // EL0 IRQ (32-bit)
+  ventry  _trap_exception_el0   // EL0 FIQ (32-bit)
+  ventry  _trap_exception_el0   // EL0 Error (32-bit)
 
 
 /*----------------------------------------------------------------------------*/
-/// Default exception trap stub.
-_trap_exception:
-  kernel_entry
+/// Default exception trap stub for EL0.
+///
+/// # Description
+///
+/// On entry, the stack pointer is SP_EL1 (the current core's ISR stack). If we
+/// take the exception from EL0, we need to preserve SP_EL0 instead of the
+/// current SP.
+_trap_exception_el0:
+  kernel_entry 0
   mrs     x0, esr_el1
   mrs     x1, far_el1
+  mov     x2, sp
   bl      trap_exception    // Transfer to Rustland
-  // For now just halt.
-  // kernel_exit
-halt:
-  b       halt
+  kernel_exit 0
+
+
+/*----------------------------------------------------------------------------*/
+/// Default exception trap stub for EL1.
+_trap_exception_el1:
+  kernel_entry 1
+  mrs     x0, esr_el1
+  mrs     x1, far_el1
+  mov     x2, sp
+  bl      trap_exception    // Transfer to Rustland
+  kernel_exit 1

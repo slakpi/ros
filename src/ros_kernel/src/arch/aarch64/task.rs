@@ -1,4 +1,4 @@
-struct CpuContext {
+struct TaskContext {
   x19: usize,
   x20: usize,
   x21: usize,
@@ -9,21 +9,21 @@ struct CpuContext {
   x26: usize,
   x27: usize,
   x28: usize,
-  fp: usize, // x29, the frame pointer
-  pc: usize, // x30, the link register
-  sp: usize, // x31, the stack pointer
+  x29: usize, // the frame pointer
+  x30: usize, // the link register
+  sp: usize,  // the stack pointer
 }
 
 pub struct Task {
   task_id: usize,
-  cpu_context: CpuContext,
+  context: TaskContext,
 }
 
 impl Task {
   pub const fn new(task_id: usize) -> Self {
     Task {
       task_id,
-      cpu_context: CpuContext {
+      context: TaskContext {
         x19: 0,
         x20: 0,
         x21: 0,
@@ -34,8 +34,8 @@ impl Task {
         x26: 0,
         x27: 0,
         x28: 0,
-        fp: 0,
-        pc: 0,
+        x29: 0,
+        x30: 0,
         sp: 0,
       },
     }

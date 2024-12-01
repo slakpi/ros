@@ -166,7 +166,6 @@ primary_cpu_begin_virt_addressing:
 // ISR stack setup with virtual addressing enabled.
   ldr     x9, =__kernel_stack_start
   mov     sp, x9
-  mov     x29, sp
 
 // Write kernel configuration struct. Provide all addresses as physical.
 //
@@ -191,29 +190,31 @@ primary_cpu_begin_virt_addressing:
 //   +------------------------------+ 72
 //   | / / / / / / / / / / / / / /  |
 //   +------------------------------+ 80
+  mov     x29, sp
   sub     sp, sp, #(8 * 10)
 
   ldr     x9, =__virtual_start
   ldr     x10, =__page_size
-  stp     x9, x10, [x29, #-80]
+  stp     x9, x10, [sp, #16 * 0]
 
-  stp     x19, x20, [x29, #-64]
+  stp     x19, x20, [sp, #16 * 1]
 
   ldr     x9, =__kernel_size
-  stp     x9, x21, [x29, #-48]
+  stp     x9, x21, [sp, #16 * 2]
 
   ldr     x9, =__kernel_pages_size
-  stp     x9, x22, [x29, #-32]
+  stp     x9, x22, [sp, #16 * 3]
 
   ldr     x9, =__kernel_stack_pages
   mov     x10, #0
-  stp     x9, x10, [x29, #-16]
+  stp     x9, x10, [sp, #16 * 4]
 
 // Perform the rest of the kernel initialization in Rustland.
-  sub     x0, x29, #80
+  mov     x0, sp
   bl      ros_kernel_init
 
-// Jump to the scheduler.
+// Clear the configuration struct and jump to the scheduler.
+  mov     sp, x29
   bl      ros_kernel_scheduler
 
 // no fn_exit required. We are not coming back from the scheduler.
