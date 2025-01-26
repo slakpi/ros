@@ -1,6 +1,6 @@
 //! Memory Management
 
-mod page_allocator;
+mod buddy_allocator;
 mod pager;
 
 use crate::arch;

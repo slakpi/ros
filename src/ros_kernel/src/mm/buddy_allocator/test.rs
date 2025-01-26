@@ -1,4 +1,4 @@
-use super::{BlockLevel, PageAllocator, INDEX_SHIFT, WORD_BITS, WORD_MASK, WORD_SHIFT};
+use super::{BlockLevel, BuddyPageAllocator, INDEX_SHIFT, WORD_BITS, WORD_MASK, WORD_SHIFT};
 use crate::arch;
 use crate::debug_print;
 use crate::peripherals::memory;
@@ -90,10 +90,10 @@ pub fn run_tests() {
 ///
 /// * `context` - The test context.
 fn test_size_calculation(context: &mut test::TestContext) {
-  let (_, size) = PageAllocator::make_levels(TEST_MEM_SIZE);
+  let (_, size) = BuddyPageAllocator::make_levels(TEST_MEM_SIZE);
   check_eq!(context, size, EXPECTED_METADATA_SIZE);
 
-  let (_, size) = PageAllocator::make_levels(0);
+  let (_, size) = BuddyPageAllocator::make_levels(0);
   check_eq!(context, size, 0);
 }
 
@@ -103,7 +103,7 @@ fn test_size_calculation(context: &mut test::TestContext) {
 ///
 /// * `context` - The test context.
 fn test_level_construction(context: &mut test::TestContext) {
-  let (levels, _) = PageAllocator::make_levels(TEST_MEM_SIZE);
+  let (levels, _) = BuddyPageAllocator::make_levels(TEST_MEM_SIZE);
   let exp_levels = make_expected_levels();
 
   check_eq!(context, levels.len(), exp_levels.len());
@@ -281,7 +281,7 @@ fn test_available_regions(context: &mut test::TestContext) {
     },
   ]);
 
-  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &avail);
+  let allocator = BuddyPageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &avail);
   check_not_none!(context, allocator);
 
   verify_allocator(
@@ -349,27 +349,27 @@ fn test_construction_errors(context: &mut test::TestContext) {
   let bad_avail = memory::MemoryConfig::new();
 
   // Base case, verify valid parameters produce a valid allocator.
-  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &good_avail);
+  let allocator = BuddyPageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &good_avail);
   check_not_none!(context, allocator);
 
   // Use a base address that aligns down to 0.
-  let allocator = PageAllocator::new(0, TOTAL_MEM_SIZE, meta, &good_avail);
+  let allocator = BuddyPageAllocator::new(0, TOTAL_MEM_SIZE, meta, &good_avail);
   check_none!(context, allocator);
 
   // Use a memory size that aligns done to a size less than a page.
-  let allocator = PageAllocator::new(base_addr, TEST_PAGE_SIZE - 1, meta, &good_avail);
+  let allocator = BuddyPageAllocator::new(base_addr, TEST_PAGE_SIZE - 1, meta, &good_avail);
   check_none!(context, allocator);
 
   // Use a base address and memory size that would overflow a pointer.
-  let allocator = PageAllocator::new(base_addr, usize::MAX, meta, &good_avail);
+  let allocator = BuddyPageAllocator::new(base_addr, usize::MAX, meta, &good_avail);
   check_none!(context, allocator);
 
   // Use a null metadata pointer.
-  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, ptr::null_mut(), &good_avail);
+  let allocator = BuddyPageAllocator::new(base_addr, TOTAL_MEM_SIZE, ptr::null_mut(), &good_avail);
   check_none!(context, allocator);
 
   // Use an empty list of available memory regions.
-  let allocator = PageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &bad_avail);
+  let allocator = BuddyPageAllocator::new(base_addr, TOTAL_MEM_SIZE, meta, &bad_avail);
   check_none!(context, allocator);
 
   // TODO: Error check providing virtual addresses and invalid available ranges.
@@ -570,8 +570,8 @@ fn make_block_addr(base_addr: usize, block: usize, level: usize) -> usize {
   base_addr + ((TEST_PAGE_SIZE << level) * (block - 1))
 }
 
-fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::MemoryConfig) {
-  let (levels, meta_size) = PageAllocator::make_levels(TOTAL_MEM_SIZE);
+fn make_allocator(base_offset: usize) -> (BuddyPageAllocator<'static>, memory::MemoryConfig) {
+  let (levels, meta_size) = BuddyPageAllocator::make_levels(TOTAL_MEM_SIZE);
   let (base_addr, meta_addr) = get_addrs();
 
   unsafe { TEST_MEM.mem.fill(0xcc) };
@@ -582,7 +582,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
   }]);
 
   (
-    PageAllocator {
+    BuddyPageAllocator {
       base: base_addr,
       size: TOTAL_MEM_SIZE,
       levels,
@@ -594,7 +594,7 @@ fn make_allocator(base_offset: usize) -> (PageAllocator<'static>, memory::Memory
 
 fn verify_allocator(
   context: &mut test::TestContext,
-  allocator: &PageAllocator,
+  allocator: &BuddyPageAllocator,
   state: &AllocatorState,
 ) {
   let mut blocks = TEST_MEM_SIZE >> TEST_PAGE_SHIFT;
@@ -620,7 +620,7 @@ fn verify_allocator(
     blocks >>= 1;
 
     for block in *exp_blocks {
-      let node = PageAllocator::get_block_node(ptr);
+      let node = BuddyPageAllocator::get_block_node(ptr);
       check_eq!(context, ptr, *block);
       ptr = node.next;
 
@@ -649,7 +649,7 @@ fn verify_allocator(
     check_eq!(context, ptr, exp_blocks[0]);
 
     for block in exp_blocks.iter().rev() {
-      let node = PageAllocator::get_block_node(ptr);
+      let node = BuddyPageAllocator::get_block_node(ptr);
       ptr = node.prev;
       check_eq!(context, ptr, *block);
     }

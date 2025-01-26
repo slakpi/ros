@@ -5,7 +5,7 @@
 //! https://stackoverflow.com/questions/45694690/how-i-can-remove-all-odds-bits-in-c
 
 /// Random seed bytes for a checksum.
-pub const CHECKSUM_SEED: usize = 0x09a52af1c62bd04b;
+pub const CHECKSUM_SEED: usize = 0x09a5_2af1_c62b_d04b;
 
 /// Fast 64-bit population count.
 ///

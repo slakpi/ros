@@ -1,6 +1,6 @@
 //! Kernel Memory Pager
 
-use super::page_allocator::PageAllocator;
+use super::buddy_allocator::BuddyPageAllocator;
 use crate::arch::{self, memory};
 use crate::support::{bits, range};
 use crate::sync;
@@ -11,7 +11,7 @@ use core::ptr;
 const MAX_ALLOCATORS: usize = memory::MAX_MEM_RANGES;
 
 /// A convenience initializer for the allocator array.
-const INIT_ALLOCATOR: Option<sync::SpinLock<PageAllocator>> = None;
+const INIT_ALLOCATOR: Option<sync::SpinLock<BuddyPageAllocator>> = None;
 
 /// List of available page allocators.
 ///
@@ -19,7 +19,7 @@ const INIT_ALLOCATOR: Option<sync::SpinLock<PageAllocator>> = None;
 ///         allocation / free. If the zones are split among the cores,
 ///         contention can be reduced to situations where a core runs out of
 ///         pages in its block.
-static mut ALLOCATORS: [Option<sync::SpinLock<PageAllocator>>; MAX_ALLOCATORS] =
+static mut ALLOCATORS: [Option<sync::SpinLock<BuddyPageAllocator>>; MAX_ALLOCATORS] =
   [INIT_ALLOCATOR; MAX_ALLOCATORS];
 
 /// Initializes the page allocators for the given memory layout.
@@ -44,7 +44,7 @@ pub fn init() {
 
     // Calculate the amount of memory needed for the allocator's metadata and
     // verify the memory area is large enough. If not, skip it.
-    let size = PageAllocator::calc_metadata_size(r.size);
+    let size = BuddyPageAllocator::calc_metadata_size(r.size);
     let alloc_size = bits::align_up(size, page_size);
     if r.size - page_size < alloc_size {
       continue;
@@ -71,7 +71,7 @@ pub fn init() {
 
     avail.exclude_range(&meta_range);
 
-    if let Some(allocator) = PageAllocator::new(r.base, r.size, ptr, &avail) {
+    if let Some(allocator) = BuddyPageAllocator::new(r.base, r.size, ptr, &avail) {
       unsafe {
         ALLOCATORS[i] = Some(sync::SpinLock::new(allocator));
       }

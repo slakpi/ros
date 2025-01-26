@@ -197,11 +197,15 @@ pub fn init_secondary_cores() {
     //     | Core N ISR Stack          |
     //     +---------------------------+ +stack size * N
     let start_offset = (kernel_stack_pages << page_shift) * core_id;
-    unsafe { *ptr = virt_base + stack_base + start_offset; }
+    unsafe {
+      *ptr = virt_base + stack_base + start_offset;
+    }
 
     // Now write the kernel base address to the core's release address.
     let ptr = (virt_base + core.get_release_addr()) as *mut usize;
-    unsafe { *ptr = kernel_base; }
+    unsafe {
+      *ptr = kernel_base;
+    }
   }
 }
 

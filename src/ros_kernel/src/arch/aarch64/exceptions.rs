@@ -39,7 +39,7 @@ struct CpuContext {
   x29: usize,
   x30: usize,
   sp: usize,
-  
+
   elr_el1: usize,
   spsr_el1: usize,
 }
@@ -54,7 +54,7 @@ struct CpuContext {
 #[no_mangle]
 extern "C" fn trap_exception(esr_el1: usize, far_el1: usize, cpu_context: usize) {
   assert!(cpu_context != 0);
-  
+
   _ = unsafe { &*(cpu_context as *const CpuContext) };
 
   debug_print!(

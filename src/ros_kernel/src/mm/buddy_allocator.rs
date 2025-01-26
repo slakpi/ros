@@ -70,14 +70,14 @@ struct BlockLevel {
 }
 
 /// The Buddy Allocator
-pub struct PageAllocator<'memory> {
+pub struct BuddyPageAllocator<'memory> {
   base: usize,
   size: usize,
   levels: [BlockLevel; BLOCK_LEVELS],
   flags: &'memory mut [usize],
 }
 
-impl<'memory> PageAllocator<'memory> {
+impl<'memory> BuddyPageAllocator<'memory> {
   /// Calculate the amount of memory required for the allocator's metadata.
   ///
   /// # Parameters
@@ -280,7 +280,7 @@ impl<'memory> PageAllocator<'memory> {
 
     let (levels, alloc_size) = Self::make_levels(size);
 
-    let mut allocator = PageAllocator {
+    let mut allocator = BuddyPageAllocator {
       base,
       size,
       levels,
