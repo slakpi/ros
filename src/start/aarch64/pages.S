@@ -69,8 +69,8 @@ mmu_create_kernel_page_tables:
   bl      section_align_size
   mov     x20, x0
 
-// Align the size of the kernel area on a section.
-  adrp    x0, __kernel_id_pages_end
+// Align the size of the kernel image on a section.
+  adrp    x0, __kernel_end
   bl      section_align_size
   mov     x21, x0
 
