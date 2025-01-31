@@ -125,7 +125,8 @@ intact for the secondary cores.
 #### A.2.6 Transfer to Kernel Initialization
 
 After enabling the MMU, the primary core fills out the AArch64 kernel configuration struct and
-passes it to `ros_kernel_init` in the `ros_kernel` library.
+passes it to `ros_kernel_init` in the `ros_kernel` library. All addresses in the struct are
+physical.
 
     +------------------------------+ 0
     | Virtual base address         |
@@ -151,6 +152,135 @@ passes it to `ros_kernel_init` in the `ros_kernel` library.
 
 ## B. `ros_kernel` Library
 
+### B.1 `arch` Module
+
+The `arch` module is an *interface* to architecture-specific Rust code. The module automatically
+includes the correct architecture code an exports it as the `arch` module.
+
+#### B.1.1 ARMv7
+
+##### B.1.1.1 CPU Initialization
+
+##### B.1.1.2 Memory Initialization
+
+##### B.1.1.3 Address Space
+
+    +-----------------+ 0xffff_ffff    -+
+    | / / / / / / / / |                 |
+    |.................| 0xffff_2000     |
+    | Exception Stubs |                 |
+    |.................| 0xffff_1000     |
+    | Vectors         |                 |
+    |.................| 0xffff_0000     +- High Memory
+    |                 |                 |
+    |                 |                 |
+    |                 |                 |
+    |.................| 0xf820_0000     |
+    | Thread Local    |                 |
+    +-----------------+ 0xf800_0000    -+
+    |                 |                 |
+    |                 |                 |
+    | Fixed Mappings  |                 +- Low Memory
+    |                 |                 |
+    |                 | 0xc000_0000 or  |
+    +-----------------+ 0x8000_0000    -+
+
+#### B.1.2 AArch64
+
+##### B.1.2.1 Memory Initialization
+
+##### B.1.2.2 Address Space
+
+    +-----------------+ 0xffff_ffff_ffff_ffff
+    |                 |
+    | Kernel Segment  |
+    |                 |
+    +-----------------+ 0xffff_0000_0000_0000
+    | / / / / / / / / |
+    | / / / / / / / / |
+    | / / / / / / / / | 16,776,704 TiB of unused address space
+    | / / / / / / / / |
+    | / / / / / / / / |
+    +-----------------+ 0x0000_ffff_ffff_ffff
+    |                 |
+    | User Segment    | 256 TiB
+    |                 |
+    +-----------------+ 0x0000_0000_0000_0000
+
+##### B.1.2.3 CPU Initialization
+
+### B.2 `mm` Module
+
+#### B.2.1 Module Interface
+
+#### B.2.2 Pager
+
+#### B.2.3 Page Directory
+
+ROS reserves the top 2 TiB of the virtual address space for the page directory. The page directory
+is a virtually-contiguous array of page metadata.
+
+    +-----------------+ 0xffff_ffff_ffff_ffff
+    | Page Directory  |
+    |.................| 0xffff_fe00_0000_0000
+    |                 |
+    | Kernel Segment  |
+    |                 |
+    +-----------------+ 0xffff_0000_0000_0000
+
+With the minimum page size of 4 KiB, there are 64 Gi pages in 256 TiB. Assuming the metadata for a
+page is 32 bytes, a maximum of 2 TiB is required for the array.
+
+Why 32 bytes? Will we need more? Great questions! Anyway...
+
+Similar to the Linux sparse virtual memory map model, this simplifies conversion from a page
+metadata address to a page physical address and vice versa. For 4 KiB pages:
+
+    Page Frame Number (PFN) = Physical Address >> 12
+    Page Metadata Address   = ( PFN << 5 ) + 0xffff_fffe_0000_0000
+
+The process is easily reversed to calculate a page physical address from a page metadata address.
+
+#### B.2.4 Buddy Allocator
+
+See: [Buddy Memory Allocation](https://en.wikipedia.org/wiki/Buddy_memory_allocation)
+
+A buddy allocator manages a single contiguous block of memory and allocates blocks of up to 2^10
+pages. The buddy allocator has a small amount of overhead to track buddy pair state. The allocator
+computes the size buddy pair state from the size of the memory block, rounds up to the nearest page,
+and stores the state at the end of the memory block.
+
+    Block Start                                  End
+    +--------------------------------------+-------+
+    | Available Pages                      | State |
+    +--------------------------------------+-------+
+
+On a system with 1 GiB of memory and 4 KiB pages, the buddy allocator needs just shy of 32 KiB for
+the buddy pair state. Out of the 256 Ki pages available, the buddy allocator will reserve 8 of them
+for the overhead.
+
+During initialization, the buddy allocator embeds a linked list of free pages for each order
+directly into the pages themselves.
+
+    +-------------------+ 0
+    | Next Pointer      |
+    +-------------------+
+    | Previous Pointer  |
+    +-------------------+
+    | Checksum          |
+    +-------------------+
+    | / / / / / / / / / |
+    | / / / / / / / / / |
+    | / / / / / / / / / |
+    +-------------------+ Page Size
+
+The checksum is a simple XOR of the architecture checksum seed and the next and previous pointers.
+It is not a secure checksum, it is only meant as a sanity check when allocating a page.
+
+### B.3 `support` Module
+
+### B.4 `sync` Module
+
 ## C. `ros_kernel_user` Library
 
 ## D. `ros_user` Library
@@ -161,3 +291,4 @@ passes it to `ros_kernel_init` in the `ros_kernel` library.
 * [Linux AArch64 Boot Protocol](https://www.kernel.org/doc/Documentation/arm64/booting.txt)
 * [AArch32 Procedure Call Standard](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst)
 * [AArch64 Procedure Call Standard](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst)
+* [Linux Memory Models](https://lwn.net/Articles/789304/)
