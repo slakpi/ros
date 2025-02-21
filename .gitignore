@@ -1,6 +1,10 @@
+**/.DS_Store
+
+.wt
 .vscode/*
 !.vscode/README.md
 !.vscode/cmake-kits.json
 build
-**/.DS_Store
-.wt
+
+doc/output/*
+!doc/output/.keep
