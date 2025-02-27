@@ -2,7 +2,8 @@
 # AArch64 kernel start code.
 #-------------------------------------------------------------------------------
 add_executable(
-  kernel dtb.S
+  kernel cpu.S
+         dtb.S
          exceptions.S
          pages.S
          spin_lock.S

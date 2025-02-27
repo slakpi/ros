@@ -39,15 +39,11 @@ fn panic(info: &PanicInfo) -> ! {
 /// After initializing the kernel, this function will ungate the remaining CPUs.
 #[no_mangle]
 extern "C" fn ros_kernel_init(config: usize) {
-  // Initialize the architecture components. At a minimum, this gives the kernel
-  // access to all available memory and configures some method of debug output.
-  arch::init(config);
-
   // Initialize the architecture-independent components.
-  kernel_init();
+  kernel_init(config);
 
-  // Bring secondary cores online.
-  arch::init_secondary_cores();
+  // Post-initialization tasks.
+  kernel_post_init();
 }
 
 /// Scheduler entry point.
@@ -68,13 +64,23 @@ extern "C" fn ros_kernel_scheduler() -> ! {
 }
 
 /// Kernel architecture-independent component initialization.
-fn kernel_init() {
+fn kernel_init(config: usize) {
+  // Initialize the architecture components. At a minimum, this gives the kernel
+  // access to all available memory and configures some method of debug output.
+  arch::init(config);
+
   // Run module tests if configured.
   #[cfg(feature = "module_tests")]
   kernel_module_tests();
 
   // Initialize components.
   mm::init();
+}
+
+/// Kernel post-initialization tasks.
+fn kernel_post_init() {
+  // Go multi-threaded.
+  arch::init_multi_core();
 }
 
 /// Run the low-level kernel module tests.

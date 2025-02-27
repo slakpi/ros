@@ -6,6 +6,16 @@
   * [ARMv7 Startup](#armv7-startup)
   * [AArch64 Startup](#aarch64-startup)
 * [`ros_kernel` Library](#ros_kernel-library)
+  * [`arch` Module](#arch-module)
+    * [Module Interface](#arch-module-iface)
+    * [ARMv7](#armv7-arch-impl)
+    * [AArch64](#aarch64-arch-impl)
+  * [`mm` Module](#mm-module)
+    * [Pager](#pager)
+    * [Page Directory](#page-directory)
+    * [Buddy Allocator](#buddy-allocator)
+  * [`support` Module](#support-module)
+  * [`sync` Module](#sync-module)
 * [`ros_kernel_user` Library](#ros_kernel_user-library)
 * [`ros_user` Library](#ros_user-library)
 * [Reference](#reference)
@@ -36,7 +46,7 @@ The `start` library is the low-level entry point for the kernel and is currently
 
 #### Kernel Image Layout {#aarch64-kernel-image-layout}
 
-    +----------------------+ __text_start
+    +----------------------+ __kernel_start / __text_start
     | .text                |
     +----------------------+ __rodata_start
     | .rodata              |
@@ -54,7 +64,7 @@ The `start` library is the low-level entry point for the kernel and is currently
     | .data.pages          |
     +----------------------+ __kernel_end
 
-The base of the `.text` segment is specified by the compile-time constant `KERNEL_BASE` provided by CMake.
+The base of the `.text` segment is specified by the compile-time constant `__kernel_start` provided by CMake.
 
 `.data.stack` is the primary core's interrupt service routine (ISR) stack. Refer to `SP_EL1`. `__kernel_stack_pages` is a compile-time constant provided by the linker script that specifies the ISR stack size in pages. During the single-threaded setup phase, the primary core uses this stack as its general purpose stack.
 
@@ -62,7 +72,7 @@ The base of the `.text` segment is specified by the compile-time constant `KERNE
 
 The stack pointer table is a single page of 512 8-byte pointer entries. 512 entries is sufficient for the 256 core maximum on AArch64 nodes.
 
-`.data.id_pages` and `.data.pages` are blocks reserved for the initial kernel page tables. The kernel image reserves three pages for each table.
+`.data.id_pages` and `.data.pages` are blocks reserved for the [initial kernel page tables](#aarch64-initial-page-tables). The kernel image reserves three pages for each table.
 
 #### Exception Level
 
@@ -74,7 +84,8 @@ Once in EL1 on the primary core, ROS sets the primary core's stack pointer to `_
 
 With the stack set, ROS writes all zeros to the `.bss` section.
 
-Next, ROS checks if the blob provided by the boot loader is a DeviceTree by checking if the first four bytes are the DeviceTree magic bytes.
+Next, ROS checks if the blob provided by the boot loader is a DeviceTree by checking if the first four bytes are the DeviceTree magic bytes. ROS *only* supports DeviceTrees. If the blob is not a
+DeviceTree, ROS halts.
 
 #### Initial Page Tables {#aarch64-initial-page-tables}
 
@@ -84,25 +95,31 @@ Because ROS has no idea how much memory actually exists in the system at this po
 
 Each table has three pages, one for each fo the L1, L2, and L3 tables. Only the first entries of the L1 and L2 tables are used for the first 1 GiB of the virtual address space. The 2 MiB sections of the kernel image and DTB are mapped in the L3 table.
 
-`E` is the end address of the kernel image `__kernel_start + __kernel_size` rounded to the next 2 MiB section, `P` is the blob pointer provided by the boot loader, and `D` is the DTB end address rounded to the next 2 MiB section.
+          Identity              Virtual
+          Map                   Map
 
-                       Identity              Virtual
-                       Map                   Map
+    PE +---------------+     +---------------+ VS + PE
+       | DTB           |     | DTB           |
+    PS +---------------+     +---------------+ VS + PS
+       | / / / / / / / |     | / / / / / / / |
+       | / / / / / / / |     | / / / / / / / |
+    KE +---------------+     +---------------+ VS + KE
+       |               |     |               |
+       | Kernel Image  |     | Kernel Image  |
+       |               |     |               |
+    KS +---------------+     +---------------+ VS + KS
+       | / / / / / / / |     | / / / / / / / |   
+     0 +---------------+     +---------------+ VS
 
-                 D +---------------+     +---------------+ __virtual_start + D
-                   | DTB           |     | DTB           |
-                 P +---------------+     +---------------+ __virtual_start + P
-                   | / / / / / / / |     | / / / / / / / |
-                   | / / / / / / / |     | / / / / / / / |
-                 E +---------------+     +---------------+ __virtual_start + E
-                   |               |     |               |
-                   | Kernel Image  |     | Kernel Image  |
-                   |               |     |               |
-    __kernel_start +---------------+     +---------------+ __virtual_start + __kernel_start
-                   | / / / / / / / |     | / / / / / / / |
-                 0 +---------------+     +---------------+ __virtual_start
+| Abbreviation | Description                              |
+|:-------------|:-----------------------------------------|
+| `VS`         | `__virtual_start`                        |
+| `KS`         | `__kernel_start`                         |
+| `KE`         | ⌈ `__kernel_size` ⌉~2MiB~                |
+| `PS`         | Blob pointer provided by the bootloader. |
+| `PE`         | ⌈ Blob Size ⌉~2MiB~                      |
 
-The identity tables allow a core to find the next instruction, typically a jump to set the program counter to virtual addressing, after enabling the MMU. After making the jump to virtual addressing, ROS sets `TTBR0_EL1` to 0.
+The identity tables allow a core to find the next instruction, typically a jump to set the program counter to virtual addressing, after enabling the MMU. After making the jump to virtual addressing, ROS sets `TTBR0_EL1` back to 0.
 
 The identity tables are placed in the kernel image prior to the virtual tables to ensure they remain intact for the secondary cores.
 
@@ -146,9 +163,9 @@ Each architecture supported by ROS must implement the following public interface
 
 Performs single-threaded, architecture-specific kernel initialization. Typically, this will involve determining the amount of physical memory, setting up kernel page tables, setting up page allocators, etc.
 
-##### `pub fn arch::init_secondary_cores()`
+##### `pub fn arch::init_multi_core()`
 
-Performs secondary core initialization. All secondary cores should be running with interrupts disabled when this function returns.
+Performs multi-threaded initialization. Any secondary cores will be running with interrupts disabled when this function returns.
 
 ##### `pub fn get_memory_layout() -> &'static memory::MemoryConfig`
 
@@ -190,6 +207,14 @@ Retrieves architecture-independent information about a core.
 
 Retrieves the identifier of the current core.
 
+##### `pub fn get_page_directory_virtual_base() -> usize`
+
+Retrieves the virtual address of the page directory.
+
+##### `pub fn get_page_directory_virtual_size() -> usize`
+
+Retrieves the size of the virtual area reserved for the page directory in bytes.
+
 ##### `pub fn spin_lock( lock_addr: usize )`
 
 Low-level spin lock on the specified address.
@@ -206,7 +231,7 @@ Low-level spin lock release on the specified address.
 
 Implements architecture-dependent debug output. For example, ROS currently uses the ARM UART to send debug messages.
 
-#### ARMv7 {#armv7-arch-impl}
+#### ARMv7 Implementation {#armv7-arch-impl}
 
 ##### Memory Initialization {#armv7-memory-init}
 
@@ -261,21 +286,23 @@ The remaining 97,216 KiB of the kernel segment are available for...things.
 
 ##### CPU Initialization {#armv7-cpu-init}
 
-#### AArch64 {#aarch64-arch-impl}
+#### AArch64 Implementation {#aarch64-arch-impl}
 
 ##### Memory Initialization {#aarch64-memory-init}
 
 ##### Address Space {#aarch64-address-space}
 
-ROS uses the conventional 256 TiB arrangement for a 64-bit address space and allows up to 254 TiB of physical memory accessed through a fixed, linear mapping.
+ROS uses the canonical 256 TiB arrangement for a 64-bit address space and allows up to 254 TiB of physical memory accessed through a fixed, linear mapping.
 
-    +-----------------+ 0xffff_ffff_ffff_ffff            K S
-    | Page Directory  | 2 TiB                            E E
-    |.................| 0xffff_fe00_ffff_ffff            R G
-    |                 |                                  N M
-    | Fixed Mappings  | 254 TiB                          E E
-    |                 |                                  L N
-    +-----------------+ 0xffff_0000_0000_0000              T
+    +-----------------+ 0xffff_ffff_ffff_ffff
+    | Page Directory  | 2 TiB                            K S
+    |.................| 0xffff_fe00_0000_0000            E E
+    | ISR Stacks      |                                  R G
+    |.................|                                  N M
+    |                 | 254 TiB                          E E
+    | Fixed Mappings  |                                  L N
+    |                 |                                    T
+    +-----------------+ 0xffff_0000_0000_0000
     | / / / / / / / / |
     | / / / / / / / / |
     | / / / / / / / / | 16,776,704 TiB (Unused)
@@ -297,6 +324,24 @@ Similar to the Linux sparse virtual memory map model, this simplifies conversion
     Page Metadata Address   = ( PFN << 5 ) + 0xffff_fffe_0000_0000
 
 The process is easily reversed to calculate a page physical address from a page metadata address.
+
+The ISR Stacks area virtually maps each core's ISR stack with unampped guard pages in between each to trap stack overflows. With the maximum of 256 cores, a page size of 4 KiB, and the default 16 page stack, this area reduces the allowed physical memory by 17 MiB.
+
+     +-----------------+
+     | Core N Stack    |
+     +-----------------+
+     |  / / Guard / /  |
+     +-----------------+
+    ...               ...
+     +-----------------+
+     | Core 2 Stack    |
+     +-----------------+
+     |  / / Guard / /  |
+     +-----------------+
+     | Core 1 Stack    |
+     +-----------------+
+     |  / / Guard / /  |
+     +-----------------+
 
 The exception vectors are part of the kernel image.
 

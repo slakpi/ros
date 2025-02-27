@@ -109,9 +109,8 @@ el2_entry:
 /*----------------------------------------------------------------------------*/
 /// Entry point for EL2 -> EL1.
 el1_entry:
-  mrs     x9, mpidr_el1
-  and     x9, x9, #0xff
-  cbz     x9, primary_cpu_boot
+  bl      cpu_get_core_id
+  cbz     x0, primary_cpu_boot
   b       secondary_cpu_boot
 
 
@@ -134,16 +133,15 @@ primary_cpu_boot:
   ldr     x2, =__bss_size
   bl      memset
 
-// Make the blob pointer 64-bit. Check if the blob is a DTB, then create the
-// kernel page tables. If the blob is a DTB, the DTB will be mapped into the
-// initial kernel page tables.
-  ldr     x9, =0xffffffff
-  and     x19, x19, x9
+// Check if the blob is a DTB, then create the kernel page tables. If the blob
+// is a DTB, the DTB will be mapped into the initial kernel page tables. If the
+// blob is not a DTB, halt the CPU.
   mov     x0, x19
   bl      dtb_quick_check
+  cbz     x0, cpu_halt
 
-  mov     x1, x0            // dtb_quick_check return value to x1
-  mov     x0, x19           // blob address to x0
+  mov     x1, x0            // dtb blob size to x1
+  mov     x0, x19           // dtb blob address to x0
   bl      mmu_create_kernel_page_tables
 
 // Save off physical addresses needed for the kernel configuration struct.
@@ -152,6 +150,9 @@ primary_cpu_boot:
   adrp    x22, __kernel_stack_list
 
 // Enable the MMU.
+//
+//   NOTE: Manually set the link register to the virtual return address when
+//         calling `setup_and_enable_mmu`. Do not use branch-and-link.
   adrp    x0, __kernel_id_pages_start
   adrp    x1, __kernel_pages_start
   ldr     lr, =primary_cpu_begin_virt_addressing
@@ -169,27 +170,27 @@ primary_cpu_begin_virt_addressing:
 
 // Write kernel configuration struct. Provide all addresses as physical.
 //
-//   +------------------------------+ 0
-//   | Virtual base address         |
-//   +------------------------------+ 8
-//   | Page size                    |
-//   +------------------------------+ 16
-//   | Physical blob address        |
-//   +------------------------------+ 24
-//   | Physical kernel address      |
-//   +------------------------------+ 32
-//   | Kernel size                  |
-//   +------------------------------+ 40
-//   | Physical page tables address |
-//   +------------------------------+ 48
-//   | Page table area size         |
-//   +------------------------------+ 56
-//   | ISR stack list address       |
-//   +------------------------------+ 64
-//   | ISR stack page count         |
-//   +------------------------------+ 72
-//   | / / / / / / / / / / / / / /  |
 //   +------------------------------+ 80
+//   | Primary ISR stack start      |
+//   +------------------------------+ 72
+//   | ISR stack page count         |
+//   +------------------------------+ 64
+//   | ISR stack list address       |
+//   +------------------------------+ 56
+//   | Page table area size         |
+//   +------------------------------+ 48
+//   | Physical page tables address |
+//   +------------------------------+ 40
+//   | Kernel size                  |
+//   +------------------------------+ 32
+//   | Physical kernel address      |
+//   +------------------------------+ 24
+//   | Physical blob address        |
+//   +------------------------------+ 16
+//   | Page size                    |
+//   +------------------------------+ 8
+//   | Virtual base address         |
+//   +------------------------------+ 0
   mov     x29, sp
   sub     sp, sp, #(8 * 10)
 
@@ -206,7 +207,7 @@ primary_cpu_begin_virt_addressing:
   stp     x9, x22, [sp, #16 * 3]
 
   ldr     x9, =__kernel_stack_pages
-  mov     x10, #0
+  ldr     x10, =__kernel_stack_start
   stp     x9, x10, [sp, #16 * 4]
 
 // Perform the rest of the kernel initialization in Rustland.
@@ -227,6 +228,9 @@ secondary_cpu_boot:
 // no fn_entry required.
 
 // Enable the MMU.
+//
+//   NOTE: Manually set the link register to the virtual return address when
+//         calling `setup_and_enable_mmu()`. Do not use branch-and-link.
   adrp    x0, __kernel_id_pages_start
   adrp    x1, __kernel_pages_start
   ldr     lr, =secondary_cpu_begin_virt_addressing
@@ -263,8 +267,8 @@ secondary_cpu_begin_virt_addressing:
 ///
 /// Enables the MMU with TTBR0 = x0 and TTBR1 = x1.
 ///
-/// The function should be called with the link register set to the VIRTUAL
-/// return address.
+///   NOTE: The function must be called with the link register set to the
+///         VIRTUAL return address.
 setup_and_enable_mmu:
 // no fn_entry required.
 
@@ -301,3 +305,18 @@ cleanup_mmu_setup:
 
 // no fn_exit required.
   ret
+
+
+/*----------------------------------------------------------------------------*/
+/// Halt the caller.
+///
+/// # Description
+///
+/// Halts the CPU calling the function using a wait loop.
+cpu_halt:
+// no fn_entry required.
+  brk     #0                // Trigger hardware breakpoint.
+1:
+  wfi                       // Wait for interrupt.
+  b       1b                // Infinite loop.
+// no fn_ext required; never returns.

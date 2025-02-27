@@ -1,7 +1,9 @@
 //! AArch64 Memory Management
 
+use crate::mm::{MappingStrategy, TableAllocator};
 use core::{cmp, ptr, slice};
 
+/// TODO: These need to be dynamic based on the configured page size.
 const TABLE_SIZE: usize = 4096;
 const PAGE_SHIFT: usize = 12;
 const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
@@ -16,6 +18,7 @@ const LEVEL_3_SHIFT: usize = PAGE_SHIFT + INDEX_SHIFT;
 const LEVEL_4_SHIFT: usize = PAGE_SHIFT;
 
 const MM_PAGE_TABLE_FLAG: usize = 0x3 << 0;
+const MM_PAGE_FLAG: usize = 0x3 << 0;
 const MM_BLOCK_FLAG: usize = 0x1 << 0;
 const MM_NORMAL_FLAG: usize = 0x1 << 2;
 const MM_DEVICE_FLAG: usize = 0x0 << 2;
@@ -46,32 +49,31 @@ struct PageTable {
 ///
 /// * `virtual_base` - The kernel segment base address.
 /// * `pages_start` - The address of the kernel's Level 1 page table.
-/// * `pages_end` - The start of available memory for new page tables.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
-///
-/// # Returns
-///
-/// The new end of the page table area.
+/// * `allocator` - The allocator that will provide new table pages.
+/// * `strategy` - The mapping strategy.
 pub fn direct_map_memory(
   virtual_base: usize,
   pages_start: usize,
-  pages_end: usize,
   base: usize,
   size: usize,
   device: bool,
-) -> usize {
+  allocator: &mut impl TableAllocator,
+  strategy: MappingStrategy,
+) {
   fill_table(
     virtual_base,
     TableLevel::Level1,
     pages_start,
-    pages_end,
     base,
     base,
     size,
     device,
-  )
+    allocator,
+    strategy,
+  );
 }
 
 /// Map a range of physical addresses to a task's virtual address space.
@@ -80,38 +82,37 @@ pub fn direct_map_memory(
 ///
 /// * `virtual_base` - The task's virtual base address.
 /// * `pages_start` - The address of the task's Level 1 page table.
-/// * `pages_end` - The start of available memory for new pages.
 /// * `virt` - Base of the virtual address range.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
+/// * `allocator` - The allocator that will provide new table pages.
+/// * `strategy` - The mapping strategy.
 ///
 /// # Description
 ///
 /// This is a generalized version of `direct_map_memory` where `virt` != `base`.
-///
-/// # Returns
-///
-/// The new end of the page table area.
 pub fn map_memory(
   virtual_base: usize,
   pages_start: usize,
-  pages_end: usize,
   virt: usize,
   base: usize,
   size: usize,
   device: bool,
-) -> usize {
+  allocator: &mut impl TableAllocator,
+  strategy: MappingStrategy,
+) {
   fill_table(
     virtual_base,
     TableLevel::Level1,
     pages_start,
-    pages_end,
     virt,
     base,
     size,
     device,
-  )
+    allocator,
+    strategy,
+  );
 }
 
 /// Allocates a new page table if the specified descriptor is invalid, then
@@ -122,44 +123,41 @@ pub fn map_memory(
 /// * `virtual_base` - The kernel segment base address.
 /// * `table_level` - The current table level.
 /// * `desc` - The current descriptor in the table.
-/// * `pages_end` - The current end of the table area.
 /// * `virt` - Base of the virtual address range.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
+/// * `allocator` - The allocator that will provide new table pages.
+/// * `strategy` - The mapping strategy.
 ///
 /// # Description
-///
-/// If the specified descriptor in the current table is invalid, a new page
-/// is allocated at `pages_end` before a recursive call to `fill_table` is made.
 ///
 /// The current table must be Level 1, 2, or 3. Level 4 tables can only point to
 /// pages.
 ///
 /// # Returns
 ///
-/// The new descriptor and new end of the table area.
+/// The new descriptor.
 fn alloc_table_and_fill(
   virtual_base: usize,
   table_level: TableLevel,
   desc: usize,
-  pages_end: usize,
   virt: usize,
   base: usize,
   size: usize,
   device: bool,
-) -> (usize, usize) {
+  allocator: &mut impl TableAllocator,
+  strategy: MappingStrategy,
+) -> usize {
   let next_level = get_next_table(table_level).unwrap();
   let mut next_addr = get_phys_addr_from_descriptor(desc);
   let mut desc = desc;
-  let mut pages_end = pages_end;
 
   // TODO: It is probably fine to overwrite a section descriptor. If the memory
   //       configuration is overwriting itself, then we probably have something
   //       wrong and a memory trap is the right outcome.
   if desc & TYPE_MASK != MM_PAGE_TABLE_FLAG {
-    next_addr = pages_end;
-    pages_end += TABLE_SIZE;
+    next_addr = allocator.alloc_table();
 
     unsafe {
       // Zero out the table. Any entry in the table with 0 in bit 0 is invalid.
@@ -169,19 +167,19 @@ fn alloc_table_and_fill(
     desc = make_pointer_entry(next_addr);
   }
 
-  (
-    desc,
-    fill_table(
-      virtual_base,
-      next_level,
-      next_addr,
-      pages_end,
-      virt,
-      base,
-      size,
-      device,
-    ),
-  )
+  fill_table(
+    virtual_base,
+    next_level,
+    next_addr,
+    virt,
+    base,
+    size,
+    device,
+    allocator,
+    strategy,
+  );
+
+  desc
 }
 
 /// Given a table level, return the next table level down in the translation
@@ -230,18 +228,67 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
   (phys_addr & ADDR_MASK) | MM_PAGE_TABLE_FLAG
 }
 
-/// Fills a page table with entries for the specified range.
+/// Wrapper for strategy-specific fill functions.
 ///
 /// # Parameters
 ///
 /// * `virtual_base` - The kernel segment base address.
 /// * `table_level` - The current table level.
 /// * `table_addr` - The address of the current page table.
-/// * `pages_end` - The start of available memory for new pages.
 /// * `virt` - Base of the virtual address range.
 /// * `base` - Base of the physical address range.
 /// * `size` - Size of the physical address range.
 /// * `device` - Whether this block or page maps to device memory.
+/// * `allocator` - The allocator that will provide new table pages.
+/// * `strategy` - The mapping strategy.
+fn fill_table(
+  virtual_base: usize,
+  table_level: TableLevel,
+  table_addr: usize,
+  virt: usize,
+  base: usize,
+  size: usize,
+  device: bool,
+  allocator: &mut impl TableAllocator,
+  strategy: MappingStrategy,
+) {
+  match strategy {
+    MappingStrategy::Compact => fill_table_compact(
+      virtual_base,
+      table_level,
+      table_addr,
+      virt,
+      base,
+      size,
+      device,
+      allocator,
+    ),
+    MappingStrategy::Granular => fill_table_granular(
+      virtual_base,
+      table_level,
+      table_addr,
+      virt,
+      base,
+      size,
+      device,
+      allocator,
+    ),
+  }
+}
+
+/// Fills a page table with entries for the specified range using sections to
+/// compact the tables.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `table_level` - The current table level.
+/// * `table_addr` - The address of the current page table.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
+/// * `allocator` - The allocator that will provide new table pages.
 ///
 /// # Details
 ///
@@ -325,21 +372,20 @@ fn make_pointer_entry(phys_addr: usize) -> usize {
 /// # Returns
 ///
 /// Returns the new end of the table area.
-fn fill_table(
+fn fill_table_compact(
   virtual_base: usize,
   table_level: TableLevel,
   table_addr: usize,
-  pages_end: usize,
   virt: usize,
   base: usize,
   size: usize,
   device: bool,
-) -> usize {
+  allocator: &mut impl TableAllocator,
+) {
   let entry_size = get_table_entry_size(table_level);
   let mut virt = virt;
   let mut base = base;
   let mut size = size;
-  let mut pages_end = pages_end;
   let table = get_table(virtual_base + table_addr);
 
   while size >= PAGE_SIZE {
@@ -352,15 +398,16 @@ fn fill_table(
       // size since the block size can be greater at Level 1.
       fill_size = cmp::min(size, entry_size);
 
-      (table[idx], pages_end) = alloc_table_and_fill(
+      table[idx] = alloc_table_and_fill(
         virtual_base,
         table_level,
         table[idx],
-        pages_end,
         virt,
         base,
         fill_size,
         device,
+        allocator,
+        MappingStrategy::Compact,
       );
     } else {
       // Handle Case 1 and Case 2 for Level 4 tables.
@@ -371,9 +418,68 @@ fn fill_table(
     base += fill_size;
     size -= fill_size;
   }
+}
 
-  // Return the updated `pages_end` pointer to be used by subsequent mappings.
-  pages_end
+/// Fills a page table with entries for the specified range using individual
+/// page entries.
+///
+/// # Parameters
+///
+/// * `virtual_base` - The kernel segment base address.
+/// * `table_level` - The current table level.
+/// * `table_addr` - The address of the current page table.
+/// * `virt` - Base of the virtual address range.
+/// * `base` - Base of the physical address range.
+/// * `size` - Size of the physical address range.
+/// * `device` - Whether this block or page maps to device memory.
+/// * `allocator` - The allocator that will provide new table pages.
+fn fill_table_granular(
+  virtual_base: usize,
+  table_level: TableLevel,
+  table_addr: usize,
+  virt: usize,
+  base: usize,
+  size: usize,
+  device: bool,
+  allocator: &mut impl TableAllocator,
+) {
+  let entry_size = get_table_entry_size(table_level);
+  let mut virt = virt;
+  let mut base = base;
+  let mut size = size;
+  let table = get_table(virtual_base + table_addr);
+
+  loop {
+    let idx = get_descriptor_index(virtual_base + virt, table_level);
+
+    // For levels 1, 2, and 3, allocate new tables as necessary and descend to
+    // the next level down. At level 4, add individual page entries.
+    if table_level != TableLevel::Level4 {
+      table[idx] = alloc_table_and_fill(
+        virtual_base,
+        table_level,
+        table[idx],
+        virt,
+        base,
+        size,
+        device,
+        allocator,
+        MappingStrategy::Granular,
+      );
+    } else {
+      table[idx] = make_descriptor(table_level, base, device);
+    }
+
+    // If the size of the block is smaller than the entry size, there is nothing
+    // left to do.
+    if size <= entry_size {
+      break;
+    }
+
+    virt += entry_size;
+    base += entry_size;
+    size -= entry_size;
+  }
 }
 
 /// Given a table level, returns the size covered by a single entry.
@@ -496,7 +602,7 @@ fn make_block_descriptor(phys_addr: usize, device: bool) -> usize {
 ///
 /// The new page descriptor.
 fn make_page_descriptor(phys_addr: usize, device: bool) -> usize {
-  let mut entry = (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_NORMAL_FLAG;
+  let mut entry = (phys_addr & ADDR_MASK) | MM_ACCESS_FLAG | MM_NORMAL_FLAG | MM_PAGE_FLAG;
 
   if device {
     entry |= MM_DEVICE_FLAG;

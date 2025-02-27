@@ -354,8 +354,12 @@ impl<'memory> BuddyPageAllocator<'memory> {
     assert!(base & (pages - 1) == 0);
 
     let page_shift = arch::get_page_shift();
-    let mut base = base;
+    let range_end = base + ((pages << page_shift) - 1);
+    let alloc_end = self.base + (self.size - 1);
+    assert!(base >= self.base && range_end <= alloc_end);
 
+    let mut base = base;
+    
     for level in min_level..BLOCK_LEVELS {
       let (index, bit_idx) = self.get_flag_index_and_bit(base, level);
 
@@ -600,27 +604,28 @@ impl<'memory> BuddyPageAllocator<'memory> {
     let head_addr = self.levels[level].head;
     let block = Self::get_block_node(block_addr);
 
-    // If the block address is the same as the head address, then we need to
-    // check if the head points to itself. If it does, simply set the list head
-    // to zero. Otherwise, we assume there is more than one block and perform a
-    // normal list removal.
+    // If the block points to itself, just set the head address to zero and
+    // and bail.
+    if block.next == block_addr {
+      assert!(block.prev == block.next);
+      assert!(head_addr == block_addr);
+      self.levels[level].head = 0;
+      return;
+    }
+
+    // Remove the block.
+    let prev = Self::get_block_node_mut(block.prev);
+    let next = Self::get_block_node_mut(block.next);
+
+    *prev = BlockNode::new(block.next, prev.prev);
+    *next = BlockNode::new(next.next, block.prev);
+
+    Self::unget_block_node();
+    Self::unget_block_node();
+
+    // If this block is the head block, move the head to the next block.
     if block_addr == head_addr {
-      let head = Self::get_block_node(head_addr);
-
-      if head.next == head_addr {
-        self.levels[level].head = 0;
-      }
-
-      Self::unget_block_node();
-    } else {
-      let prev = Self::get_block_node_mut(block.prev);
-      let next = Self::get_block_node_mut(block.next);
-
-      *prev = BlockNode::new(prev.prev, block.next);
-      *next = BlockNode::new(block.prev, next.next);
-
-      Self::unget_block_node();
-      Self::unget_block_node();
+      self.levels[level].head = block.next;
     }
 
     Self::unget_block_node();

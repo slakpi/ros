@@ -2,6 +2,7 @@
 
 mod buddy_allocator;
 mod pager;
+mod slab_allocator;
 
 use crate::arch;
 use crate::task;
@@ -11,6 +12,25 @@ use crate::debug_print;
 
 /// Re-initialization guard.
 static mut INITIALIZED: bool = false;
+
+/// Mapping strategies to use when mapping blocks of memory.
+pub enum MappingStrategy {
+  /// A strategy that uses architecture-specific techniques, such as ARM
+  /// sections, to map a block of memory using the fewest table entries.
+  Compact,
+  /// A strategy that maps a block of memory to individual pages.
+  Granular,
+}
+
+/// Interface for allocating table pages.
+pub trait TableAllocator {
+  /// Allocate a new table page.
+  ///
+  /// # Returns
+  ///
+  /// The physical address of the new table page.
+  fn alloc_table(&mut self) -> usize;
+}
 
 /// Memory management initialization.
 ///
@@ -54,6 +74,10 @@ pub fn kernel_unmap_page_local() {
 
 pub fn kernel_allocate(pages: usize) -> Option<(usize, usize, usize)> {
   pager::allocate(pages)
+}
+
+pub fn kernel_free(base: usize, pages: usize, zone: usize) {
+  pager::free(base, pages, zone);
 }
 
 #[cfg(feature = "module_tests")]

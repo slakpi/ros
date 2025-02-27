@@ -4,6 +4,11 @@ use crate::support::{dtb, hash, hash_map};
 use core::cmp;
 use core::convert::TryFrom;
 
+extern "C" {
+  fn cpu_get_core_id() -> usize;
+  fn cpu_remap_stack(current_base: usize, new_base: usize);
+}
+
 /// Maximum number of cores supported for an ARM SoC (see B4.1.106 MPIDR and
 /// D17.2.101 MPIDR_EL1).
 pub const MAX_CORES: usize = 256;
@@ -348,4 +353,29 @@ pub fn get_cpu_config(config: &mut CpuConfig, blob: usize) -> bool {
   }
 
   true
+}
+
+/// Get the identifier of the current core.
+///
+/// # Description
+///
+/// See `cpu_get_core_id()`.
+pub fn get_core_id() -> usize {
+  unsafe { cpu_get_core_id() }
+}
+
+/// Map the current core's stack to a different virtual address.
+///
+/// # Parameters
+///
+/// * current_start - The original virtual address of the stack's start.
+/// * new_start - The new virtual address of the stack's start.
+///
+/// # Description
+///
+/// See `cpu_remap_stack()`.
+pub fn remap_stack(current_start: usize, new_start: usize) {
+  unsafe {
+    cpu_remap_stack(current_start, new_start);
+  }
 }
