@@ -146,7 +146,7 @@ After enabling the MMU, the primary core fills out the AArch64 kernel configurat
     +------------------------------+ 64
     | ISR stack page count         |
     +------------------------------+ 72
-    | / / / / / / / / / / / / / /  |
+    | Primary core ISR stack start |
     +------------------------------+ 80
 
 ## `ros_kernel` Library
@@ -299,7 +299,7 @@ ROS uses the canonical 256 TiB arrangement for a 64-bit address space and allows
     |.................| 0xffff_fe00_0000_0000            E E
     | ISR Stacks      |                                  R G
     |.................|                                  N M
-    |                 | 254 TiB                          E E
+    |                 | ~254 TiB                         E E
     | Fixed Mappings  |                                  L N
     |                 |                                    T
     +-----------------+ 0xffff_0000_0000_0000

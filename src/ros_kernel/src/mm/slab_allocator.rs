@@ -28,7 +28,7 @@ struct Slab {
 
 pub struct SlabAllocator<T> {
   first: usize,
-  _phantom: PhantomData<T>
+  _phantom: PhantomData<T>,
 }
 
 impl<T> SlabAllocator<T> {
@@ -37,7 +37,7 @@ impl<T> SlabAllocator<T> {
     // next pointer.
     debug_assert!(mem::size_of::<T>() < arch::get_page_size() - mem::size_of::<usize>());
 
-    SlabAllocator{
+    SlabAllocator {
       first: 0,
       _phantom: PhantomData,
     }

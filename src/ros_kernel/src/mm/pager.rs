@@ -126,7 +126,7 @@ pub fn allocate(pages: usize) -> Option<(usize, usize, usize)> {
 /// * `zone` - The zone from which the pages originated.
 pub fn free(base: usize, pages: usize, zone: usize) {
   assert!(zone < MAX_ALLOCATORS);
-  
+
   unsafe {
     let lock = ALLOCATORS[zone].as_ref().unwrap();
     let mut allocator = lock.lock();

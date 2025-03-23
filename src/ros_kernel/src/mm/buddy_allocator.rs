@@ -359,7 +359,7 @@ impl<'memory> BuddyPageAllocator<'memory> {
     assert!(base >= self.base && range_end <= alloc_end);
 
     let mut base = base;
-    
+
     for level in min_level..BLOCK_LEVELS {
       let (index, bit_idx) = self.get_flag_index_and_bit(base, level);
 
