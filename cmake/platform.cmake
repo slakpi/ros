@@ -196,16 +196,12 @@ function(get_kernel_page_size kib)
 endfunction()
 
 #-------------------------------------------------------------------------------
-# Get the kernel stack page count. Defaults to 16 pages. The kernel stack is a
-# bootstrap stack used for initializing the architecture-dependent components
-# before going multi-core. Kernel threads will allocate their stacks after the
-# system memory map is setup. The boostrap stack should be as small as
-# practical.
+# Get the kernel stack page count. Defaults to 2 pages.
 #-------------------------------------------------------------------------------
 function(get_kernel_stack_page_count pages)
   if (DEFINED KERNEL_STACK_PAGES)
     set(${pages} ${KERNEL_STACK_PAGES} PARENT_SCOPE)
   else()
-    set(${pages} 16 PARENT_SCOPE)
+    set(${pages} 2 PARENT_SCOPE)
   endif()
 endfunction()
