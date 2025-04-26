@@ -70,7 +70,7 @@ The base of the `.text` segment is specified by the compile-time constant `__ker
 
 `.data.stack_pointers` is the ISR stack pointer table for secondary cores. During the single-threaded setup phase, the primary core will allocate pages for secondary core ISR stacks and place pointers to the tops of those stacks in this table. The secondary cores will index this table to locate their stacks when they are released.
 
-The stack pointer table is a single page of 512 8-byte pointer entries. 512 entries is sufficient for the 256 core maximum on AArch64 nodes.
+The stack pointer table is a single page of 512 8-byte pointer entries. 512 entries is sufficient for the 256 core maximum on AArch64 nodes. See [Multi-Core Initialization](#aarch64-multi-core-init).
 
 `.data.id_pages` and `.data.pages` are blocks reserved for the [initial kernel page tables](#aarch64-initial-page-tables). The kernel image reserves three pages for each table.
 
@@ -93,7 +93,7 @@ DeviceTree, ROS halts.
 
 Because ROS has no idea how much memory actually exists in the system at this point, it takes a very conservative approach to the initial page tables. The kernel image and the DeviceTree binary (DTB), if present, are linearly mapped in 2 MiB sections. The identity tables map the physical addresses back to the same physical address while the virtual address page tables map the physical addresses offset by `__virtual_start`.
 
-Each table has three pages, one for each fo the L1, L2, and L3 tables. Only the first entries of the L1 and L2 tables are used for the first 1 GiB of the virtual address space. The 2 MiB sections of the kernel image and DTB are mapped in the L3 table.
+Each table has three pages, one for each of the L1, L2, and L3 tables. Only the first entries of the L1 and L2 tables are used for the first 1 GiB of the virtual address space. The 2 MiB sections of the kernel image and DTB are mapped in the L3 table.
 
           Identity              Virtual
           Map                   Map
@@ -127,27 +127,27 @@ The identity tables are placed in the kernel image prior to the virtual tables t
 
 After enabling the MMU, the primary core fills out the AArch64 kernel configuration struct and passes it to `ros_kernel_init` in the `ros_kernel` library. All addresses in the struct are physical.
 
-    +------------------------------+ 0
-    | Virtual base address         |
-    +------------------------------+ 8
-    | Page size                    |
-    +------------------------------+ 16
-    | Physical blob address        |
-    +------------------------------+ 24
-    | Physical kernel address      |
-    +------------------------------+ 32
-    | Kernel size                  |
-    +------------------------------+ 40
-    | Physical page tables address |
-    +------------------------------+ 48
-    | Page table area size         |
-    +------------------------------+ 56
-    | ISR stack list address       |
-    +------------------------------+ 64
-    | ISR stack page count         |
-    +------------------------------+ 72
-    | Primary core ISR stack start |
     +------------------------------+ 80
+    | Primary ISR stack start      |
+    +------------------------------+ 72
+    | ISR stack page count         |
+    +------------------------------+ 64
+    | ISR stack list address       |
+    +------------------------------+ 56
+    | Page table area size         |
+    +------------------------------+ 48
+    | Physical page tables address |
+    +------------------------------+ 40
+    | Kernel size                  |
+    +------------------------------+ 32
+    | Physical kernel address      |
+    +------------------------------+ 24
+    | Physical blob address        |
+    +------------------------------+ 16
+    | Page size                    |
+    +------------------------------+ 8
+    | Virtual base address         |
+    +------------------------------+ 0
 
 ## `ros_kernel` Library
 
@@ -165,15 +165,11 @@ Performs single-threaded, architecture-specific kernel initialization. Typically
 
 ##### `pub fn arch::init_multi_core()`
 
-Performs multi-threaded initialization. Any secondary cores will be running with interrupts disabled when this function returns.
+Performs multi-threaded initialization. Any secondary cores will be running with interrupts disabled when this function returns. This must be called after `arch::init()`.
 
 ##### `pub fn get_memory_layout() -> &'static memory::MemoryConfig`
 
-Retrieves the physical memory layout.
-
-##### `pub fn get_exclusion_layout() -> &'static memory::MemoryConfig`
-
-Retrieves the physical memory exclusions. These are areas that will not be made available to the page allocators. For example, the area containing the kernel image must be excluded.
+Retrieves the physical memory layout. The layout must exclude any memory regions that cannot be used by the kernel, e.g. the kernel code itself, a DeviceTree, etc.
 
 ##### `pub fn get_page_size() -> usize`
 
@@ -189,7 +185,7 @@ Retrieves the kernel's physical base address.
 
 ##### `pub fn get_kernel_virtual_base() -> usize`
 
-Retrieves the kernel's virtual base address.
+Retrieves the kernel segment virtual base address.
 
 ##### `pub fn get_max_physical_address() -> usize`
 
@@ -232,6 +228,8 @@ Low-level spin lock release on the specified address.
 Implements architecture-dependent debug output. For example, ROS currently uses the ARM UART to send debug messages.
 
 #### ARMv7 Implementation {#armv7-arch-impl}
+
+##### CPU Initialization {#armv7-cpu-init}
 
 ##### Memory Initialization {#armv7-memory-init}
 
@@ -284,23 +282,23 @@ ROS configures ARMv7 cores to place exception vectors at 0xffff_0000 and places 
 
 The remaining 97,216 KiB of the kernel segment are available for...things.
 
-##### CPU Initialization {#armv7-cpu-init}
-
 #### AArch64 Implementation {#aarch64-arch-impl}
+
+##### CPU Initialization {#aarch64-cpu-init}
 
 ##### Memory Initialization {#aarch64-memory-init}
 
 ##### Address Space {#aarch64-address-space}
 
-ROS uses the canonical 256 TiB arrangement for a 64-bit address space and allows up to 254 TiB of physical memory accessed through a fixed, linear mapping.
+ROS uses the canonical 256 TiB arrangement for a 64-bit address space and allows up to just under 254 TiB of physical memory accessed through a fixed, linear mapping.
 
     +-----------------+ 0xffff_ffff_ffff_ffff
     | Page Directory  | 2 TiB                            K S
     |.................| 0xffff_fe00_0000_0000            E E
-    | ISR Stacks      |                                  R G
+    | ISR Stacks      | 3 MiB (Max)                      R G
     |.................|                                  N M
-    |                 | ~254 TiB                         E E
-    | Fixed Mappings  |                                  L N
+    |                 |                                  E E
+    | Fixed Mappings  | ~254 TiB                         L N
     |                 |                                    T
     +-----------------+ 0xffff_0000_0000_0000
     | / / / / / / / / |
@@ -325,27 +323,47 @@ Similar to the Linux sparse virtual memory map model, this simplifies conversion
 
 The process is easily reversed to calculate a page physical address from a page metadata address.
 
-The ISR Stacks area virtually maps each core's ISR stack with unampped guard pages in between each to trap stack overflows. With the maximum of 256 cores, a page size of 4 KiB, and the default 16 page stack, this area reduces the allowed physical memory by 17 MiB.
-
-     +-----------------+
-     | Core N Stack    |
-     +-----------------+
-     |  / / Guard / /  |
-     +-----------------+
-    ...               ...
-     +-----------------+
-     | Core 2 Stack    |
-     +-----------------+
-     |  / / Guard / /  |
-     +-----------------+
-     | Core 1 Stack    |
-     +-----------------+
-     |  / / Guard / /  |
-     +-----------------+
+The ISR Stacks area virtually maps each core's ISR stack with unmapped guard pages in between each to trap stack overflows. With the maximum of 256 cores, a page size of 4 KiB, and the default 2-page stack, the maximum ISR Stacks area size is 3 MiB.
 
 The exception vectors are part of the kernel image.
 
-##### CPU Initialization {#aarch64-cpu-init}
+##### Multi-Core Initialization {#aarch64-multi-core-init}
+
+Before releasing secondary cores, ROS allocates the ISR stacks, maps them into the ISR Stack area, and fills out the kernel stack list. The primary core's stack has already been configured, so the primary core's entry in the list is just left blank.
+
+     +---------------------------+ +8 * N
+     | Core N ISR Stack Address  |
+    ...                         ...
+     | Core 3 ISR Stack Address  |
+     +---------------------------+ +24
+     | Core 2 ISR Stack Address  |
+     +---------------------------+ +16
+     | Core 1 ISR Stack Address  |
+     +---------------------------+ +8
+     | / / / / / / / / / / / / / |
+     +---------------------------+  virtual base + list address
+
+While the primary core's ISR stack is physically located in the kernel image, ROS remaps it into the ISR Stack region with a guard page and updates the stack pointer. The stacks for the remaining cores are dynamically allocated and mapped into the ISR Stacks area once ROS initializes the page allocators.
+
+     +---------------------------+ +stack_virtual_offset * N
+     | Core N ISR Stack          |
+     +---------------------------+
+     | / / / / / Guard / / / / / |
+     +---------------------------+
+    ...                         ...
+     +---------------------------+
+     | Core 2 ISR Stack          |
+     +---------------------------+
+     | / / / / / Guard / / / / / |
+     +---------------------------+ +stack_virtual_offset * 2
+     | Core 1 ISR Stack          |
+     +---------------------------+
+     | / / / / / Guard / / / / / |
+     +---------------------------+ +stack_virtual_offset
+     | Core 0 ISR Stack          |
+     +---------------------------+
+     | / / / / / Guard / / / / / |
+     +---------------------------+  virtual base + stack_base
 
 ### `mm` Module
 
@@ -380,7 +398,8 @@ During initialization, the buddy allocator embeds a linked list of free pages fo
     | / / / / / / / / / |
     +-------------------+ Page Size
 
-The checksum is a simple XOR of the architecture checksum seed and the next and previous pointers. It is not a secure checksum, it is only meant as a sanity check when allocating a page.
+The checksum is a checksum of the next and previous pointers to sanity check the linked list when
+allocating a block of memory.
 
 ### `support` Module
 
