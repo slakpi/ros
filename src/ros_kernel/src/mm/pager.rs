@@ -34,7 +34,6 @@ pub fn init() {
   let page_size = arch::get_page_size();
   let virtual_base = arch::get_kernel_virtual_base();
   let mem_layout = arch::get_memory_layout();
-  let excl_layout = arch::get_exclusion_layout();
 
   for (i, r) in mem_layout.get_ranges().iter().enumerate() {
     // If the memory area is not large enough for even a single page, skip it.
@@ -63,10 +62,6 @@ pub fn init() {
     let mut avail = memory::MemoryConfig::new();
     if !avail.insert_range(*r) {
       continue;
-    }
-
-    for e in excl_layout.get_ranges() {
-      avail.exclude_range(e);
     }
 
     avail.exclude_range(&meta_range);

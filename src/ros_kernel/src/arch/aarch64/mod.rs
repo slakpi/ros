@@ -34,11 +34,12 @@ struct KernelConfig {
 const PAGE_DIRECTORY_VIRTUAL_BASE: usize = 0xffff_fe00_0000_0000;
 
 /// The size of the virtual area reserved for the page directory (2 TiB).
-const PAGE_DIRECTORY_VIRTUAL_SIZE: usize = 0x200_0000_0000;
+const PAGE_DIRECTORY_SIZE: usize = 0x200_0000_0000;
 
 /// Re-initialization guard.
 static mut INITIALIZED: bool = false;
 
+/// Kernel configuration provided by the start code.
 static mut KERNEL_CONFIG: KernelConfig = KernelConfig {
   virtual_base: 0,
   page_size: 0,
@@ -55,10 +56,6 @@ static mut KERNEL_CONFIG: KernelConfig = KernelConfig {
 /// Layout of physical memory in the system.
 static mut MEM_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
 
-/// Layout of page allocation exclusions. The physical memory occupied by the
-/// kernel, for example, cannot be available for memory allocation.
-static mut EXCL_LAYOUT: memory::MemoryConfig = memory::MemoryConfig::new();
-
 /// Page shift.
 static mut PAGE_SHIFT: usize = 0;
 
@@ -68,16 +65,14 @@ static mut MAX_PHYSICAL_ADDRESS: usize = 0;
 /// CPU configuration.
 static mut CPU_CONFIG: cpu::CpuConfig = cpu::CpuConfig::new();
 
-/// The base virtual address of the kernel thread stack area.
-static mut KERNEL_THREAD_STACK_VIRTUAL_BASE: usize = 0;
-
 /// The base virtual address of the kernel ISR stack area.
 static mut KERNEL_ISR_STACK_VIRTUAL_BASE: usize = 0;
 
 /// Simple allocator for use before the kernel's page allocators are
-/// initialized.
+/// initialized. Allocates tables starting from the first available address in
+/// the provided memory layout.
 struct LinearTableAllocator {
-  next_table: usize,
+  mem_layout: &'static mut memory::MemoryConfig,
 }
 
 impl LinearTableAllocator {
@@ -85,14 +80,9 @@ impl LinearTableAllocator {
   ///
   /// # Parameters
   ///
-  /// * `next_table` - The next available physical address for new tables.
-  pub fn new(next_table: usize) -> Self {
-    LinearTableAllocator { next_table }
-  }
-
-  /// Get the physical address of the next table.
-  fn get_next_table(&self) -> usize {
-    self.next_table
+  /// * `mem_layout` - The memory layout.
+  pub fn new(mem_layout: &'static mut memory::MemoryConfig) -> Self {
+    LinearTableAllocator { mem_layout }
   }
 }
 
@@ -101,18 +91,25 @@ impl TableAllocator for LinearTableAllocator {
   ///
   /// # Description
   ///
-  /// Simply returns the next page address.
-  ///
-  ///   TODO: The allocator just assumes it is allocating from available memory.
-  ///         The allocator really should have an upper bound.
+  /// Reserves the next available page and excludes it from the memory layout.
   ///
   /// # Returns
   ///
   /// The physical address of the new table.
   fn alloc_table(&mut self) -> usize {
-    let new_table = self.next_table;
-    self.next_table += get_page_size();
-    new_table
+    assert!(!self.mem_layout.is_empty());
+
+    let page_size = get_page_size();
+    let range = self.mem_layout.get_ranges()[0];
+    let excl = range::Range {
+      base: range.base,
+      size: page_size,
+    };
+
+    assert!(range.size >= page_size);
+    self.mem_layout.exclude_range(&excl);
+
+    range.base
   }
 }
 
@@ -141,8 +138,13 @@ impl TableAllocator for DynamicTableAllocator {
   ///
   /// The physical address of the new table.
   fn alloc_table(&mut self) -> usize {
+    const ALLOC_COUNT: usize = 4;
+
+    // Allocate tables in `ALLOC_COUNT` blocks to reduce the number of
+    // allocation calls.
     if self.avail_tables == 0 {
-      (self.next_table, self.avail_tables, self.zone) = crate::mm::kernel_allocate(4).unwrap();
+      (self.next_table, self.avail_tables, self.zone) =
+        crate::mm::kernel_allocate(ALLOC_COUNT).unwrap();
     }
 
     assert!(self.avail_tables > 0);
@@ -194,15 +196,15 @@ pub fn init(config: usize) {
 
   let kconfig = unsafe { &*(config as *const KernelConfig) };
 
+  // TODO: 16 KiB and 64 KiB page support.
+  assert!(kconfig.page_size == 4096);
+
   // Calculate the blob address and its size. There is no need to do any real
   // error checking on the size. If the blob is not valid,
   // `init_physical_memory_mappings()` will panic.
   let blob_vaddr = kconfig.virtual_base + kconfig.blob;
   let blob_size = dtb::DtbReader::check_dtb(blob_vaddr)
     .map_or_else(|_| 0, |size| bits::align_up(size, kconfig.page_size));
-
-  // TODO: 16 KiB and 64 KiB page support.
-  assert!(kconfig.page_size == 4096);
 
   unsafe {
     KERNEL_CONFIG = *kconfig;
@@ -213,8 +215,35 @@ pub fn init(config: usize) {
   // Get the CPU configuration from the DTB.
   init_cpu_configuration(blob_vaddr);
 
-  let mut table_allocator =
-    LinearTableAllocator::new(kconfig.kernel_pages_start + kconfig.kernel_pages_size);
+  // Get the physical memory layout from the DTB excluding the kernel and the
+  // blob. These have already been mapped by the start code.
+  init_memory_layout(
+    blob_vaddr,
+    blob_size,
+    kconfig.kernel_base,
+    kconfig.kernel_pages_start - kconfig.kernel_base + kconfig.kernel_pages_size,
+  );
+
+  // Get a copy of the memory layout to use for mapping. This ensures we map the
+  // areas used for page tables. The initial L1, L2, and L3 page tables covering
+  // the lowest gigabyte of physical memory will have already been mapped as
+  // part of the kernel.
+  let mut mem_layout = *get_memory_layout();
+
+  // Use the real memory layout for the allocator. The allocator will update the
+  // layout to exclude the region used for page tables to make it unavailable to
+  // the page allocator.
+  let mut table_allocator = LinearTableAllocator::new(
+    unsafe { ptr::addr_of_mut!(MEM_LAYOUT).as_mut().unwrap() }
+  );
+
+  // Initialize the physical memory mappings.
+  init_kernel_memory_map(
+    kconfig.virtual_base,
+    &mem_layout,
+    kconfig.kernel_pages_start,
+    &mut table_allocator,
+  );
 
   // Initialize the SoC memory mappings.
   //
@@ -224,14 +253,6 @@ pub fn init(config: usize) {
   init_soc_mappings(blob_vaddr, kconfig.kernel_pages_start, &mut table_allocator);
   base::set_peripheral_base_addr(kconfig.virtual_base + 0x3f00_0000);
   mini_uart::init();
-
-  // Initialize the physical memory mappings.
-  init_physical_memory_mappings(blob_vaddr, kconfig.kernel_pages_start, &mut table_allocator);
-
-  // Initialize the page allocation exclusions. The allocator allocates pages
-  // linearly starting from the end of the kernel image, so just use exclude
-  // everything from 0 to the next available address.
-  init_exclusions(table_allocator.get_next_table(), kconfig.blob, blob_size);
 }
 
 /// Initialize any secondary cores. The kernel is considered multi-threaded when
@@ -273,16 +294,6 @@ pub fn get_memory_layout() -> &'static memory::MemoryConfig {
   unsafe { ptr::addr_of!(MEM_LAYOUT).as_ref().unwrap() }
 }
 
-/// Get the page allocation exclusion list.
-///
-/// # Description
-///
-///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed.
-pub fn get_exclusion_layout() -> &'static memory::MemoryConfig {
-  unsafe { ptr::addr_of!(EXCL_LAYOUT).as_ref().unwrap() }
-}
-
 /// Get the page size.
 ///
 /// # Description
@@ -313,7 +324,7 @@ pub fn get_kernel_base() -> usize {
   unsafe { KERNEL_CONFIG.kernel_base }
 }
 
-/// Get the kernel virtual base address.
+/// Get the kernel segment virtual base address.
 ///
 /// # Description
 ///
@@ -374,9 +385,9 @@ pub fn get_page_directory_virtual_base() -> usize {
   PAGE_DIRECTORY_VIRTUAL_BASE
 }
 
-/// Get the size of the virtual area reserved for the page directory.
-pub fn get_page_directory_virtual_size() -> usize {
-  PAGE_DIRECTORY_VIRTUAL_SIZE
+/// Get the size of the area reserved for the page directory.
+pub fn get_page_directory_size() -> usize {
+  PAGE_DIRECTORY_SIZE
 }
 
 /// Get the address of the Level 1 translation table.
@@ -429,27 +440,80 @@ fn get_kernel_isr_stack_virtual_base() -> usize {
   unsafe { KERNEL_ISR_STACK_VIRTUAL_BASE }
 }
 
-/// Get the base virtual address of the kernel thread stacks.
-///
-/// # Description
-///
-///   NOTE: The interface guarantees read-only access outside of the module and
-///         one-time initialization is assumed.
-fn get_kernel_thread_stack_virtual_base() -> usize {
-  unsafe { KERNEL_THREAD_STACK_VIRTUAL_BASE }
-}
-
 /// Initialize the CPU configuration.
 ///
 /// # Parameters
 ///
-/// * `blob_addr` - The DTB blob address.
-fn init_cpu_configuration(blob_addr: usize) {
+/// * `blob_vaddr` - The DTB blob virtual address.
+fn init_cpu_configuration(blob_vaddr: usize) {
   unsafe {
     assert!(cpu::get_cpu_config(
       ptr::addr_of_mut!(CPU_CONFIG).as_mut().unwrap(),
-      blob_addr
+      blob_vaddr
     ));
+  }
+}
+
+/// Initialize the physical memory layout globals from the DTB.
+///
+/// # Parameters
+///
+/// * `blob_vaddr` - The DTB blob virtual address.
+/// * `blob_size` - The size of the DTB area.
+/// * `kernel_addr` - The kernel's base physical address.
+/// * `kernel_size` - The size of the kernel.
+fn init_memory_layout(blob_vaddr: usize, blob_size: usize, kernel_addr: usize, kernel_size: usize) {
+  let virt_base = get_kernel_virtual_base();
+
+  // Get the physical memory layout from the DTB.
+  let mut mem_layout = unsafe { ptr::addr_of_mut!(MEM_LAYOUT).as_mut().unwrap() };
+  assert!(memory::get_memory_layout(&mut mem_layout, blob_vaddr));
+
+  let core_count = get_core_count();
+  let page_shift = get_page_shift();
+  let kernel_stack_pages = get_kernel_stack_pages();
+  let region_size = ((kernel_stack_pages + 1) << page_shift) * core_count;
+
+  unsafe {
+    KERNEL_ISR_STACK_VIRTUAL_BASE = PAGE_DIRECTORY_VIRTUAL_BASE - region_size;
+  }
+
+  // Exclude the page directory area from the physical memory layout. This
+  // effectively reduces the maximum allowed physical memory to 254 TiB.
+  //
+  // Exclude the kernel ISR stack region from the physical memory layout. This
+  // again reduces the maximum allowed physical memory, but by a very small
+  // amount. With 8 KiB stacks, guard pages, and 256 cores, the reduction is
+  // 3 MiB.
+  //
+  // Exclude 0 up to the end of the kernel and exclude the blob region. These
+  // exclusions align the size to the nearest 2 MiB section. The start code maps
+  // The kernel and blob as sections, so excluding the sections preserves the
+  // existing mappings vs. trying to remap the empty area after the kernel using
+  // 4 KiB pages for example.
+  let section_size = 1 << (page_shift + 9);
+
+  let excl = &[
+    range::Range {
+      base: PAGE_DIRECTORY_VIRTUAL_BASE - virt_base,
+      size: PAGE_DIRECTORY_SIZE,
+    },
+    range::Range {
+      base: get_kernel_isr_stack_virtual_base() - virt_base,
+      size: region_size,
+    },
+    range::Range {
+      base: 0,
+      size: bits::align_up(kernel_addr + kernel_size, section_size),
+    },
+    range::Range {
+      base: blob_vaddr - virt_base,
+      size: bits::align_up(blob_size, section_size),
+    },
+  ];
+
+  for range in excl {
+    mem_layout.exclude_range(range);
   }
 }
 
@@ -479,81 +543,6 @@ fn init_soc_mappings(blob_addr: usize, pages_start: usize, allocator: &mut impl 
       allocator,
       MappingStrategy::Compact,
     );
-  }
-}
-
-/// Initialize the physical memory layout.
-///
-/// # Parameters
-///
-/// * `blob_addr` - The DTB blob address.
-/// * `pages_start` - The start of the kernel's page tables.
-/// * `allocator` - The table page allocator.
-///
-/// # Description
-///
-/// Linearly maps physical memory into the kernel address space. Excludes any
-/// physical memory that would be in the regions reserved for the page directory
-/// and kernel ISR stacks and thread stacks.
-fn init_physical_memory_mappings(
-  blob_addr: usize,
-  pages_start: usize,
-  allocator: &mut impl TableAllocator,
-) {
-  let core_count = get_core_count();
-  let kernel_stack_pages = get_kernel_stack_pages();
-  let page_shift = get_page_shift();
-  let stack_size = (kernel_stack_pages + 1) << page_shift;
-  let region_size = stack_size * core_count;
-  let virt_base = get_kernel_virtual_base();
-
-  unsafe {
-    KERNEL_THREAD_STACK_VIRTUAL_BASE = PAGE_DIRECTORY_VIRTUAL_BASE - region_size;
-    KERNEL_ISR_STACK_VIRTUAL_BASE = KERNEL_THREAD_STACK_VIRTUAL_BASE - region_size;
-  }
-
-  // Exclude the top 2 TiB plus the kernel ISR stack and thread stack regions.
-  let excl = range::Range {
-    base: get_kernel_isr_stack_virtual_base() - virt_base,
-    size: PAGE_DIRECTORY_VIRTUAL_SIZE + (region_size * 2),
-  };
-
-  // Get the physical memory layout and apply the exclusion.
-  unsafe {
-    let mut mem_layout = ptr::addr_of_mut!(MEM_LAYOUT).as_mut().unwrap();
-    assert!(memory::get_memory_layout(&mut mem_layout, blob_addr));
-    mem_layout.exclude_range(&excl);
-  }
-
-  // Map the remaining physical memory into the kernel address space.
-  init_kernel_memory_map(virt_base, get_memory_layout(), pages_start, allocator);
-}
-
-/// Initialize the physical memory exclusion list.
-///
-/// # Parameters
-///
-/// * `kernel_size` - The size of the kernel area.
-/// * `blob_addr` - The DTB blob address.
-/// * `blob_size` - The DTB blob size.
-///
-/// # Description
-///
-/// The kernel area is assumed to start at address 0.
-fn init_exclusions(kernel_size: usize, blob_addr: usize, blob_size: usize) {
-  let excl_layout = memory::MemoryConfig::new_with_ranges(&[
-    range::Range {
-      base: 0,
-      size: kernel_size,
-    },
-    range::Range {
-      base: blob_addr,
-      size: blob_size,
-    },
-  ]);
-
-  unsafe {
-    EXCL_LAYOUT = excl_layout;
   }
 }
 

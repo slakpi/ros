@@ -223,11 +223,11 @@ create_table_entry:
 
 
 /*----------------------------------------------------------------------------*/
-/// Map a block of 2 MiB sections to a L2 translation table.
+/// Map a block of 2 MiB sections to a L3 translation table.
 ///
 /// # Parameters
 ///
-/// * x0 - The base address of the L2 table.
+/// * x0 - The base address of the L3 table.
 /// * x1 - The base physical address.
 /// * x2 - The base virtual address.
 /// * x3 - The last virtual address.

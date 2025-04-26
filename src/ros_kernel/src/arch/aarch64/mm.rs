@@ -292,6 +292,9 @@ fn fill_table(
 ///
 /// # Details
 ///
+///     NOTE: This function assumes the base address to be mapped is aligned on
+///           a 2 MiB section.
+///
 ///     TODO: For now, memory management will just assume 4 KiB pages. The
 ///           start code will have already configured the MMU and provided the
 ///           page size in the kernel configuration struct.
